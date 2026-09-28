@@ -184,6 +184,12 @@ fn importa_inventaria_e_rastreia_ate_a_origem() {
     assert_eq!(qtd("vazio"), Some(1));
     let busca = banco.arquivos(x.id, None, Some("MMSSMS"), 0, 10).unwrap();
     assert_eq!(busca.total, 2); // banco e -wal
+    let midias = banco.arquivos(x.id, Some("midia"), None, 0, 10).unwrap();
+    assert_eq!(
+        midias.total, 1,
+        "\"midia\" = imagens, vídeos, áudios e documentos"
+    );
+    assert_eq!(midias.itens[0].categoria, "imagem");
 
     // Execução do parser.
     let ex = banco.execucoes(x.id).unwrap();
