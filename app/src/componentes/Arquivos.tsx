@@ -1,14 +1,18 @@
 // Inventário de arquivos de uma extração: tabela (Arquivos, aba da extração) e
-// grade (Mídias), com painel de detalhes. Tudo vem do inventário gravado na
-// importação; nenhuma miniatura é gerada ainda (nada é lido da evidência aqui).
+// grade (Mídias), com painel de detalhes. Os dados vêm do inventário gravado na
+// importação. As miniaturas das imagens são geradas pelo backend a partir do arquivo
+// da extração, só depois de conferir o SHA-256 com o inventário.
 
-import { useState, type ReactNode } from "react";
-import type { ArquivoExtracao, Caso, Extracao } from "../api/cliente";
-import { useArquivos, useDispositivos, useExecucoes, useExtracoes, useTotaisPorCategoria } from "../api/consultas";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { api, type ArquivoExtracao, type Caso, type Extracao } from "../api/cliente";
+import { chaves, useArquivos, useDispositivos, useExecucoes, useExtracoes, useTotaisPorCategoria } from "../api/consultas";
+import { useListaPaginada } from "../util/listaPaginada";
 import { dataHora, extensao, nomeArquivo, numero, tamanho } from "../util/formatar";
 import { nomeCategoria } from "../util/rotulos";
 import { Aviso, Cartao, Carregando, entrada, Filtros, Hash, Paginacao, Selo, tabela, Vazio } from "./Estrutura";
 import { Icone, type NomeIcone } from "./Icone";
+import { MiniaturaArquivo, SobreMiniatura } from "./Miniatura";
 
 export const iconeCategoria: Record<string, NomeIcone> = {
   banco_sqlite: "banco",
@@ -77,6 +81,21 @@ function DetalheArquivo({ caso, f, parser, fechar }: {
         </button>
       }
     >
+      {(f.categoria === "imagem" || f.categoria === "video" || f.categoria === "audio") && (
+        <div className="mb-3">
+          <MiniaturaArquivo
+            caso={caso}
+            arquivoId={f.id}
+            categoria={f.categoria}
+            icone={iconeCategoria[f.categoria] ?? "arquivos"}
+            ajuste="conter"
+            className="aspect-[4/3] w-full rounded-md border border-borda"
+          />
+          <p className="mt-1.5 text-[11px] leading-snug text-texto-3">
+            <SobreMiniatura caso={caso} arquivoId={f.id} categoria={f.categoria} />
+          </p>
+        </div>
+      )}
       <p className="mb-2 break-all font-medium text-texto">{nomeArquivo(f.caminho)}</p>
       <dl aria-label="Metadados do arquivo">
         {linha("Caminho", f.caminho, true)}
@@ -173,29 +192,20 @@ export function InventarioArquivos({ caso, extracaoId, midias }: { caso: Caso; e
           <div className="p-4">
             <Vazio titulo={midias ? "Nenhuma mídia nesta seleção" : "Nenhum arquivo encontrado"} icone={midias ? "midias" : "arquivos"} />
           </div>
+        ) : midias && arquivos.data.total > LIMITE ? (
+          <GradeVirtual
+            caso={caso}
+            extracaoId={extracaoId}
+            filtro={{ categoria, texto: busca }}
+            primeira={arquivos.data}
+            selecionado={selecionado}
+            selecionar={setSelecionado}
+          />
         ) : midias ? (
           <ul className="grid grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] gap-3 p-3" aria-label="Mídias">
             {arquivos.data.itens.map((f) => (
               <li key={f.id}>
-                <button
-                  type="button"
-                  aria-pressed={selecionado?.id === f.id}
-                  onClick={() => setSelecionado(f)}
-                  title={f.caminho}
-                  className={`flex w-full flex-col overflow-hidden rounded-lg border text-left transition-colors ${
-                    selecionado?.id === f.id ? "border-ouro/70 bg-ouro/5" : "border-borda bg-sup-2/60 hover:border-borda-2"
-                  }`}
-                >
-                  <span className="grid aspect-[4/3] w-full place-items-center bg-fundo text-texto-3">
-                    <Icone nome={iconeCategoria[f.categoria] ?? "arquivos"} className="size-8" />
-                  </span>
-                  <span className="block w-full px-2 py-1.5">
-                    <span className="block truncate text-xs text-texto">{nomeArquivo(f.caminho)}</span>
-                    <span className="tabular block text-[11px] text-texto-3">
-                      {nomeCategoria[f.categoria] ?? f.categoria} · {tamanho(f.tamanho)}
-                    </span>
-                  </span>
-                </button>
+                <CartaoMidia caso={caso} f={f} ativo={selecionado?.id === f.id} selecionar={setSelecionado} />
               </li>
             ))}
           </ul>
@@ -241,7 +251,7 @@ export function InventarioArquivos({ caso, extracaoId, midias }: { caso: Caso; e
             </table>
           </div>
         )}
-        {arquivos.data && arquivos.data.total > LIMITE && (
+        {!midias && arquivos.data && arquivos.data.total > LIMITE && (
           <div className="border-t border-borda px-3">
             <Paginacao total={arquivos.data.total} deslocamento={deslocamento} limite={LIMITE} mudar={setDeslocamento} />
           </div>
@@ -250,6 +260,121 @@ export function InventarioArquivos({ caso, extracaoId, midias }: { caso: Caso; e
       {selecionado && (
         <DetalheArquivo caso={caso} f={selecionado} parser={parserDe(selecionado.caminho)} fechar={() => setSelecionado(null)} />
       )}
+    </div>
+  );
+}
+
+/** Um item da grade de mídias: miniatura (ou ícone do tipo), nome e tamanho. */
+function CartaoMidia({ caso, f, ativo, selecionar }: {
+  caso: Caso;
+  f: ArquivoExtracao;
+  ativo: boolean;
+  selecionar: (f: ArquivoExtracao) => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={ativo}
+      onClick={() => selecionar(f)}
+      title={f.caminho}
+      className={`flex w-full flex-col overflow-hidden rounded-lg border text-left transition-colors ${
+        ativo ? "border-ouro/70 bg-ouro/5" : "border-borda bg-sup-2/60 hover:border-borda-2"
+      }`}
+    >
+      <MiniaturaArquivo
+        caso={caso}
+        arquivoId={f.id}
+        categoria={f.categoria}
+        icone={iconeCategoria[f.categoria] ?? "arquivos"}
+        className="aspect-[4/3] w-full"
+      />
+      <span className="block w-full px-2 py-1.5">
+        <span className="block truncate text-xs text-texto">{nomeArquivo(f.caminho)}</span>
+        <span className="tabular block text-[11px] text-texto-3">
+          {nomeCategoria[f.categoria] ?? f.categoria} · {tamanho(f.tamanho)}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+/** Largura mínima de um item da grade e espaço entre eles (px), como na grade simples. */
+const LARGURA_ITEM = 152;
+const ESPACO = 12;
+const LEGENDA = 44;
+
+/**
+ * Grade de mídias longa: só as linhas perto da área visível existem na tela, e as
+ * páginas do inventário são pedidas ao banco conforme a rolagem.
+ */
+function GradeVirtual({ caso, extracaoId, filtro, primeira, selecionado, selecionar }: {
+  caso: Caso;
+  extracaoId: string;
+  filtro: { categoria: string | null; texto: string | null };
+  primeira: { total: number; itens: ArquivoExtracao[] };
+  selecionado: ArquivoExtracao | null;
+  selecionar: (f: ArquivoExtracao) => void;
+}) {
+  const rolagem = useRef<HTMLDivElement>(null);
+  const [largura, setLargura] = useState(0);
+  useEffect(() => {
+    const el = rolagem.current;
+    if (!el) return;
+    setLargura(el.clientWidth || el.offsetWidth);
+    if (typeof ResizeObserver === "undefined") return;
+    const o = new ResizeObserver(() => setLargura(el.clientWidth || el.offsetWidth));
+    o.observe(el);
+    return () => o.disconnect();
+  }, []);
+  const util = Math.max(0, largura - 2 * ESPACO);
+  const colunas = Math.max(1, Math.floor((util + ESPACO) / (LARGURA_ITEM + ESPACO)));
+  const larguraItem = colunas > 0 ? (util - ESPACO * (colunas - 1)) / colunas : LARGURA_ITEM;
+  const alturaLinha = Math.round(larguraItem * 0.75 + LEGENDA + ESPACO);
+  const linhas = Math.ceil(primeira.total / colunas);
+
+  const virtual = useVirtualizer({
+    count: linhas,
+    getScrollElement: () => rolagem.current,
+    estimateSize: () => alturaLinha,
+    overscan: 3,
+  });
+  useEffect(() => virtual.measure(), [alturaLinha, virtual]);
+
+  const linhasVisiveis = virtual.getVirtualItems();
+  const indices = linhasVisiveis.flatMap((l) => Array.from({ length: colunas }, (_, k) => l.index * colunas + k));
+  const { item } = useListaPaginada({
+    chave: [...chaves.extracao(extracaoId), "arquivos", filtro],
+    primeira,
+    tamanho: LIMITE,
+    buscar: (d, l) => api.listarArquivos(extracaoId, filtro, d, l),
+    indices,
+  });
+
+  return (
+    <div ref={rolagem} className="h-[calc(100vh-17rem)] min-h-80 overflow-y-auto" aria-label="Mídias (lista longa)">
+      <ul aria-label="Mídias" className="relative w-full" style={{ height: virtual.getTotalSize() + ESPACO }}>
+        {linhasVisiveis.map((l) => (
+          <li
+            key={l.key}
+            className="absolute inset-x-0 grid gap-3 px-3"
+            style={{ top: l.start + ESPACO, height: alturaLinha - ESPACO, gridTemplateColumns: `repeat(${colunas}, minmax(0, 1fr))` }}
+          >
+            {Array.from({ length: colunas }, (_, k) => {
+              const i = l.index * colunas + k;
+              if (i >= primeira.total) return null;
+              const f = item(i);
+              return f ? (
+                <CartaoMidia key={f.id} caso={caso} f={f} ativo={selecionado?.id === f.id} selecionar={selecionar} />
+              ) : (
+                <span key={`v${i}`} className="animate-pulse rounded-lg border border-borda bg-sup-2/40" aria-hidden />
+              );
+            })}
+          </li>
+        ))}
+      </ul>
+      <p className="tabular px-3 pb-2 text-center text-[11px] text-texto-3" role="status">
+        {numero(primeira.total)} itens · carregados conforme a rolagem
+      </p>
     </div>
   );
 }

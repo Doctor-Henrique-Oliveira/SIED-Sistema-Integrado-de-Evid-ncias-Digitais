@@ -100,7 +100,6 @@ pub fn executar() {
             comandos::listar_artefatos,
             comandos::detalhe_artefato,
             comandos::listar_conversas,
-            comandos::filtrar_conversas,
             comandos::apps_das_conversas,
             comandos::posicao_mensagem,
             comandos::localizar_na_conversa,

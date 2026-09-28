@@ -10,14 +10,20 @@ sintéticas de testes/fixtures/whatsapp (msgstore.db no esquema novo e wa.db), m
 citadas pelas mensagens e um backup .crypt14 inventado. Sem a opção, a saída é a
 mesma de sempre (é a que o teste E2E usa).
 
-Uso: python3 testes/gerador/extracao_sintetica.py [--whatsapp] <pasta de destino>
+Com --volume, acrescenta volume para testar as telas com dados em quantidade: uma
+conversa SMS com milhares de mensagens, centenas de conversas curtas e centenas de
+imagens PNG desenhadas aqui mesmo (padrões geométricos, sem pessoas nem texto).
+
+Uso: python3 testes/gerador/extracao_sintetica.py [--whatsapp] [--volume] <pasta de destino>
 """
 
 import os
 import shutil
 import sqlite3
+import struct
 import sys
 import tempfile
+import zlib
 
 FIXTURES_WHATSAPP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "fixtures", "whatsapp")
 
@@ -37,6 +43,59 @@ MENSAGENS = [
 MENSAGENS_WAL = [
     (6, 3, "+5531900000003", 120, 1, "Mensagem que só existe no WAL (sintético)"),
 ]
+
+
+# Volume (--volume): ids a partir de 1000 para não colidir com as mensagens acima.
+VOLUME_CONVERSA_LONGA = 5000
+VOLUME_CONVERSAS_CURTAS = 300
+VOLUME_IMAGENS = 400
+
+
+def mensagens_volume():
+    """Mensagens sintéticas em quantidade; o texto diz que são inventadas."""
+    i = 1000
+    for n in range(VOLUME_CONVERSA_LONGA):
+        marcador = " [marcador sintético]" if n % 250 == 0 else ""
+        yield (i, 10, "+5561900000010", 200 + n * 7, 1 if n % 3 else 2,
+               f"Mensagem sintética {n + 1} da conversa longa{marcador}")
+        i += 1
+    for c in range(VOLUME_CONVERSAS_CURTAS):
+        numero = f"+55619{(c + 100):08d}"
+        for k in range(3):
+            yield (i, 100 + c, numero, 300 + c * 40 + k, 1 if k != 1 else 2,
+                   f"Conversa sintética {c + 1}, mensagem {k + 1}")
+            i += 1
+
+
+def png(largura: int, altura: int, semente: int) -> bytes:
+    """PNG RGB com um padrão de faixas e círculo, sem bibliotecas externas."""
+    r0, g0, b0 = (semente * 53) % 256, (semente * 97) % 256, (semente * 151) % 256
+    cx, cy, raio2 = largura // 2, altura // 2, (min(largura, altura) // 3) ** 2
+    linhas = bytearray()
+    for y in range(altura):
+        linhas.append(0)
+        for x in range(largura):
+            if (x - cx) ** 2 + (y - cy) ** 2 < raio2:
+                linhas += bytes((255 - r0, 255 - g0, 255 - b0))
+            elif ((x + semente * 5) // 24 + y // 24) % 2:
+                linhas += bytes((r0, g0, b0))
+            else:
+                linhas += bytes((r0 // 2, g0 // 2, b0 // 2))
+
+    def bloco(tipo: bytes, dados: bytes) -> bytes:
+        return struct.pack(">I", len(dados)) + tipo + dados + struct.pack(">I", zlib.crc32(tipo + dados) & 0xFFFFFFFF)
+
+    cabecalho = struct.pack(">IIBBBBB", largura, altura, 8, 2, 0, 0, 0)
+    return b"\x89PNG\r\n\x1a\n" + bloco(b"IHDR", cabecalho) + bloco(b"IDAT", zlib.compress(bytes(linhas), 9)) + bloco(b"IEND", b"")
+
+
+def gerar_imagens(destino: str) -> None:
+    pasta = os.path.join(destino, "midia", "DCIM", "Volume")
+    os.makedirs(pasta)
+    for n in range(VOLUME_IMAGENS):
+        largura, altura = (640, 480) if n % 4 else (360, 640)
+        with open(os.path.join(pasta, f"IMG_SINT_{n + 1:04d}.png"), "wb") as f:
+            f.write(png(largura, altura, n + 1))
 
 
 def banco_de_fixture(sql: str, destino: str) -> None:
@@ -68,7 +127,7 @@ def gerar_whatsapp(destino: str) -> None:
             b"SINTETICO-CIFRADO", 256)
 
 
-def gerar(destino: str, whatsapp: bool = False) -> None:
+def gerar(destino: str, whatsapp: bool = False, volume: bool = False) -> None:
     if os.path.exists(destino) and os.listdir(destino):
         sys.exit(f"a pasta {destino} já existe e não está vazia")
     os.makedirs(os.path.join(destino, "dados", "com.android.providers.telephony", "databases"))
@@ -98,6 +157,11 @@ def gerar(destino: str, whatsapp: bool = False) -> None:
                    "VALUES (?, ?, ?, ?, ?, ?, 1, 1)")
         for (i, t, a, m, tipo, corpo) in MENSAGENS:
             conn.execute(inserir, (i, t, a, BASE_MS + m * MINUTO, tipo, corpo))
+        if volume:
+            conn.execute("BEGIN")
+            for (i, t, a, m, tipo, corpo) in mensagens_volume():
+                conn.execute(inserir, (i, t, a, BASE_MS + m * MINUTO, tipo, corpo))
+            conn.execute("COMMIT")
         conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         conn.execute("PRAGMA wal_autocheckpoint=0")
         for (i, t, a, m, tipo, corpo) in MENSAGENS_WAL:
@@ -109,13 +173,16 @@ def gerar(destino: str, whatsapp: bool = False) -> None:
         conn.close()
     if whatsapp:
         gerar_whatsapp(destino)
+    if volume:
+        gerar_imagens(destino)
     print(destino)
 
 
 if __name__ == "__main__":
     args = sys.argv[1:]
     whatsapp = "--whatsapp" in args
-    args = [a for a in args if a != "--whatsapp"]
+    volume = "--volume" in args
+    args = [a for a in args if a not in ("--whatsapp", "--volume")]
     if len(args) != 1:
         sys.exit(__doc__)
-    gerar(args[0], whatsapp)
+    gerar(args[0], whatsapp, volume)

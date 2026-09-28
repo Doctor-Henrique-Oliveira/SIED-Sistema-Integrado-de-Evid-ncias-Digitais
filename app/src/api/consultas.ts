@@ -1,7 +1,7 @@
 // Hooks de dados (TanStack Query). A UI nunca guarda cópias próprias do estado do
 // backend: lê daqui e invalida após cada alteração.
 
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import {
   api,
@@ -9,6 +9,7 @@ import {
   type DispositivoId,
   type ExtracaoId,
   type FiltroBusca,
+  type FiltroConversas,
   type NovoCaso,
   type NovoDispositivo,
 } from "./cliente";
@@ -195,11 +196,59 @@ export function useDetalheArtefato(artefatoId: number | null) {
   });
 }
 
-export function useConversas(casoId: CasoId, extracaoId: ExtracaoId | null, deslocamento: number, limite: number) {
+export function useConversas(casoId: CasoId, filtro: FiltroConversas, deslocamento: number, limite: number) {
   return useQuery({
-    queryKey: [...chaves.conversas(casoId), "lista", extracaoId, deslocamento, limite],
-    queryFn: () => api.listarConversas(extracaoId, deslocamento, limite),
+    queryKey: [...chaves.conversas(casoId), "lista", filtro, deslocamento, limite],
+    queryFn: () => api.listarConversas(filtro, deslocamento, limite),
     placeholderData: keepPreviousData,
+  });
+}
+
+/** Páginas extras de uma lista longa (a primeira vem do hook da lista), pedidas
+ * conforme a rolagem: só o que está perto da área visível é carregado. */
+export function usePaginasExtras<T>(chave: readonly unknown[], paginas: number[], buscar: (pagina: number) => Promise<T>) {
+  return useQueries({
+    queries: paginas.map((p) => ({
+      queryKey: [...chave, "pagina", p],
+      queryFn: () => buscar(p),
+      staleTime: 60_000,
+    })),
+  });
+}
+
+export function useAppsDasConversas(casoId: CasoId, extracaoId: ExtracaoId | null) {
+  return useQuery({
+    queryKey: [...chaves.conversas(casoId), "apps", extracaoId],
+    queryFn: () => api.appsDasConversas(extracaoId),
+  });
+}
+
+export function usePosicaoMensagem(casoId: CasoId, conversaId: number, artefatoId: number | null, ativo: boolean) {
+  return useQuery({
+    queryKey: [...chaves.conversas(casoId), "posicao", conversaId, artefatoId],
+    queryFn: () => api.posicaoMensagem(conversaId, artefatoId!),
+    enabled: ativo && artefatoId != null,
+  });
+}
+
+export function useLocalizarNaConversa(casoId: CasoId, conversaId: number, termo: string, ativo: boolean) {
+  return useQuery({
+    queryKey: [...chaves.conversas(casoId), "localizar", conversaId, termo],
+    queryFn: () => api.localizarNaConversa(conversaId, termo, 5000),
+    enabled: ativo && termo.trim() !== "",
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** Miniatura: guardada enquanto o caso estiver aberto (o arquivo de origem é imutável). */
+export function useMiniatura(casoId: CasoId, arquivoId: number | null) {
+  return useQuery({
+    queryKey: ["miniatura", casoId, arquivoId],
+    queryFn: () => api.miniatura(arquivoId!),
+    enabled: arquivoId != null,
+    staleTime: Infinity,
+    gcTime: 10 * 60_000,
+    retry: false,
   });
 }
 

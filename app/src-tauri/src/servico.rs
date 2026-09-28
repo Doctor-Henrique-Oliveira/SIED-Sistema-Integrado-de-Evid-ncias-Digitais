@@ -416,6 +416,8 @@ impl Servico {
         Ok(self.banco()?.artefato(artefato_id)?)
     }
 
+    /// Sem filtros além da extração (atalho dos testes; a tela usa a versão filtrada).
+    #[cfg(test)]
     pub fn listar_conversas(
         &mut self,
         extracao_id: Option<ExtracaoId>,

@@ -195,23 +195,26 @@ pub fn detalhe_artefato(
     estado.com(|s| s.detalhe_artefato(artefato_id))
 }
 
+/// Filtros opcionais (texto, app, tipo, com anexo) valem para o caso inteiro.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub fn listar_conversas(
     estado: State<'_, Estado>,
     extracao_id: Option<ExtracaoId>,
     deslocamento: i64,
     limite: i64,
+    texto: Option<String>,
+    app: Option<String>,
+    tipo: Option<String>,
+    com_anexo: Option<bool>,
 ) -> ResultadoApp<Pagina<Conversa>> {
-    estado.com(|s| s.listar_conversas(extracao_id, deslocamento, limite))
-}
-
-#[tauri::command]
-pub fn filtrar_conversas(
-    estado: State<'_, Estado>,
-    filtro: FiltroConversas,
-    deslocamento: i64,
-    limite: i64,
-) -> ResultadoApp<Pagina<Conversa>> {
+    let filtro = FiltroConversas {
+        extracao_id,
+        texto,
+        app,
+        tipo,
+        com_anexo,
+    };
     estado.com(|s| s.listar_conversas_filtradas(&filtro, deslocamento, limite))
 }
 

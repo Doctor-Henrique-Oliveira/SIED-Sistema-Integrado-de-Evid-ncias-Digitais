@@ -6,6 +6,7 @@ import { Link, useNavigate } from "react-router-dom";
 import type { Caso, InfoApp } from "../api/cliente";
 import { useEstadoImportacao, useFecharCaso } from "../api/consultas";
 import { identificacaoCaso } from "../util/formatar";
+import { fracaoDaEtapa, PASSOS, passoDaEtapa } from "../util/progresso";
 import { nomeEtapa } from "../util/rotulos";
 import { Icone } from "./Icone";
 
@@ -13,7 +14,9 @@ function ImportacaoEmCurso({ caso }: { caso: Caso }) {
   const estado = useEstadoImportacao(caso.id).data;
   if (!estado || estado.terminada) return null;
   const p = estado.progresso;
-  const pct = p.bytes_total > 0 ? Math.round((p.bytes_feitos / p.bytes_total) * 100) : null;
+  const passo = passoDaEtapa(p.etapa);
+  const fracao = fracaoDaEtapa(p);
+  const pct = fracao == null ? null : Math.round(fracao * 100);
   return (
     <Link
       to={`/casos/${caso.id}/extracoes`}
@@ -21,7 +24,13 @@ function ImportacaoEmCurso({ caso }: { caso: Caso }) {
       className="flex items-center gap-2 rounded-lg border border-ouro/35 bg-ouro/10 px-2.5 py-1 text-xs text-ouro-claro hover:bg-ouro/15"
     >
       <span className="size-3 animate-spin rounded-full border-2 border-ouro/40 border-r-ouro" aria-hidden />
-      Importando{pct != null ? ` · ${pct}%` : "…"}
+      Importando
+      {passo != null && (
+        <span className="tabular text-ouro-claro/80">
+          {" "}· etapa {passo}/{PASSOS.length}
+          {pct != null ? ` · ${pct}%` : ""}
+        </span>
+      )}
     </Link>
   );
 }
