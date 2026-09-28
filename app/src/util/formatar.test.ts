@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bytes, dataHora, hora, identificacaoCaso, lerCapacidade, limiteDia, ouNulo } from "./formatar";
+import { bytes, dataHora, duracao, extensao, hora, identificacaoCaso, lerCapacidade, limiteDia, nomeArquivo, ouNulo } from "./formatar";
 
 describe("formatar", () => {
   it("data em pt-BR no fuso de Brasília", () => {
@@ -38,5 +38,21 @@ describe("limiteDia", () => {
 
   it("mostra a hora com segundos no fuso do caso", () => {
     expect(hora(Date.UTC(2026, 0, 1, 3, 4, 5), "America/Sao_Paulo")).toBe("00:04:05");
+  });
+});
+
+describe("duração e caminhos", () => {
+  it("duração legível entre dois instantes", () => {
+    expect(duracao("2026-01-01T10:00:00Z", "2026-01-01T10:00:42Z")).toBe("42 s");
+    expect(duracao("2026-01-01T10:00:00Z", "2026-01-01T10:02:13Z")).toBe("2 min 13 s");
+    expect(duracao("2026-01-01T10:00:00Z", "2026-01-01T12:05:00Z")).toBe("2 h 5 min");
+    expect(duracao("2026-01-01T10:00:00Z", null)).toBe("—");
+  });
+
+  it("extensão e nome do arquivo", () => {
+    expect(extensao("dados/telefonia/mmssms.DB")).toBe("db");
+    expect(extensao("pasta\\sem_extensao")).toBe("");
+    expect(extensao(".oculto")).toBe("");
+    expect(nomeArquivo("a/b/IMG_0001.dat")).toBe("IMG_0001.dat");
   });
 });
