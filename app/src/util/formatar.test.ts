@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bytes, dataHora, identificacaoCaso, lerCapacidade, ouNulo } from "./formatar";
+import { bytes, dataHora, hora, identificacaoCaso, lerCapacidade, limiteDia, ouNulo } from "./formatar";
 
 describe("formatar", () => {
   it("data em pt-BR no fuso de Brasília", () => {
@@ -24,5 +24,19 @@ describe("formatar", () => {
   it("identificação do caso", () => {
     expect(identificacaoCaso({ numero_procedimento: "IP 1", numero_bo: "9" })).toBe("IP 1");
     expect(identificacaoCaso({ numero_procedimento: null, numero_bo: "9" })).toBe("BO 9");
+  });
+});
+
+describe("limiteDia", () => {
+  it("converte o dia no fuso do caso para o intervalo em UTC", () => {
+    // Meia-noite em Brasília = 03:00 UTC.
+    expect(limiteDia("2026-01-01", "America/Sao_Paulo")).toBe(Date.UTC(2026, 0, 1, 3));
+    expect(limiteDia("2026-01-01", "America/Sao_Paulo", true)).toBe(Date.UTC(2026, 0, 2, 3) - 1);
+    expect(limiteDia("2026-01-01", "UTC")).toBe(Date.UTC(2026, 0, 1));
+    expect(limiteDia("01/01/2026")).toBeNull();
+  });
+
+  it("mostra a hora com segundos no fuso do caso", () => {
+    expect(hora(Date.UTC(2026, 0, 1, 3, 4, 5), "America/Sao_Paulo")).toBe("00:04:05");
   });
 });

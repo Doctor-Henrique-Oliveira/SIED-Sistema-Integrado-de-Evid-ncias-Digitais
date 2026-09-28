@@ -99,6 +99,11 @@ pub fn executar() {
             comandos::listar_execucoes,
             comandos::listar_artefatos,
             comandos::detalhe_artefato,
+            comandos::listar_conversas,
+            comandos::obter_conversa,
+            comandos::mensagens_conversa,
+            comandos::conversa_do_artefato,
+            comandos::buscar,
         ])
         .build(tauri::generate_context!())
         .expect("falha ao montar o aplicativo");

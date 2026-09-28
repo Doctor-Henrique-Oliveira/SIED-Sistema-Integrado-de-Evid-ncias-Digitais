@@ -6,6 +6,7 @@
 
 use rusqlite::Connection;
 use sha2::{Digest, Sha256};
+use sied_armazenamento::busca::FiltroBusca;
 use sied_armazenamento::{BancoCaso, ErroArmazenamento, Sessao};
 use sied_dominio::{Dispositivo, NovoCaso, NovoDispositivo, SistemaOperacional};
 use sied_ingestao::fonte::pasta::PastaSomenteLeitura;
@@ -339,7 +340,9 @@ fn caso_v1_e_migrado_com_copia_de_seguranca() {
     banco.fechar().unwrap();
     let conn = Connection::open(pasta.join("caso.sied.db")).unwrap();
     conn.execute_batch(
-        "DROP TABLE referencia_origem; DROP TABLE artefato; DROP TABLE aviso_parser;
+        "DROP TABLE busca_artefato; DROP TABLE busca_arquivo; DROP TABLE conversa_participante;
+         DROP TABLE conversa; DELETE FROM schema_migracao WHERE versao = 3;
+         DROP TABLE referencia_origem; DROP TABLE artefato; DROP TABLE aviso_parser;
          DROP TABLE execucao_parser; DROP TABLE arquivo; DROP TABLE extracao;
          DELETE FROM schema_migracao WHERE versao = 2; PRAGMA user_version = 1;",
     )
@@ -348,5 +351,174 @@ fn caso_v1_e_migrado_com_copia_de_seguranca() {
     let banco = BancoCaso::abrir(&pasta, sessao()).unwrap();
     assert!(banco.extracoes().unwrap().is_empty());
     assert!(pasta.join("caso.sied.db.antes-v2.bak").is_file());
+    banco.verificar_auditoria().unwrap();
+}
+
+fn conversas_e_busca_de(banco: &BancoCaso) -> (String, String) {
+    let conversas = banco.conversas(None, 0, 50).unwrap();
+    let busca = banco
+        .buscar(
+            &FiltroBusca {
+                texto: "sintetica".into(),
+                ..Default::default()
+            },
+            0,
+            50,
+        )
+        .unwrap();
+    (
+        serde_json::to_string(&conversas).unwrap(),
+        serde_json::to_string(&busca).unwrap(),
+    )
+}
+
+#[test]
+fn conversas_sao_reconstruidas_a_partir_dos_artefatos() {
+    let raiz = tempfile::tempdir().unwrap();
+    let origem = raiz.path().join("ext");
+    extracao_sintetica(&origem);
+    let (banco, d) = caso(raiz.path());
+    let x = importar(&banco, &d, &origem, &Controle::default());
+
+    let lista = banco.conversas(Some(x.id), 0, 10).unwrap();
+    assert_eq!(lista.total, 2);
+    // Mais recente primeiro: a conversa 8 (só no WAL) é a última.
+    let (c8, c7) = (&lista.itens[0], &lista.itens[1]);
+    assert_eq!((c8.app.as_str(), c8.id_externo.as_str()), ("sms", "8"));
+    assert_eq!(c8.total_mensagens, 1);
+    assert_eq!(c8.ultima_mensagem.as_deref(), Some("Só no WAL (sintético)"));
+    assert_eq!(c7.id_externo, "7");
+    assert_eq!(c7.total_mensagens, 2);
+    assert_eq!(c7.enviadas, 1);
+    assert_eq!(c7.primeira_ms, Some(1_767_225_600_000));
+    assert_eq!(c7.ultima_ms, Some(1_767_225_660_000));
+    assert_eq!(c7.participantes.len(), 1);
+    assert_eq!(c7.participantes[0].identificador, "+5511900000001");
+    assert_eq!(c7.participantes[0].mensagens, 2);
+
+    // Mensagens em ordem cronológica, e o caminho de volta artefato → conversa.
+    let msgs = banco.mensagens_conversa(c7.id, 0, 10).unwrap();
+    assert_eq!(msgs.total, 2);
+    assert_eq!(
+        msgs.itens[0].conteudo.as_deref(),
+        Some("Mensagem sintética recebida")
+    );
+    assert_eq!(msgs.itens[1].de_mim, Some(true));
+    assert_eq!(
+        banco.conversa_do_artefato(msgs.itens[1].id).unwrap(),
+        Some(c7.id)
+    );
+    assert!(matches!(
+        banco.conversa(9999),
+        Err(ErroArmazenamento::NaoEncontrado(_))
+    ));
+}
+
+#[test]
+fn busca_global_por_texto_telefone_e_arquivo() {
+    let raiz = tempfile::tempdir().unwrap();
+    let origem = raiz.path().join("ext");
+    extracao_sintetica(&origem);
+    let (banco, d) = caso(raiz.path());
+    let x = importar(&banco, &d, &origem, &Controle::default());
+    let buscar = |texto: &str| {
+        banco
+            .buscar(
+                &FiltroBusca {
+                    texto: texto.into(),
+                    ..Default::default()
+                },
+                0,
+                10,
+            )
+            .unwrap()
+    };
+
+    // Sem acento e por prefixo ("sintetica" encontra "sintética"/"sintético").
+    let r = buscar("SINTETIC");
+    assert_eq!(r.modo, "texto");
+    assert_eq!(r.artefatos.total, 3);
+    // Duas palavras: as duas precisam aparecer.
+    let r = buscar("resposta enviada");
+    assert_eq!(r.artefatos.total, 1);
+    let a = &r.artefatos.itens[0];
+    assert_eq!(a.extracao_id, x.id);
+    assert!(a.conversa_id.is_some());
+    let trecho = a.trecho.as_deref().unwrap();
+    assert!(trecho.contains("\u{1}Resposta\u{2}"), "{trecho:?}");
+
+    // Telefone digitado de outro jeito encontra remetente e destinatário.
+    let r = buscar("(11) 90000-0001");
+    assert_eq!(r.modo, "telefone");
+    assert_eq!(r.artefatos.total, 2);
+    // O número inteiro, só com dígitos.
+    assert_eq!(buscar("5511900000002").artefatos.total, 1);
+
+    // Nomes de arquivo do inventário.
+    let r = buscar("mmssms");
+    assert_eq!(r.arquivos.total, 2);
+    assert!(r.arquivos.itens.iter().all(|f| f.extracao_id == x.id));
+
+    // Texto com sintaxe de FTS não quebra a consulta.
+    assert_eq!(buscar("\"OR (NEAR -").artefatos.total, 0);
+    assert_eq!(buscar("   ").modo, "vazio");
+
+    // Filtros.
+    let filtrado = |f: FiltroBusca| banco.buscar(&f, 0, 10).unwrap().artefatos.total;
+    let base = || FiltroBusca {
+        texto: "sintetic".into(),
+        ..Default::default()
+    };
+    assert_eq!(
+        filtrado(FiltroBusca {
+            app: Some("whatsapp".into()),
+            ..base()
+        }),
+        0
+    );
+    assert_eq!(
+        filtrado(FiltroBusca {
+            de_ms: Some(1_767_225_650_000),
+            ate_ms: Some(1_767_225_700_000),
+            ..base()
+        }),
+        1
+    );
+    assert_eq!(
+        filtrado(FiltroBusca {
+            extracao_id: Some(x.id),
+            tipo: Some("mensagem".into()),
+            ..base()
+        }),
+        3
+    );
+}
+
+#[test]
+fn caso_v2_ganha_conversas_e_busca_do_que_ja_foi_importado() {
+    let raiz = tempfile::tempdir().unwrap();
+    let origem = raiz.path().join("ext");
+    extracao_sintetica(&origem);
+    let (banco, d) = caso(raiz.path());
+    importar(&banco, &d, &origem, &Controle::default());
+    let esperado = conversas_e_busca_de(&banco);
+    let pasta = banco.pasta().to_path_buf();
+    banco.fechar().unwrap();
+
+    // Volta o banco para a versão 2 (sem as tabelas derivadas).
+    let conn = Connection::open(pasta.join("caso.sied.db")).unwrap();
+    conn.execute_batch(
+        "DROP TRIGGER artefato_indexa_busca; DROP TRIGGER artefato_agrega_conversa;
+         DROP TRIGGER arquivo_indexa_busca;
+         DROP TABLE busca_artefato; DROP TABLE busca_arquivo; DROP TABLE conversa_participante;
+         DROP TABLE conversa; DELETE FROM schema_migracao WHERE versao = 3;
+         PRAGMA user_version = 2;",
+    )
+    .unwrap();
+    drop(conn);
+
+    let banco = BancoCaso::abrir(&pasta, sessao()).unwrap();
+    assert!(pasta.join("caso.sied.db.antes-v3.bak").is_file());
+    assert_eq!(conversas_e_busca_de(&banco), esperado);
     banco.verificar_auditoria().unwrap();
 }

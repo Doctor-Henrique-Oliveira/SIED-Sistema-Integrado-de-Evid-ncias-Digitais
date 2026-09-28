@@ -66,3 +66,47 @@ export function tamanho(n: number | null | undefined): string {
 export function numero(n: number | null | undefined): string {
   return n == null ? "—" : n.toLocaleString("pt-BR");
 }
+
+/** Dia por extenso no fuso do caso, para os separadores da conversa. */
+export function dia(ms: number, fuso: string = FUSO_PADRAO): string {
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: fuso,
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  }).format(new Date(ms));
+}
+
+/** Hora com segundos no fuso do caso (o segundo importa em análise forense). */
+export function hora(ms: number, fuso: string = FUSO_PADRAO): string {
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: fuso,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(new Date(ms));
+}
+
+/** Início de um dia (AAAA-MM-DD) no fuso do caso, em ms UTC. `fim` pega o último ms do dia. */
+export function limiteDia(data: string, fuso: string = FUSO_PADRAO, fim = false): number | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(data);
+  if (!m) return null;
+  const [a, me, d] = [Number(m[1]), Number(m[2]) - 1, Number(m[3])];
+  // Descobre o deslocamento do fuso naquele dia e corrige (ida e volta pelo Intl).
+  const utc = Date.UTC(a, me, d + (fim ? 1 : 0));
+  const partes = new Intl.DateTimeFormat("en-US", {
+    timeZone: fuso,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(new Date(utc));
+  const v = (t: string) => Number(partes.find((p) => p.type === t)?.value);
+  const comoLocal = Date.UTC(v("year"), v("month") - 1, v("day"), v("hour"), v("minute"), v("second"));
+  const ms = utc - (comoLocal - utc);
+  return fim ? ms - 1 : ms;
+}

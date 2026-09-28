@@ -7,7 +7,9 @@ arquitetura aprovada em [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md).
 > **Estado atual: Fase 1 — fundação + primeira importação.** O app cria casos, cadastra
 > dispositivos e importa uma pasta de extração: inventário com SHA-256 de todos os arquivos,
 > manifesto `sha256sum`, SMS do Android interpretados com a origem de cada registro, tudo
-> com trilha de auditoria. O importador do Avilla aguarda uma extração real para ser escrito.
+> com trilha de auditoria. Conversas reconstruídas e busca global sobre o que foi importado.
+> O importador do Avilla aguarda uma extração real para ser escrito
+> (roteiro em [`docs/PREPARACAO-AVILLA-WHATSAPP.md`](docs/PREPARACAO-AVILLA-WHATSAPP.md)).
 
 ## Estrutura
 
@@ -68,6 +70,19 @@ caso, ou esteja dentro dela.
 Importadores disponíveis: **Pasta genérica** (qualquer pasta; interpreta `mmssms.db` do Android onde
 estiver). O **Avilla** aparece como "ainda não disponível" até sua estrutura ser documentada a partir de
 uma extração real. Parser disponível: **SMS do Android** (tabela `sms`; MMS ainda não).
+
+## Conversas e busca
+
+- **Conversas**: os registros de um mesmo app e da mesma conversa (`thread_id` no SMS) são agrupados e
+  mostrados como chat: recebidas à esquerda, enviadas à direita, separador por dia e hora com segundos no
+  fuso do caso. "Detalhes técnicos" mostra, para a mensagem clicada, a origem completa (arquivo, hash,
+  tabela, registro, valores brutos).
+- **Busca global** (SQLite FTS5): conteúdo das mensagens, remetentes/destinatários e nomes de arquivo do
+  inventário, sem diferenciar acentos e maiúsculas, com busca por prefixo. Um texto só com dígitos e
+  separadores é tratado como telefone e encontrado em qualquer formato (`(11) 90000-0001` acha
+  `+5511900000001`). Filtros por extração e período.
+- As duas coisas são **derivadas** (migração 3 do banco do caso): mantidas por gatilhos a cada registro
+  gravado e reconstruíveis a partir dos artefatos. Casos antigos ganham conversas e índice ao abrir.
 
 Fechar o caso ou o programa durante uma importação a cancela e registra o cancelamento. Uma importação
 interrompida por queda de energia aparece como "interrompida" ao reabrir o caso; basta importar de novo.

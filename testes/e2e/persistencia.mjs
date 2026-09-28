@@ -3,7 +3,8 @@
 // Fluxo: iniciar o SIED → criar caso → cadastrar dispositivo → fechar o programa →
 // abrir novamente → conferir que caso, dispositivo e auditoria persistiram →
 // importar uma extração SINTÉTICA (testes/gerador) → conferir registros, origem,
-// inventário e manifesto → provar que a extração não mudou → fechar e reabrir.
+// inventário e manifesto → buscar e abrir o registro na conversa → provar que a
+// extração não mudou → fechar e reabrir.
 //
 // Requisitos (Linux/CI): tauri-driver (cargo install tauri-driver), WebKitWebDriver e
 // um display (Xvfb). Uso:
@@ -250,6 +251,28 @@ async function principal() {
     await s.capturar("sied-7-inventario");
     if (retrato(extracao) !== antes) throw new Error("a pasta da extração foi alterada!");
 
+    console.log("6b. buscar, abrir na conversa e ver a origem");
+    await s.clicar("//a[normalize-space()='← Voltar ao caso']");
+    await s.clicar("//a[normalize-space()='Buscar']");
+    await s.digitarEm("//input[@id='texto-busca']", "encontrar");
+    await s.clicar(botao("Buscar"));
+    await s.esperarTexto("Registros (1)");
+    await s.capturar("sied-9-busca");
+    await s.clicar("//a[@data-teste='achado']");
+    const chat = await s.esperarTexto("_id=3");
+    for (const esperado of ["Oi, tudo bem? (mensagem sintética)", "Combinado.", "4 mensagens (2 enviadas)"]) {
+      if (!chat.includes(esperado)) throw new Error(`conversa sem: ${esperado}`);
+    }
+    await s.capturar("sied-10-conversa-com-origem");
+    await s.clicar("//a[normalize-space()='Buscar em tudo']");
+    await s.digitarEm("//input[@id='texto-busca']", "(21) 90000-0002");
+    await s.clicar(botao("Buscar"));
+    await s.esperarTexto("Registros (1) · busca por telefone");
+    await s.clicar("//a[normalize-space()='← Voltar ao caso']");
+    await s.clicar("//a[normalize-space()='Conversas']");
+    const conversas = await s.esperarTexto("Mensagem que só existe no WAL");
+    if ((conversas.match(/mensagens ·/g) ?? []).length !== 3) throw new Error("esperadas 3 conversas");
+
     console.log("7. fechar, reabrir e conferir a extração e a auditoria");
     await s.fecharJanela();
     s = await Sessao.abrir();
@@ -262,7 +285,7 @@ async function principal() {
     await s.capturar("sied-8-caso-com-extracao");
     await s.fecharJanela();
     if (retrato(extracao) !== antes) throw new Error("a pasta da extração foi alterada!");
-    console.log(`\nOK: dados persistiram; importação conferida; extração intacta.\nPASTA_DADOS=${env.SIED_PASTA_DADOS}\nPASTA_CASOS=${env.SIED_PASTA_CASOS}`);
+    console.log(`\nOK: dados persistiram; importação, busca e conversas conferidas; extração intacta.\nPASTA_DADOS=${env.SIED_PASTA_DADOS}\nPASTA_CASOS=${env.SIED_PASTA_CASOS}`);
   } catch (e) {
     if (atual) {
       await atual.capturar("sied-falha").catch(() => {});
