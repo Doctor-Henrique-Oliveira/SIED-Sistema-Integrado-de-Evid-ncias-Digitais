@@ -3,7 +3,9 @@
 
 use serde::Serialize;
 use sied_armazenamento::auditoria::{RegistroAuditoria, VerificacaoAuditoria};
+use sied_armazenamento::busca::{FiltroBusca, ResultadoBusca};
 use sied_armazenamento::caso::{nome_pasta_sugerido, NOME_ARQUIVO_CASO};
+use sied_armazenamento::conversas::Conversa;
 use sied_armazenamento::extracoes::{
     ArquivoExtracao, ArtefatoDetalhe, ArtefatoResumo, ExecucaoParser, Extracao, Pagina,
     TotalCategoria,
@@ -412,6 +414,49 @@ impl Servico {
         Ok(self.banco()?.artefato(artefato_id)?)
     }
 
+    pub fn listar_conversas(
+        &mut self,
+        extracao_id: Option<ExtracaoId>,
+        deslocamento: i64,
+        limite: i64,
+    ) -> ResultadoApp<Pagina<Conversa>> {
+        Ok(self
+            .banco()?
+            .conversas(extracao_id, deslocamento.max(0), limite.clamp(1, 500))?)
+    }
+
+    pub fn obter_conversa(&mut self, conversa_id: i64) -> ResultadoApp<Conversa> {
+        Ok(self.banco()?.conversa(conversa_id)?)
+    }
+
+    pub fn mensagens_conversa(
+        &mut self,
+        conversa_id: i64,
+        deslocamento: i64,
+        limite: i64,
+    ) -> ResultadoApp<Pagina<ArtefatoResumo>> {
+        Ok(self.banco()?.mensagens_conversa(
+            conversa_id,
+            deslocamento.max(0),
+            limite.clamp(1, 1000),
+        )?)
+    }
+
+    pub fn conversa_do_artefato(&mut self, artefato_id: i64) -> ResultadoApp<Option<i64>> {
+        Ok(self.banco()?.conversa_do_artefato(artefato_id)?)
+    }
+
+    pub fn buscar(
+        &mut self,
+        filtro: &FiltroBusca,
+        deslocamento: i64,
+        limite: i64,
+    ) -> ResultadoApp<ResultadoBusca> {
+        Ok(self
+            .banco()?
+            .buscar(filtro, deslocamento.max(0), limite.clamp(1, 200))?)
+    }
+
     /// Chamado ao encerrar o aplicativo.
     pub fn encerrar(&mut self) {
         if let Err(e) = self.fechar_atual() {
@@ -565,6 +610,21 @@ mod testes {
         let a = s.listar_artefatos(x.id, 0, 10).unwrap();
         let det = s.detalhe_artefato(a.itens[0].id).unwrap();
         assert_eq!(det.referencias[0].arquivo_caminho, "telefonia/mmssms.db");
+        let conversas = s.listar_conversas(Some(x.id), 0, 10).unwrap();
+        assert_eq!(conversas.total, 1);
+        let msgs = s.mensagens_conversa(conversas.itens[0].id, 0, 10).unwrap();
+        assert_eq!(msgs.itens[0].id, a.itens[0].id);
+        let achado = s
+            .buscar(
+                &FiltroBusca {
+                    texto: "mmssms".into(),
+                    ..Default::default()
+                },
+                0,
+                10,
+            )
+            .unwrap();
+        assert_eq!(achado.arquivos.total, 1);
         s.verificar_auditoria().unwrap();
     }
 

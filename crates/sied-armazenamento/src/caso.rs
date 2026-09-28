@@ -22,6 +22,8 @@ use sied_ingestao::InfoComponente;
 use std::path::{Path, PathBuf};
 
 use crate::auditoria::{self, RegistroAuditoria, VerificacaoAuditoria};
+use crate::busca::{self, FiltroBusca, ResultadoBusca};
+use crate::conversas::{self, Conversa};
 use crate::extracoes::{
     self, ArquivoExtracao, ArtefatoDetalhe, ArtefatoResumo, ExecucaoParser, Extracao, Pagina,
     TotalCategoria,
@@ -269,6 +271,41 @@ impl BancoCaso {
 
     pub fn artefato(&self, artefato_id: i64) -> Resultado<ArtefatoDetalhe> {
         extracoes::detalhe_artefato(&self.conn, artefato_id)
+    }
+
+    pub fn conversas(
+        &self,
+        extracao: Option<ExtracaoId>,
+        deslocamento: i64,
+        limite: i64,
+    ) -> Resultado<Pagina<Conversa>> {
+        conversas::listar(&self.conn, extracao, deslocamento, limite)
+    }
+
+    pub fn conversa(&self, conversa_id: i64) -> Resultado<Conversa> {
+        conversas::obter(&self.conn, conversa_id)
+    }
+
+    pub fn mensagens_conversa(
+        &self,
+        conversa_id: i64,
+        deslocamento: i64,
+        limite: i64,
+    ) -> Resultado<Pagina<ArtefatoResumo>> {
+        conversas::mensagens(&self.conn, conversa_id, deslocamento, limite)
+    }
+
+    pub fn conversa_do_artefato(&self, artefato_id: i64) -> Resultado<Option<i64>> {
+        conversas::conversa_do_artefato(&self.conn, artefato_id)
+    }
+
+    pub fn buscar(
+        &self,
+        filtro: &FiltroBusca,
+        deslocamento: i64,
+        limite: i64,
+    ) -> Resultado<ResultadoBusca> {
+        busca::buscar(&self.conn, filtro, deslocamento, limite)
     }
 }
 

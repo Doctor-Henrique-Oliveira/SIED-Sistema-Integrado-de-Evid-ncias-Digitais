@@ -54,3 +54,14 @@ export function tomStatus(status: string): "ok" | "atencao" | "erro" | "neutro" 
   if (status === "falhou") return "erro";
   return "neutro";
 }
+
+export const nomeApp: Record<string, string> = {
+  sms: "SMS",
+  whatsapp: "WhatsApp",
+  telegram: "Telegram",
+};
+
+export function rotuloApp(app: string | null | undefined): string {
+  if (!app) return "—";
+  return nomeApp[app] ?? app;
+}

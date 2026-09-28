@@ -24,8 +24,18 @@ import type { Extracao } from "./tipos/Extracao";
 import type { ExtracaoId } from "./tipos/ExtracaoId";
 import type { Pagina } from "./tipos/Pagina";
 import type { TotalCategoria } from "./tipos/TotalCategoria";
+import type { Conversa } from "./tipos/Conversa";
+import type { FiltroBusca } from "./tipos/FiltroBusca";
+import type { ResultadoBusca } from "./tipos/ResultadoBusca";
+import type { AchadoArtefato } from "./tipos/AchadoArtefato";
+import type { AchadoArquivo } from "./tipos/AchadoArquivo";
 
 export type {
+  AchadoArquivo,
+  AchadoArtefato,
+  Conversa,
+  FiltroBusca,
+  ResultadoBusca,
   ArquivoExtracao,
   ArtefatoDetalhe,
   ArtefatoResumo,
@@ -119,4 +129,13 @@ export const api = {
   listarArtefatos: (extracaoId: ExtracaoId, deslocamento: number, limite: number) =>
     chamar<Pagina<ArtefatoResumo>>("listar_artefatos", { extracaoId, deslocamento, limite }),
   detalheArtefato: (artefatoId: number) => chamar<ArtefatoDetalhe>("detalhe_artefato", { artefatoId }),
+
+  listarConversas: (extracaoId: ExtracaoId | null, deslocamento: number, limite: number) =>
+    chamar<Pagina<Conversa>>("listar_conversas", { extracaoId, deslocamento, limite }),
+  obterConversa: (conversaId: number) => chamar<Conversa>("obter_conversa", { conversaId }),
+  mensagensConversa: (conversaId: number, deslocamento: number, limite: number) =>
+    chamar<Pagina<ArtefatoResumo>>("mensagens_conversa", { conversaId, deslocamento, limite }),
+  conversaDoArtefato: (artefatoId: number) => chamar<number | null>("conversa_do_artefato", { artefatoId }),
+  buscar: (filtro: FiltroBusca, deslocamento: number, limite: number) =>
+    chamar<ResultadoBusca>("buscar", { filtro, deslocamento, limite }),
 };

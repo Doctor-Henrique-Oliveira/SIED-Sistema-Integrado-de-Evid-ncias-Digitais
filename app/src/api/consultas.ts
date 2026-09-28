@@ -8,6 +8,7 @@ import {
   type CasoId,
   type DispositivoId,
   type ExtracaoId,
+  type FiltroBusca,
   type NovoCaso,
   type NovoDispositivo,
 } from "./cliente";
@@ -21,6 +22,9 @@ export const chaves = {
   importacao: ["importacao"] as const,
   extracoes: (casoId: CasoId) => ["extracoes", casoId] as const,
   extracao: (id: ExtracaoId) => ["extracao", id] as const,
+  // Conversas e busca derivam das importações: invalidadas junto com elas.
+  conversas: (casoId: CasoId) => ["conversas", casoId] as const,
+  busca: (casoId: CasoId) => ["busca", casoId] as const,
 };
 
 export function useInfoApp() {
@@ -113,6 +117,8 @@ export function useEstadoImportacao(casoId: CasoId) {
       void qc.invalidateQueries({ queryKey: chaves.extracoes(casoId) });
       void qc.invalidateQueries({ queryKey: chaves.auditoria(casoId) });
       void qc.invalidateQueries({ queryKey: ["extracao"] });
+      void qc.invalidateQueries({ queryKey: chaves.conversas(casoId) });
+      void qc.invalidateQueries({ queryKey: chaves.busca(casoId) });
     }
     anterior.current = terminada;
   }, [terminada, casoId, qc]);
@@ -182,5 +188,39 @@ export function useDetalheArtefato(artefatoId: number | null) {
     queryKey: ["artefato", artefatoId],
     queryFn: () => api.detalheArtefato(artefatoId!),
     enabled: artefatoId != null,
+  });
+}
+
+export function useConversas(casoId: CasoId, extracaoId: ExtracaoId | null, deslocamento: number, limite: number) {
+  return useQuery({
+    queryKey: [...chaves.conversas(casoId), "lista", extracaoId, deslocamento, limite],
+    queryFn: () => api.listarConversas(extracaoId, deslocamento, limite),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useConversa(casoId: CasoId, conversaId: number | null) {
+  return useQuery({
+    queryKey: [...chaves.conversas(casoId), "detalhe", conversaId],
+    queryFn: () => api.obterConversa(conversaId!),
+    enabled: conversaId != null,
+  });
+}
+
+export function useMensagensConversa(casoId: CasoId, conversaId: number | null, deslocamento: number, limite: number) {
+  return useQuery({
+    queryKey: [...chaves.conversas(casoId), "mensagens", conversaId, deslocamento, limite],
+    queryFn: () => api.mensagensConversa(conversaId!, deslocamento, limite),
+    enabled: conversaId != null,
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useBusca(casoId: CasoId, filtro: FiltroBusca | null, deslocamento: number, limite: number) {
+  return useQuery({
+    queryKey: [...chaves.busca(casoId), filtro, deslocamento, limite],
+    queryFn: () => api.buscar(filtro!, deslocamento, limite),
+    enabled: filtro != null && filtro.texto.trim() !== "",
+    placeholderData: keepPreviousData,
   });
 }

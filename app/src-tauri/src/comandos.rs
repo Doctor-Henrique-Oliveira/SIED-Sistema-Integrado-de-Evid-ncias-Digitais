@@ -2,6 +2,8 @@
 //! delega ao [`Servico`] e converte erros.
 
 use sied_armazenamento::auditoria::{RegistroAuditoria, VerificacaoAuditoria};
+use sied_armazenamento::busca::{FiltroBusca, ResultadoBusca};
+use sied_armazenamento::conversas::Conversa;
 use sied_armazenamento::extracoes::{
     ArquivoExtracao, ArtefatoDetalhe, ArtefatoResumo, ExecucaoParser, Extracao, Pagina,
     TotalCategoria,
@@ -189,4 +191,47 @@ pub fn detalhe_artefato(
     artefato_id: i64,
 ) -> ResultadoApp<ArtefatoDetalhe> {
     estado.com(|s| s.detalhe_artefato(artefato_id))
+}
+
+#[tauri::command]
+pub fn listar_conversas(
+    estado: State<'_, Estado>,
+    extracao_id: Option<ExtracaoId>,
+    deslocamento: i64,
+    limite: i64,
+) -> ResultadoApp<Pagina<Conversa>> {
+    estado.com(|s| s.listar_conversas(extracao_id, deslocamento, limite))
+}
+
+#[tauri::command]
+pub fn obter_conversa(estado: State<'_, Estado>, conversa_id: i64) -> ResultadoApp<Conversa> {
+    estado.com(|s| s.obter_conversa(conversa_id))
+}
+
+#[tauri::command]
+pub fn mensagens_conversa(
+    estado: State<'_, Estado>,
+    conversa_id: i64,
+    deslocamento: i64,
+    limite: i64,
+) -> ResultadoApp<Pagina<ArtefatoResumo>> {
+    estado.com(|s| s.mensagens_conversa(conversa_id, deslocamento, limite))
+}
+
+#[tauri::command]
+pub fn conversa_do_artefato(
+    estado: State<'_, Estado>,
+    artefato_id: i64,
+) -> ResultadoApp<Option<i64>> {
+    estado.com(|s| s.conversa_do_artefato(artefato_id))
+}
+
+#[tauri::command]
+pub fn buscar(
+    estado: State<'_, Estado>,
+    filtro: FiltroBusca,
+    deslocamento: i64,
+    limite: i64,
+) -> ResultadoApp<ResultadoBusca> {
+    estado.com(|s| s.buscar(&filtro, deslocamento, limite))
 }

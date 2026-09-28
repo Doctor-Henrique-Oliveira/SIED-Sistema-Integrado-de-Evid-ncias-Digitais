@@ -9,8 +9,10 @@
 //!   É autocontido: copiar a pasta do caso leva todos os dados junto.
 
 pub mod auditoria;
+pub mod busca;
 pub mod caso;
 mod conexao;
+pub mod conversas;
 pub mod erro;
 pub mod extracoes;
 pub mod global;

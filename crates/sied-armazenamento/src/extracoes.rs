@@ -49,7 +49,7 @@ const COLUNAS_EXTRACAO: &str = "id, dispositivo_id, importador, importador_nome,
     concluida_em, status, total_arquivos, total_bytes, arquivos_ilegiveis, itens_ignorados,
     hash_manifesto, total_artefatos, total_avisos, erro, observacoes";
 
-fn uuid<T: std::str::FromStr>(texto: String) -> rusqlite::Result<T>
+pub(crate) fn uuid<T: std::str::FromStr>(texto: String) -> rusqlite::Result<T>
 where
     T::Err: std::error::Error + Send + Sync + 'static,
 {
@@ -276,7 +276,7 @@ pub struct ArtefatoResumo {
     pub estado_registro: String,
 }
 
-fn ler_resumo(r: &Row) -> rusqlite::Result<ArtefatoResumo> {
+pub(crate) fn ler_resumo(r: &Row) -> rusqlite::Result<ArtefatoResumo> {
     let dest: String = r.get(5)?;
     Ok(ArtefatoResumo {
         id: r.get(0)?,

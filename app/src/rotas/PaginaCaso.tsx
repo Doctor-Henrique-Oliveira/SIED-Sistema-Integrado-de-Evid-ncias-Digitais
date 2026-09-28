@@ -63,6 +63,22 @@ function DetalheCaso({ caso, pasta }: { caso: Caso; pasta: string }) {
             {pasta}
           </span>
         }
+        acoes={
+          <div className="flex gap-2">
+            <Link
+              to={`/casos/${caso.id}/conversas`}
+              className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 ring-1 ring-inset ring-slate-300 hover:bg-slate-50"
+            >
+              Conversas
+            </Link>
+            <Link
+              to={`/casos/${caso.id}/busca`}
+              className="rounded-lg bg-marca-600 px-4 py-2 text-sm font-medium text-white hover:bg-marca-700"
+            >
+              Buscar
+            </Link>
+          </div>
+        }
       />
       <div className="grid gap-6">
         <Cartao titulo="Procedimento">
