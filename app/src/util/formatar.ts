@@ -52,3 +52,17 @@ export function identificacaoCaso(c: {
 }): string {
   return c.numero_procedimento ?? (c.numero_bo ? `BO ${c.numero_bo}` : "Caso sem número");
 }
+
+/** Data a partir de milissegundos UTC, no fuso do caso. */
+export function dataHoraMs(ms: number | null | undefined, fuso: string = FUSO_PADRAO): string {
+  return ms == null ? "—" : dataHora(new Date(ms).toISOString(), fuso);
+}
+
+/** Tamanho de arquivo (unidades decimais, como o Windows Explorer usa KB/MB). */
+export function tamanho(n: number | null | undefined): string {
+  return n === 0 ? "0 B" : bytes(n);
+}
+
+export function numero(n: number | null | undefined): string {
+  return n == null ? "—" : n.toLocaleString("pt-BR");
+}

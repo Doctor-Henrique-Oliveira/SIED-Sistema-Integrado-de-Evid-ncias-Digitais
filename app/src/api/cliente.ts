@@ -13,8 +13,30 @@ import type { NovoCaso } from "./tipos/NovoCaso";
 import type { NovoDispositivo } from "./tipos/NovoDispositivo";
 import type { RegistroAuditoria } from "./tipos/RegistroAuditoria";
 import type { VerificacaoAuditoria } from "./tipos/VerificacaoAuditoria";
+import type { ArquivoExtracao } from "./tipos/ArquivoExtracao";
+import type { ArtefatoDetalhe } from "./tipos/ArtefatoDetalhe";
+import type { ArtefatoResumo } from "./tipos/ArtefatoResumo";
+import type { Deteccao } from "./tipos/Deteccao";
+import type { DispositivoId } from "./tipos/DispositivoId";
+import type { EstadoImportacao } from "./tipos/EstadoImportacao";
+import type { ExecucaoParser } from "./tipos/ExecucaoParser";
+import type { Extracao } from "./tipos/Extracao";
+import type { ExtracaoId } from "./tipos/ExtracaoId";
+import type { Pagina } from "./tipos/Pagina";
+import type { TotalCategoria } from "./tipos/TotalCategoria";
 
 export type {
+  ArquivoExtracao,
+  ArtefatoDetalhe,
+  ArtefatoResumo,
+  Deteccao,
+  DispositivoId,
+  EstadoImportacao,
+  ExecucaoParser,
+  Extracao,
+  ExtracaoId,
+  Pagina,
+  TotalCategoria,
   Caso,
   CasoAberto,
   CasoCatalogado,
@@ -77,4 +99,24 @@ export const api = {
   listarDispositivos: () => chamar<Dispositivo[]>("listar_dispositivos"),
   listarAuditoria: (limite: number) => chamar<RegistroAuditoria[]>("listar_auditoria", { limite }),
   verificarAuditoria: () => chamar<VerificacaoAuditoria>("verificar_auditoria"),
+
+  detectarFonte: (pasta: string) => chamar<Deteccao[]>("detectar_fonte", { pasta }),
+  iniciarImportacao: (dispositivoId: DispositivoId, pasta: string, importador: string) =>
+    chamar<EstadoImportacao>("iniciar_importacao", { dispositivoId, pasta, importador }),
+  estadoImportacao: () => chamar<EstadoImportacao | null>("estado_importacao"),
+  cancelarImportacao: () => chamar<null>("cancelar_importacao"),
+  listarExtracoes: () => chamar<Extracao[]>("listar_extracoes"),
+  obterExtracao: (extracaoId: ExtracaoId) => chamar<Extracao>("obter_extracao", { extracaoId }),
+  totaisPorCategoria: (extracaoId: ExtracaoId) =>
+    chamar<TotalCategoria[]>("totais_por_categoria", { extracaoId }),
+  listarArquivos: (
+    extracaoId: ExtracaoId,
+    filtro: { categoria: string | null; texto: string | null },
+    deslocamento: number,
+    limite: number,
+  ) => chamar<Pagina<ArquivoExtracao>>("listar_arquivos", { extracaoId, ...filtro, deslocamento, limite }),
+  listarExecucoes: (extracaoId: ExtracaoId) => chamar<ExecucaoParser[]>("listar_execucoes", { extracaoId }),
+  listarArtefatos: (extracaoId: ExtracaoId, deslocamento: number, limite: number) =>
+    chamar<Pagina<ArtefatoResumo>>("listar_artefatos", { extracaoId, deslocamento, limite }),
+  detalheArtefato: (artefatoId: number) => chamar<ArtefatoDetalhe>("detalhe_artefato", { artefatoId }),
 };

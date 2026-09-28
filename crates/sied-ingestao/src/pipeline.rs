@@ -471,6 +471,9 @@ fn inventariar(
     Ok(())
 }
 
+/// Papel do arquivo → (id no inventário, SHA-256).
+type PorPapel = HashMap<String, (i64, String)>;
+
 /// Copia um arquivo da extração para `pasta`, conferindo que o hash da cópia é o do
 /// inventário. Se o original mudou desde o inventário, a cópia é descartada.
 fn copiar_verificado(
@@ -506,7 +509,7 @@ fn preparar_entrada(
     controle: &Controle,
     ctx: &ContextoImportacao,
     tarefa: &TarefaParser,
-) -> Resultado<(Vec<ArquivoDeTrabalho>, HashMap<String, (i64, String)>)> {
+) -> Resultado<(Vec<ArquivoDeTrabalho>, PorPapel)> {
     let mut arquivos = Vec::new();
     let mut por_papel = HashMap::new();
     for a in &tarefa.arquivos {
@@ -692,7 +695,7 @@ struct Coletor<'a> {
     destino: &'a mut dyn Destino,
     controle: &'a Controle,
     execucao: i64,
-    por_papel: &'a HashMap<String, (i64, String)>,
+    por_papel: &'a PorPapel,
     lote: Vec<ArtefatoParaGravar>,
     falha_gravacao: Option<ErroIngestao>,
     emitidos: u64,

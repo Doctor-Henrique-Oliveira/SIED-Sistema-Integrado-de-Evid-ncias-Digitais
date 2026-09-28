@@ -88,6 +88,17 @@ pub fn executar() {
             comandos::listar_dispositivos,
             comandos::listar_auditoria,
             comandos::verificar_auditoria,
+            comandos::detectar_fonte,
+            comandos::iniciar_importacao,
+            comandos::estado_importacao,
+            comandos::cancelar_importacao,
+            comandos::listar_extracoes,
+            comandos::obter_extracao,
+            comandos::totais_por_categoria,
+            comandos::listar_arquivos,
+            comandos::listar_execucoes,
+            comandos::listar_artefatos,
+            comandos::detalhe_artefato,
         ])
         .build(tauri::generate_context!())
         .expect("falha ao montar o aplicativo");

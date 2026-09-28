@@ -1,8 +1,16 @@
 // Hooks de dados (TanStack Query). A UI nunca guarda cópias próprias do estado do
 // backend: lê daqui e invalida após cada alteração.
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, type CasoId, type NovoCaso, type NovoDispositivo } from "./cliente";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
+import {
+  api,
+  type CasoId,
+  type DispositivoId,
+  type ExtracaoId,
+  type NovoCaso,
+  type NovoDispositivo,
+} from "./cliente";
 
 export const chaves = {
   info: ["info"] as const,
@@ -10,6 +18,9 @@ export const chaves = {
   casoAtual: ["caso-atual"] as const,
   dispositivos: (casoId: CasoId) => ["dispositivos", casoId] as const,
   auditoria: (casoId: CasoId) => ["auditoria", casoId] as const,
+  importacao: ["importacao"] as const,
+  extracoes: (casoId: CasoId) => ["extracoes", casoId] as const,
+  extracao: (id: ExtracaoId) => ["extracao", id] as const,
 };
 
 export function useInfoApp() {
@@ -81,5 +92,95 @@ export function useCadastrarDispositivo(casoId: CasoId) {
       void qc.invalidateQueries({ queryKey: chaves.dispositivos(casoId) });
       void qc.invalidateQueries({ queryKey: chaves.auditoria(casoId) });
     },
+  });
+}
+
+// ---------- Importação ----------
+
+/** Acompanha a importação em curso: consulta a cada 500 ms até terminar. Quando
+ * termina, atualiza extrações e atividades do caso. */
+export function useEstadoImportacao(casoId: CasoId) {
+  const qc = useQueryClient();
+  const consulta = useQuery({
+    queryKey: chaves.importacao,
+    queryFn: api.estadoImportacao,
+    refetchInterval: (q) => (q.state.data && !q.state.data.terminada ? 500 : false),
+  });
+  const terminada = consulta.data?.terminada;
+  const anterior = useRef(terminada);
+  useEffect(() => {
+    if (anterior.current === false && terminada) {
+      void qc.invalidateQueries({ queryKey: chaves.extracoes(casoId) });
+      void qc.invalidateQueries({ queryKey: chaves.auditoria(casoId) });
+      void qc.invalidateQueries({ queryKey: ["extracao"] });
+    }
+    anterior.current = terminada;
+  }, [terminada, casoId, qc]);
+  return consulta;
+}
+
+export function useIniciarImportacao(casoId: CasoId) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (p: { dispositivoId: DispositivoId; pasta: string; importador: string }) =>
+      api.iniciarImportacao(p.dispositivoId, p.pasta, p.importador),
+    onSuccess: (estado) => {
+      qc.setQueryData(chaves.importacao, estado);
+      void qc.invalidateQueries({ queryKey: chaves.extracoes(casoId) });
+      void qc.invalidateQueries({ queryKey: chaves.auditoria(casoId) });
+    },
+  });
+}
+
+export function useCancelarImportacao() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.cancelarImportacao,
+    onSuccess: () => void qc.invalidateQueries({ queryKey: chaves.importacao }),
+  });
+}
+
+export function useExtracoes(casoId: CasoId) {
+  return useQuery({ queryKey: chaves.extracoes(casoId), queryFn: api.listarExtracoes });
+}
+
+export function useExtracao(id: ExtracaoId) {
+  return useQuery({ queryKey: chaves.extracao(id), queryFn: () => api.obterExtracao(id) });
+}
+
+export function useTotaisPorCategoria(id: ExtracaoId) {
+  return useQuery({ queryKey: [...chaves.extracao(id), "categorias"], queryFn: () => api.totaisPorCategoria(id) });
+}
+
+export function useArquivos(
+  id: ExtracaoId,
+  filtro: { categoria: string | null; texto: string | null },
+  deslocamento: number,
+  limite: number,
+) {
+  return useQuery({
+    queryKey: [...chaves.extracao(id), "arquivos", filtro, deslocamento, limite],
+    queryFn: () => api.listarArquivos(id, filtro, deslocamento, limite),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useExecucoes(id: ExtracaoId) {
+  return useQuery({ queryKey: [...chaves.extracao(id), "execucoes"], queryFn: () => api.listarExecucoes(id) });
+}
+
+export function useArtefatos(id: ExtracaoId, deslocamento: number, limite: number) {
+  return useQuery({
+    queryKey: [...chaves.extracao(id), "artefatos", deslocamento, limite],
+    queryFn: () => api.listarArtefatos(id, deslocamento, limite),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useDetalheArtefato(artefatoId: number | null) {
+  return useQuery({
+    queryKey: ["artefato", artefatoId],
+    queryFn: () => api.detalheArtefato(artefatoId!),
+    enabled: artefatoId != null,
   });
 }

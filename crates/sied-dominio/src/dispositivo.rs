@@ -151,7 +151,7 @@ pub fn validar_imei(imei: &str) -> Result<(), &'static str> {
             }
         })
         .sum();
-    if soma % 10 == 0 {
+    if soma.is_multiple_of(10) {
         Ok(())
     } else {
         Err("IMEI inválido (dígito verificador não confere)")

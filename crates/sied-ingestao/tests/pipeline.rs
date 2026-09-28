@@ -36,7 +36,7 @@ impl FonteSomenteLeitura for FonteQueMuda {
         })))
     }
     fn entrada(&self, _: &CaminhoFonte) -> Resultado<Option<EntradaFonte>> {
-        Ok(self.listar().next().transpose()?)
+        self.listar().next().transpose()
     }
     fn abrir(&self, _: &CaminhoFonte) -> Resultado<Box<dyn LeitorFonte>> {
         let n = self.leituras.fetch_add(1, Ordering::SeqCst);
