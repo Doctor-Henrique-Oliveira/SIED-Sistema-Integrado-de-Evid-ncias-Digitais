@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+/* Tokens do SIED. Fontes do sistema: nada é baixado da internet. */
+@theme {
+  --font-sans: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  --font-mono: "Cascadia Mono", Consolas, ui-monospace, monospace;
+
+  --color-marca-50: #effcf9;
+  --color-marca-100: #c9f5ec;
+  --color-marca-500: #14b8a6;
+  --color-marca-600: #0d9488;
+  --color-marca-700: #0f766e;
+
+  --color-painel: #0f2742;
+  --color-painel-claro: #173657;
+}
+
+html,
+body,
+#raiz {
+  height: 100%;
+}
+
+body {
+  @apply bg-slate-100 text-slate-800 antialiased;
+  font-family: var(--font-sans);
+}
+
+::selection {
+  @apply bg-marca-100;
+}
