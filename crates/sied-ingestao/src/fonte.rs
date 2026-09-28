@@ -10,6 +10,8 @@ use ts_rs::TS;
 
 use crate::{ErroIngestao, Resultado};
 
+pub mod pasta;
+
 /// Separador entre o caminho de um contêiner e o caminho interno.
 /// Ex.: `backup.ab!/apps/com.whatsapp/db/msgstore.db`
 pub const SEPARADOR_CONTEINER: &str = "!/";

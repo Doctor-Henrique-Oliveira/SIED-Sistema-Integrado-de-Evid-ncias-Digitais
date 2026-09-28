@@ -43,6 +43,12 @@ pub enum ErroArmazenamento {
     #[error("banco do caso inconsistente: {0}")]
     Inconsistente(String),
 
+    #[error("{0} não encontrado(a)")]
+    NaoEncontrado(String),
+
+    #[error("pasta de extração inválida: {0}")]
+    OrigemInvalida(String),
+
     #[error("trilha de auditoria inválida no registro {seq}: {motivo}")]
     AuditoriaCorrompida { seq: i64, motivo: String },
 }

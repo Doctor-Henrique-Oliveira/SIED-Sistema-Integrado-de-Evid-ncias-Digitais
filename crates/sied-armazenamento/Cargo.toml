@@ -14,6 +14,7 @@ serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 sied-dominio.workspace = true
+sied-ingestao.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 ts-rs.workspace = true
@@ -21,3 +22,4 @@ uuid.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+walkdir.workspace = true

@@ -2,22 +2,31 @@
 //!
 //! ```text
 //! <pasta do caso>/
-//!   caso.sied.db     procedimento, dispositivos, auditoria (e, adiante, extrações e artefatos)
+//!   caso.sied.db     procedimento, dispositivos, extrações, inventário, artefatos, auditoria
+//!   importacoes/<id>/  manifesto.sha256 e log-importacao.jsonl de cada importação
+//!   cache/bancos/<id>/ cópias de trabalho verificadas dos bancos lidos pelos parsers
 //! ```
 //!
 //! Cada alteração é gravada na mesma transação que o seu registro de auditoria:
 //! ou as duas coisas ficam gravadas, ou nenhuma.
 
 use chrono::{DateTime, Utc};
-use rusqlite::{params, Connection, Row};
+use rusqlite::{params, Connection, Row, TransactionBehavior};
 use serde_json::json;
 use sied_dominio::caso::FUSO_PADRAO;
 use sied_dominio::{
-    Caso, CasoId, Dispositivo, DispositivoId, NovoCaso, NovoDispositivo, SistemaOperacional,
+    Caso, CasoId, Dispositivo, DispositivoId, ExtracaoId, NovoCaso, NovoDispositivo,
+    SistemaOperacional,
 };
+use sied_ingestao::InfoComponente;
 use std::path::{Path, PathBuf};
 
 use crate::auditoria::{self, RegistroAuditoria, VerificacaoAuditoria};
+use crate::extracoes::{
+    self, ArquivoExtracao, ArtefatoDetalhe, ArtefatoResumo, ExecucaoParser, Extracao, Pagina,
+    TotalCategoria,
+};
+use crate::importacao::Importacao;
 use crate::migracoes::{self, BANCO_CASO};
 use crate::{conexao, ErroArmazenamento, Resultado, Sessao};
 
@@ -55,7 +64,7 @@ impl BancoCaso {
             criado_em: agora,
             atualizado_em: agora,
         };
-        let tx = conn.transaction()?;
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
         let d = &caso.dados;
         tx.execute(
             "INSERT INTO caso(id, procedimento, numero_procedimento, numero_bo, investigado, vitima, delegado,
@@ -102,7 +111,10 @@ impl BancoCaso {
         let mut conn = conexao::abrir(&caminho)?;
         migracoes::preparar(&mut conn, &caminho, &BANCO_CASO)?;
         let caso = ler_caso(&conn)?;
-        auditoria::registrar(&conn, &sessao, "caso_aberto", json!({ "pasta": pasta }))?;
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        auditoria::registrar(&tx, &sessao, "caso_aberto", json!({ "pasta": pasta }))?;
+        marcar_interrompidas(&tx, &sessao)?;
+        tx.commit()?;
         tracing::info!(caso = %caso.id, pasta = %pasta.display(), "caso aberto");
         Ok(BancoCaso {
             conn,
@@ -113,8 +125,12 @@ impl BancoCaso {
     }
 
     /// Registra o fechamento na auditoria e libera o banco.
-    pub fn fechar(self) -> Resultado<()> {
-        auditoria::registrar(&self.conn, &self.sessao, "caso_fechado", json!({}))?;
+    pub fn fechar(mut self) -> Resultado<()> {
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        auditoria::registrar(&tx, &self.sessao, "caso_fechado", json!({}))?;
+        tx.commit()?;
         tracing::info!(caso = %self.caso.id, "caso fechado");
         self.conn.close().map_err(|(_, e)| e)?;
         Ok(())
@@ -139,7 +155,9 @@ impl BancoCaso {
             criado_em: agora,
             atualizado_em: agora,
         };
-        let tx = self.conn.transaction()?;
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let d = &disp.dados;
         tx.execute(
             "INSERT INTO dispositivo(id, caso_id, apelido, fabricante, modelo, nome_comercial, sistema, versao_sistema,
@@ -193,6 +211,96 @@ impl BancoCaso {
     pub fn verificar_auditoria(&self) -> Resultado<VerificacaoAuditoria> {
         auditoria::verificar(&self.conn)
     }
+
+    /// Registra o início de uma importação e devolve o gravador, que tem conexão
+    /// própria e pode ser levado para outra thread.
+    pub fn iniciar_importacao(
+        &self,
+        dispositivo_id: DispositivoId,
+        importador: &InfoComponente,
+        origem: &Path,
+    ) -> Resultado<Importacao> {
+        Importacao::iniciar(
+            &self.pasta.join(NOME_ARQUIVO_CASO),
+            &self.pasta,
+            &self.caso.fuso_horario,
+            self.sessao.clone(),
+            dispositivo_id,
+            importador,
+            origem,
+        )
+    }
+
+    pub fn extracoes(&self) -> Resultado<Vec<Extracao>> {
+        extracoes::listar(&self.conn)
+    }
+
+    pub fn extracao(&self, id: ExtracaoId) -> Resultado<Extracao> {
+        extracoes::obter(&self.conn, id)
+    }
+
+    pub fn totais_por_categoria(&self, id: ExtracaoId) -> Resultado<Vec<TotalCategoria>> {
+        extracoes::totais_por_categoria(&self.conn, id)
+    }
+
+    pub fn arquivos(
+        &self,
+        id: ExtracaoId,
+        categoria: Option<&str>,
+        texto: Option<&str>,
+        deslocamento: i64,
+        limite: i64,
+    ) -> Resultado<Pagina<ArquivoExtracao>> {
+        extracoes::listar_arquivos(&self.conn, id, categoria, texto, deslocamento, limite)
+    }
+
+    pub fn execucoes(&self, id: ExtracaoId) -> Resultado<Vec<ExecucaoParser>> {
+        extracoes::listar_execucoes(&self.conn, id)
+    }
+
+    pub fn artefatos(
+        &self,
+        id: ExtracaoId,
+        deslocamento: i64,
+        limite: i64,
+    ) -> Resultado<Pagina<ArtefatoResumo>> {
+        extracoes::listar_artefatos(&self.conn, id, deslocamento, limite)
+    }
+
+    pub fn artefato(&self, artefato_id: i64) -> Resultado<ArtefatoDetalhe> {
+        extracoes::detalhe_artefato(&self.conn, artefato_id)
+    }
+}
+
+/// Importações que ainda constam "em andamento" ao abrir o caso foram interrompidas
+/// (programa encerrado ou queda de energia). O que já foi gravado permanece.
+fn marcar_interrompidas(conn: &Connection, sessao: &Sessao) -> Resultado<()> {
+    let ids: Vec<String> = conn
+        .prepare("SELECT id FROM extracao WHERE status = 'em_andamento'")?
+        .query_map([], |r| r.get(0))?
+        .collect::<Result<_, _>>()?;
+    for id in ids {
+        let agora = Utc::now().to_rfc3339();
+        conn.execute(
+            "UPDATE execucao_parser SET status = 'interrompida', concluida_em = ?2
+             WHERE extracao_id = ?1 AND status = 'em_andamento'",
+            params![id, agora],
+        )?;
+        conn.execute(
+            "UPDATE extracao SET status = 'interrompida', concluida_em = ?2,
+                    erro = 'importação interrompida (o SIED foi encerrado durante a importação)'
+             WHERE id = ?1",
+            params![id, agora],
+        )?;
+        auditoria::registrar(
+            conn,
+            sessao,
+            "importacao_interrompida",
+            json!({ "extracao_id": id }),
+        )?;
+        tracing::warn!(extracao = %id, "importação encontrada interrompida");
+    }
+    Ok(())
 }
 
 fn data(texto: String) -> rusqlite::Result<DateTime<Utc>> {

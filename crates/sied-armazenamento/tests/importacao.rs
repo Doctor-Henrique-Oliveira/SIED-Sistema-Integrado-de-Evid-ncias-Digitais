@@ -1,0 +1,352 @@
+//! Importação de ponta a ponta sobre uma extração **SINTÉTICA** gerada no teste.
+//!
+//! ATENÇÃO: a pasta de extração abaixo é inventada. Só o nome `mmssms.db` e o esquema
+//! da tabela `sms` seguem o Android (AOSP); nenhum dado é real e a organização das
+//! pastas não representa nenhuma ferramenta de extração.
+
+use rusqlite::Connection;
+use sha2::{Digest, Sha256};
+use sied_armazenamento::{BancoCaso, ErroArmazenamento, Sessao};
+use sied_dominio::{Dispositivo, NovoCaso, NovoDispositivo, SistemaOperacional};
+use sied_ingestao::fonte::pasta::PastaSomenteLeitura;
+use sied_ingestao::importador::Importador;
+use sied_ingestao::importadores::generico::ImportadorGenerico;
+use sied_ingestao::pipeline::{self, Controle};
+use sied_ingestao::Registro;
+use std::collections::BTreeMap;
+use std::fs;
+use std::path::{Path, PathBuf};
+
+fn sessao() -> Sessao {
+    Sessao {
+        usuario: "analista.teste".into(),
+        maquina: "ESTACAO-TESTE".into(),
+    }
+}
+
+fn caso(raiz: &Path) -> (BancoCaso, Dispositivo) {
+    let mut b = BancoCaso::criar(
+        &raiz.join("Casos/IP-1"),
+        NovoCaso {
+            numero_procedimento: Some("IP 1/2026".into()),
+            responsavel_analise: "Analista".into(),
+            unidade: "DP".into(),
+            ..Default::default()
+        },
+        sessao(),
+    )
+    .unwrap();
+    let d = b
+        .cadastrar_dispositivo(NovoDispositivo {
+            apelido: "Celular sintético".into(),
+            sistema: SistemaOperacional::Android,
+            ..Default::default()
+        })
+        .unwrap();
+    (b, d)
+}
+
+/// Cria a extração sintética. O `mmssms.db` fica com uma mensagem só no `-wal`,
+/// como acontece em aparelhos reais quando o banco não foi consolidado.
+fn extracao_sintetica(dir: &Path) {
+    fs::create_dir_all(dir.join("dados/telefonia")).unwrap();
+    fs::create_dir_all(dir.join("midia")).unwrap();
+    fs::write(
+        dir.join("SINTETICO-LEIAME.txt"),
+        "Extração SINTÉTICA gerada por teste automatizado. Nenhum dado é real.",
+    )
+    .unwrap();
+    fs::write(
+        dir.join("midia/foto.bin"),
+        [0xFF, 0xD8, 0xFF, 0xE0, 1, 2, 3],
+    )
+    .unwrap();
+    fs::write(dir.join("vazio.txt"), "").unwrap();
+
+    let tmp = tempfile::tempdir().unwrap();
+    let db = tmp.path().join("mmssms.db");
+    let conn = Connection::open(&db).unwrap();
+    conn.execute_batch(
+        "PRAGMA journal_mode=WAL;
+         CREATE TABLE sms (_id INTEGER PRIMARY KEY, thread_id INTEGER, address TEXT, person INTEGER,
+             date INTEGER, date_sent INTEGER, protocol INTEGER, read INTEGER, status INTEGER, type INTEGER,
+             body TEXT, service_center TEXT, seen INTEGER);
+         INSERT INTO sms VALUES (1, 7, '+5511900000001', NULL, 1767225600000, 1767225590000, 0, 1, -1, 1,
+             'Mensagem sintética recebida', NULL, 1);
+         INSERT INTO sms VALUES (2, 7, '+5511900000001', NULL, 1767225660000, 0, NULL, 1, -1, 2,
+             'Resposta sintética enviada', NULL, 1);
+         PRAGMA wal_checkpoint(TRUNCATE);
+         PRAGMA wal_autocheckpoint=0;
+         INSERT INTO sms VALUES (3, 8, '+5511900000002', NULL, 1767225720000, 0, 0, 0, -1, 1,
+             'Só no WAL (sintético)', NULL, 0);
+         INSERT INTO sms VALUES (4, 8, '+5511900000002', NULL, 1767225780000, 0, 0, 0, -1, NULL,
+             'Sem tipo: deve virar aviso', NULL, 0);",
+    )
+    .unwrap();
+    // Copia banco e -wal com a conexão ainda aberta (WAL não consolidado).
+    fs::copy(&db, dir.join("dados/telefonia/mmssms.db")).unwrap();
+    fs::copy(
+        tmp.path().join("mmssms.db-wal"),
+        dir.join("dados/telefonia/mmssms.db-wal"),
+    )
+    .unwrap();
+    drop(conn);
+}
+
+fn sha256(p: &Path) -> String {
+    hex::encode(Sha256::digest(fs::read(p).unwrap()))
+}
+
+/// Hash e data de modificação de tudo na pasta, para provar que nada mudou.
+fn retrato(dir: &Path) -> BTreeMap<PathBuf, (String, std::time::SystemTime)> {
+    walkdir::WalkDir::new(dir)
+        .into_iter()
+        .map(|e| e.unwrap())
+        .filter(|e| e.file_type().is_file())
+        .map(|e| {
+            let m = e.metadata().unwrap().modified().unwrap();
+            (e.path().to_path_buf(), (sha256(e.path()), m))
+        })
+        .collect()
+}
+
+fn importar(
+    banco: &BancoCaso,
+    d: &Dispositivo,
+    origem: &Path,
+    controle: &Controle,
+) -> sied_armazenamento::extracoes::Extracao {
+    let importador = ImportadorGenerico;
+    let mut imp = banco
+        .iniciar_importacao(d.id, &importador.info(), origem)
+        .unwrap();
+    let fonte = PastaSomenteLeitura::abrir(origem).unwrap();
+    let ctx = imp.contexto().clone();
+    let r = pipeline::executar(
+        &fonte,
+        &importador,
+        &Registro::padrao(),
+        &mut imp,
+        controle,
+        &ctx,
+    );
+    imp.finalizar(&r).unwrap()
+}
+
+#[test]
+fn importa_inventaria_e_rastreia_ate_a_origem() {
+    let raiz = tempfile::tempdir().unwrap();
+    let origem = raiz.path().join("Extracao-SINTETICA");
+    extracao_sintetica(&origem);
+    let antes = retrato(&origem);
+    let (banco, d) = caso(raiz.path());
+
+    let x = importar(&banco, &d, &origem, &Controle::default());
+    assert_eq!(x.status, "concluida", "{:?}", x.erro);
+    assert_eq!(x.total_arquivos, Some(5));
+    assert_eq!(x.arquivos_ilegiveis, Some(0));
+    assert_eq!(x.total_artefatos, Some(3));
+    assert_eq!(x.total_avisos, Some(1));
+    assert_eq!(x.dispositivo_id, d.id);
+
+    // A extração não mudou (conteúdo e datas).
+    assert_eq!(retrato(&origem), antes);
+
+    // Manifesto: hash gravado confere e cada linha confere com o arquivo real.
+    let manifesto = banco
+        .pasta()
+        .join("importacoes")
+        .join(x.id.to_string())
+        .join("manifesto.sha256");
+    assert_eq!(
+        x.hash_manifesto.as_deref(),
+        Some(sha256(&manifesto).as_str())
+    );
+    let texto = fs::read_to_string(&manifesto).unwrap();
+    assert_eq!(texto.lines().count(), 5);
+    for linha in texto.lines() {
+        let (hash, caminho) = linha.split_once(" *").unwrap();
+        assert_eq!(hash, sha256(&origem.join(caminho)), "{caminho}");
+    }
+    assert!(banco
+        .pasta()
+        .join("importacoes")
+        .join(x.id.to_string())
+        .join("log-importacao.jsonl")
+        .is_file());
+
+    // Inventário e classificação pela assinatura.
+    let cats = banco.totais_por_categoria(x.id).unwrap();
+    let qtd = |c: &str| cats.iter().find(|t| t.categoria == c).map(|t| t.arquivos);
+    assert_eq!(qtd("banco_sqlite"), Some(1));
+    assert_eq!(qtd("imagem"), Some(1), "foto.bin reconhecida como JPEG");
+    assert_eq!(qtd("vazio"), Some(1));
+    let busca = banco.arquivos(x.id, None, Some("MMSSMS"), 0, 10).unwrap();
+    assert_eq!(busca.total, 2); // banco e -wal
+
+    // Execução do parser.
+    let ex = banco.execucoes(x.id).unwrap();
+    assert_eq!(ex.len(), 1);
+    assert_eq!(ex[0].parser, "android_sms");
+    assert_eq!(ex[0].status, "parcial");
+    assert_eq!(
+        ex[0].arquivo_caminho.as_deref(),
+        Some("dados/telefonia/mmssms.db")
+    );
+    assert_eq!(
+        ex[0].copia_sha256.as_deref(),
+        Some(sha256(&origem.join("dados/telefonia/mmssms.db")).as_str())
+    );
+
+    // Artefatos, inclusive o registro que só existia no WAL.
+    let arts = banco.artefatos(x.id, 0, 10).unwrap();
+    assert_eq!(arts.total, 3);
+    let textos: Vec<_> = arts
+        .itens
+        .iter()
+        .map(|a| a.conteudo.clone().unwrap())
+        .collect();
+    assert_eq!(
+        textos,
+        [
+            "Mensagem sintética recebida",
+            "Resposta sintética enviada",
+            "Só no WAL (sintético)"
+        ]
+    );
+    assert_eq!(arts.itens[0].remetente.as_deref(), Some("+5511900000001"));
+    assert_eq!(arts.itens[0].de_mim, Some(false));
+    assert_eq!(arts.itens[1].de_mim, Some(true));
+    assert_eq!(arts.itens[1].destinatarios, ["+5511900000001"]);
+    assert_eq!(arts.itens[0].data_hora_ms, Some(1_767_225_600_000));
+
+    // Visão técnica: de onde o dado veio, com todos os elos.
+    let det = banco.artefato(arts.itens[1].id).unwrap();
+    assert_eq!(det.importador, "generico");
+    assert_eq!(det.parser, "android_sms");
+    assert_eq!(det.parser_versao, "1.0.0");
+    assert_eq!(det.data_hora_original.as_deref(), Some("1767225660000"));
+    assert_eq!(det.formato_data.as_deref(), Some("unix_milissegundos"));
+    assert_eq!(det.hash_manifesto, x.hash_manifesto);
+    assert_eq!(
+        det.origem_caminho,
+        origem.canonicalize().unwrap().display().to_string()
+    );
+    let r = &det.referencias[0];
+    assert!(r.principal);
+    assert_eq!(r.arquivo_caminho, "dados/telefonia/mmssms.db");
+    assert_eq!(r.arquivo_sha256, ex[0].copia_sha256.clone().unwrap());
+    assert_eq!(r.tabela.as_deref(), Some("sms"));
+    assert_eq!(r.id_registro.as_deref(), Some("_id=2"));
+    assert_eq!(
+        r.consulta.as_deref(),
+        Some("SELECT * FROM sms ORDER BY _id")
+    );
+    assert_eq!(r.valores_brutos["body"], "Resposta sintética enviada");
+    assert_eq!(r.valores_brutos["type"], 2);
+    assert_eq!(det.metadados["situacao"], "enviada");
+
+    // A cópia de trabalho ficou na pasta do caso, não na extração.
+    let copia = banco.pasta().join("cache/bancos").join(x.id.to_string());
+    assert!(copia.is_dir());
+
+    // Inventário e artefatos são somente inclusão.
+    let conn = Connection::open(banco.pasta().join("caso.sied.db")).unwrap();
+    assert!(conn.execute("UPDATE arquivo SET sha256 = 'x'", []).is_err());
+    assert!(conn.execute("DELETE FROM artefato", []).is_err());
+    assert!(conn.execute("DELETE FROM referencia_origem", []).is_err());
+
+    // Auditoria íntegra e com o início e o fim da importação.
+    let acoes: Vec<_> = banco
+        .auditoria(10)
+        .unwrap()
+        .into_iter()
+        .map(|r| r.acao)
+        .collect();
+    assert_eq!(acoes[0], "importacao_concluida");
+    assert_eq!(acoes[1], "importacao_iniciada");
+    let fim = &banco.auditoria(1).unwrap()[0];
+    assert_eq!(
+        fim.detalhes["hash_manifesto"],
+        x.hash_manifesto.clone().unwrap()
+    );
+    banco.verificar_auditoria().unwrap();
+}
+
+#[test]
+fn cancelamento_fica_registrado() {
+    let raiz = tempfile::tempdir().unwrap();
+    let origem = raiz.path().join("ext");
+    extracao_sintetica(&origem);
+    let (banco, d) = caso(raiz.path());
+    let controle = Controle::default();
+    controle.pedir_cancelamento();
+    let x = importar(&banco, &d, &origem, &controle);
+    assert_eq!(x.status, "cancelada");
+    assert_eq!(banco.auditoria(1).unwrap()[0].acao, "importacao_cancelada");
+    banco.verificar_auditoria().unwrap();
+}
+
+#[test]
+fn importacao_interrompida_e_detectada_ao_reabrir() {
+    let raiz = tempfile::tempdir().unwrap();
+    let origem = raiz.path().join("ext");
+    extracao_sintetica(&origem);
+    let (banco, d) = caso(raiz.path());
+    let pasta = banco.pasta().to_path_buf();
+    let imp = banco
+        .iniciar_importacao(d.id, &ImportadorGenerico.info(), &origem)
+        .unwrap();
+    drop(imp); // programa encerrado no meio
+    banco.fechar().unwrap();
+
+    let banco = BancoCaso::abrir(&pasta, sessao()).unwrap();
+    let x = &banco.extracoes().unwrap()[0];
+    assert_eq!(x.status, "interrompida");
+    assert!(banco
+        .auditoria(5)
+        .unwrap()
+        .iter()
+        .any(|r| r.acao == "importacao_interrompida"));
+    banco.verificar_auditoria().unwrap();
+}
+
+#[test]
+fn recusa_extracao_dentro_do_caso_e_vice_versa() {
+    let raiz = tempfile::tempdir().unwrap();
+    let (banco, d) = caso(raiz.path());
+    let info = ImportadorGenerico.info();
+    let dentro = banco.pasta().join("sub");
+    fs::create_dir_all(&dentro).unwrap();
+    for origem in [dentro.as_path(), raiz.path()] {
+        assert!(matches!(
+            banco.iniciar_importacao(d.id, &info, origem),
+            Err(ErroArmazenamento::OrigemInvalida(_))
+        ));
+    }
+    assert!(matches!(
+        banco.iniciar_importacao(d.id, &info, &raiz.path().join("nao-existe")),
+        Err(ErroArmazenamento::OrigemInvalida(_))
+    ));
+}
+
+#[test]
+fn caso_v1_e_migrado_com_copia_de_seguranca() {
+    // Um caso criado pela versão da fundação (só migração 1) abre e ganha as tabelas novas.
+    let raiz = tempfile::tempdir().unwrap();
+    let (banco, _) = caso(raiz.path());
+    let pasta = banco.pasta().to_path_buf();
+    banco.fechar().unwrap();
+    let conn = Connection::open(pasta.join("caso.sied.db")).unwrap();
+    conn.execute_batch(
+        "DROP TABLE referencia_origem; DROP TABLE artefato; DROP TABLE aviso_parser;
+         DROP TABLE execucao_parser; DROP TABLE arquivo; DROP TABLE extracao;
+         DELETE FROM schema_migracao WHERE versao = 2; PRAGMA user_version = 1;",
+    )
+    .unwrap();
+    drop(conn);
+    let banco = BancoCaso::abrir(&pasta, sessao()).unwrap();
+    assert!(banco.extracoes().unwrap().is_empty());
+    assert!(pasta.join("caso.sied.db.antes-v2.bak").is_file());
+    banco.verificar_auditoria().unwrap();
+}

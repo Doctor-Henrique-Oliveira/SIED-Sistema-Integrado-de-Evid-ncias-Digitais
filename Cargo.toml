@@ -25,6 +25,7 @@ tracing = "0.1"
 ts-rs = { version = "10", features = ["uuid-impl", "chrono-impl", "serde-json-impl"] }
 uuid = { version = "1", features = ["v7", "serde"] }
 tempfile = "3"
+walkdir = "2"
 
 sied-dominio = { path = "crates/sied-dominio" }
 sied-armazenamento = { path = "crates/sied-armazenamento" }

@@ -5,14 +5,16 @@
 //! - **Global** (`sied-global.db`, na pasta de dados do aplicativo): catálogo de casos
 //!   conhecidos por esta estação e configurações. Nunca guarda dados de casos.
 //! - **Caso** (`caso.sied.db`, dentro da pasta do caso): tudo do caso — procedimento,
-//!   dispositivos, auditoria e, nas próximas etapas, extrações e artefatos.
+//!   dispositivos, extrações importadas (inventário, artefatos e origem) e auditoria.
 //!   É autocontido: copiar a pasta do caso leva todos os dados junto.
 
 pub mod auditoria;
 pub mod caso;
 mod conexao;
 pub mod erro;
+pub mod extracoes;
 pub mod global;
+pub mod importacao;
 pub mod migracoes;
 pub mod sessao;
 
