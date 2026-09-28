@@ -167,6 +167,24 @@ relatorios/
 *.tar
 *.avilla
 *.pdf
+# Contêineres e imagens forenses
+*.zip
+*.7z
+*.rar
+*.gz
+*.tgz
+*.ufdr
+*.ufd
+*.e01
+*.E01
+*.ex01
+*.dd
+*.img
+*.raw
+*.bin
+# Backups cifrados do WhatsApp e chaves
+*.crypt
+*.crypt[0-9]*
 # Fixtures sintéticas são permitidas explicitamente:
 !testes/fixtures/**
 
