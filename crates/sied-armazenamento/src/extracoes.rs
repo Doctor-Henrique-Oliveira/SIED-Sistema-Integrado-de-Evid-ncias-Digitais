@@ -186,29 +186,64 @@ pub fn listar_arquivos(
         |r| r.get(0),
     )?;
     let mut stmt = conn.prepare(&format!(
-        "SELECT id, caminho, tamanho, modificado_em, criado_em, sha256, assinatura, mime, categoria, erro
-         FROM arquivo WHERE {filtro} ORDER BY caminho LIMIT ?4 OFFSET ?5"
+        "SELECT {COLUNAS_ARQUIVO} FROM arquivo WHERE {filtro} ORDER BY caminho LIMIT ?4 OFFSET ?5"
     ))?;
     let itens = stmt
         .query_map(
             params![id.to_string(), categoria, texto, limite, deslocamento],
-            |r| {
-                Ok(ArquivoExtracao {
-                    id: r.get(0)?,
-                    caminho: r.get(1)?,
-                    tamanho: r.get(2)?,
-                    modificado_em: r.get(3)?,
-                    criado_em: r.get(4)?,
-                    sha256: r.get(5)?,
-                    assinatura: r.get(6)?,
-                    mime: r.get(7)?,
-                    categoria: r.get(8)?,
-                    erro: r.get(9)?,
-                })
-            },
+            ler_arquivo,
         )?
         .collect::<Result<_, _>>()?;
     Ok(Pagina { total, itens })
+}
+
+const COLUNAS_ARQUIVO: &str =
+    "id, caminho, tamanho, modificado_em, criado_em, sha256, assinatura, mime, categoria, erro";
+
+fn ler_arquivo(r: &Row) -> rusqlite::Result<ArquivoExtracao> {
+    Ok(ArquivoExtracao {
+        id: r.get(0)?,
+        caminho: r.get(1)?,
+        tamanho: r.get(2)?,
+        modificado_em: r.get(3)?,
+        criado_em: r.get(4)?,
+        sha256: r.get(5)?,
+        assinatura: r.get(6)?,
+        mime: r.get(7)?,
+        categoria: r.get(8)?,
+        erro: r.get(9)?,
+    })
+}
+
+/// Um arquivo do inventário e a pasta da extração a que pertence (para ler a
+/// evidência, sempre somente leitura).
+#[derive(Debug, Clone)]
+pub struct ArquivoComOrigem {
+    pub arquivo: ArquivoExtracao,
+    pub origem_caminho: String,
+}
+
+pub fn arquivo_com_origem(conn: &Connection, arquivo_id: i64) -> Resultado<ArquivoComOrigem> {
+    conn.query_row(
+        &format!(
+            "SELECT {}, x.origem_caminho FROM arquivo a JOIN extracao x ON x.id = a.extracao_id
+             WHERE a.id = ?1",
+            COLUNAS_ARQUIVO
+                .split(", ")
+                .map(|c| format!("a.{c}"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        [arquivo_id],
+        |r| {
+            Ok(ArquivoComOrigem {
+                arquivo: ler_arquivo(r)?,
+                origem_caminho: r.get(10)?,
+            })
+        },
+    )
+    .optional()?
+    .ok_or_else(|| ErroArmazenamento::NaoEncontrado("arquivo".into()))
 }
 
 // ---------- Execuções de parser ----------

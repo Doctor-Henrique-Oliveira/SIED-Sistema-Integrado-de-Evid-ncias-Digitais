@@ -23,10 +23,10 @@ use std::path::{Path, PathBuf};
 
 use crate::auditoria::{self, RegistroAuditoria, VerificacaoAuditoria};
 use crate::busca::{self, FiltroBusca, ResultadoBusca};
-use crate::conversas::{self, Conversa};
+use crate::conversas::{self, AppConversas, Conversa, FiltroConversas, PosicaoMensagem};
 use crate::extracoes::{
-    self, ArquivoExtracao, ArtefatoDetalhe, ArtefatoResumo, ExecucaoParser, Extracao, Pagina,
-    TotalCategoria,
+    self, ArquivoComOrigem, ArquivoExtracao, ArtefatoDetalhe, ArtefatoResumo, ExecucaoParser,
+    Extracao, Pagina, TotalCategoria,
 };
 use crate::importacao::Importacao;
 use crate::migracoes::{self, BANCO_CASO};
@@ -257,6 +257,10 @@ impl BancoCaso {
         extracoes::listar_arquivos(&self.conn, id, categoria, texto, deslocamento, limite)
     }
 
+    pub fn arquivo_com_origem(&self, arquivo_id: i64) -> Resultado<ArquivoComOrigem> {
+        extracoes::arquivo_com_origem(&self.conn, arquivo_id)
+    }
+
     pub fn execucoes(&self, id: ExtracaoId) -> Resultado<Vec<ExecucaoParser>> {
         extracoes::listar_execucoes(&self.conn, id)
     }
@@ -280,7 +284,37 @@ impl BancoCaso {
         deslocamento: i64,
         limite: i64,
     ) -> Resultado<Pagina<Conversa>> {
-        conversas::listar(&self.conn, extracao, deslocamento, limite)
+        let filtro = FiltroConversas {
+            extracao_id: extracao,
+            ..Default::default()
+        };
+        conversas::listar(&self.conn, &filtro, deslocamento, limite)
+    }
+
+    pub fn conversas_filtradas(
+        &self,
+        filtro: &FiltroConversas,
+        deslocamento: i64,
+        limite: i64,
+    ) -> Resultado<Pagina<Conversa>> {
+        conversas::listar(&self.conn, filtro, deslocamento, limite)
+    }
+
+    pub fn apps_das_conversas(&self, extracao: Option<ExtracaoId>) -> Resultado<Vec<AppConversas>> {
+        conversas::apps(&self.conn, extracao)
+    }
+
+    pub fn posicao_mensagem(&self, conversa_id: i64, artefato_id: i64) -> Resultado<Option<i64>> {
+        conversas::posicao_mensagem(&self.conn, conversa_id, artefato_id)
+    }
+
+    pub fn localizar_na_conversa(
+        &self,
+        conversa_id: i64,
+        termo: &str,
+        limite: i64,
+    ) -> Resultado<Pagina<PosicaoMensagem>> {
+        conversas::localizar(&self.conn, conversa_id, termo, limite)
     }
 
     pub fn conversa(&self, conversa_id: i64) -> Resultado<Conversa> {
