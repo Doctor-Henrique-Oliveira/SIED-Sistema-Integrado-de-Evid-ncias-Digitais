@@ -8,6 +8,13 @@ on:
 permissions:
   contents: read
 
+# PR: um push novo cancela a execução anterior do mesmo PR, que ficou obsoleta.
+# main: o grupo é o próprio commit, então cada commit mesclado mantém a sua execução
+# completa e só execuções repetidas do mesmo commit são descartadas.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || (github.ref == 'refs/heads/main' && github.sha) || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   rust-e-interface:
     name: Testes (Linux)
