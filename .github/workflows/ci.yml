@@ -104,7 +104,7 @@ jobs:
           elif [[ "$EVENTO" == pull_request ]]; then
             mudados=$(git diff --name-only "$BASE...$HEAD")
             echo "$mudados"
-            if grep -qE '^(app/src-tauri/|app/package(-lock)?\.json$|app/vite\.config\.|app/index\.html$|app/recursos/|app/public/|(^|/)Cargo\.(toml|lock)$|\.cargo/|\.github/workflows/)' <<<"$mudados"; then
+            if grep -qE '^(app/src-tauri/|app/package(-lock)?\.json$|app/vite\.config\.|app/index\.html$|app/recursos/|app/public/|\.cargo/|\.github/workflows/)|(^|/)Cargo\.(toml|lock)$' <<<"$mudados"; then
               gerar=true
             fi
           fi
