@@ -4,4 +4,8 @@ export type ParticipanteConversa = {
 /**
  * Como o parser emitiu (telefone, jid...).
  */
-identificador: string, mensagens: number, };
+identificador: string, mensagens: number, 
+/**
+ * Nome do registro de contato com o mesmo identificador, na mesma extração.
+ */
+nome: string | null, };

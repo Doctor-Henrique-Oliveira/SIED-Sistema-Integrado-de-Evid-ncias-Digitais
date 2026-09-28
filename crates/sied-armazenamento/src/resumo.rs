@@ -125,10 +125,14 @@ pub struct Identificador {
     pub primeira_ms: Option<i64>,
     #[ts(type = "number | null")]
     pub ultima_ms: Option<i64>,
+    /// Nome gravado no registro de contato do app com o mesmo identificador (se
+    /// extrações diferentes tiverem nomes diferentes, vale o primeiro em ordem
+    /// alfabética; todos continuam nos registros).
+    pub nome: Option<String>,
 }
 
 /// Identificadores das conversas, dos com mais mensagens para os com menos.
-/// `texto` filtra por trecho do identificador.
+/// `texto` filtra por trecho do identificador ou do nome do contato.
 pub fn identificadores(
     conn: &Connection,
     texto: Option<&str>,
@@ -136,19 +140,26 @@ pub fn identificadores(
     limite: i64,
 ) -> Resultado<Pagina<Identificador>> {
     let texto = texto.map(str::trim).filter(|t| !t.is_empty());
-    let base = "FROM conversa_participante p JOIN conversa c ON c.id = p.conversa_id
-                WHERE ?1 IS NULL OR instr(lower(p.identificador), lower(?1)) > 0";
+    let base = "FROM (SELECT p.identificador, c.app, c.id AS conversa, p.mensagens,
+                       c.primeira_ms, c.ultima_ms,
+                       (SELECT r.conteudo FROM artefato r
+                         WHERE r.extracao_id = c.extracao_id AND r.app = c.app
+                           AND r.tipo = 'contato' AND r.id_externo = p.identificador
+                           AND r.conteudo IS NOT NULL ORDER BY r.id LIMIT 1) AS nome
+                FROM conversa_participante p JOIN conversa c ON c.id = p.conversa_id) x
+                WHERE ?1 IS NULL OR instr(lower(x.identificador), lower(?1)) > 0
+                   OR instr(lower(coalesce(x.nome, '')), lower(?1)) > 0";
     let total: i64 = conn.query_row(
-        &format!("SELECT COUNT(*) FROM (SELECT DISTINCT c.app, p.identificador {base})"),
+        &format!("SELECT COUNT(*) FROM (SELECT DISTINCT x.app, x.identificador {base})"),
         params![texto],
         |r| r.get(0),
     )?;
     let mut stmt = conn.prepare(&format!(
-        "SELECT p.identificador, c.app, COUNT(DISTINCT c.id), SUM(p.mensagens),
-                MIN(c.primeira_ms), MAX(c.ultima_ms)
+        "SELECT x.identificador, x.app, COUNT(DISTINCT x.conversa), SUM(x.mensagens),
+                MIN(x.primeira_ms), MAX(x.ultima_ms), MIN(x.nome)
          {base}
-         GROUP BY c.app, p.identificador
-         ORDER BY SUM(p.mensagens) DESC, p.identificador
+         GROUP BY x.app, x.identificador
+         ORDER BY SUM(x.mensagens) DESC, x.identificador
          LIMIT ?2 OFFSET ?3"
     ))?;
     let itens = stmt
@@ -160,6 +171,7 @@ pub fn identificadores(
                 mensagens: r.get(3)?,
                 primeira_ms: r.get(4)?,
                 ultima_ms: r.get(5)?,
+                nome: r.get(6)?,
             })
         })?
         .collect::<Result<_, _>>()?;

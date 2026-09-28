@@ -277,7 +277,30 @@ pub struct ArtefatoResumo {
     pub conteudo: Option<String>,
     pub conversa_id_externo: Option<String>,
     pub estado_registro: String,
+    /// Identificador do registro no app (ex.: key_id da mensagem).
+    pub id_externo: Option<String>,
+    /// `id_externo` da mensagem respondida.
+    pub resposta_a_id_externo: Option<String>,
+    pub nome_arquivo: Option<String>,
+    pub mime: Option<String>,
+    #[ts(type = "number | null")]
+    pub tamanho: Option<i64>,
+    /// Arquivo do inventário ligado ao anexo, quando encontrado.
+    #[ts(type = "number | null")]
+    pub anexo_arquivo_id: Option<i64>,
+    /// Como o anexo foi procurado no inventário (ver `VinculoAnexo`).
+    pub anexo_vinculo: Option<String>,
+    pub latitude: Option<f64>,
+    pub longitude: Option<f64>,
 }
+
+/// Colunas lidas por [`ler_resumo`], com a tabela `artefato` como `a`.
+pub(crate) const COLUNAS_RESUMO: &str = "a.id, a.tipo, a.subtipo, a.app, a.remetente,
+    a.destinatarios, a.de_mim, a.data_hora_ms, a.conteudo, a.conversa_id_externo,
+    a.estado_registro, a.id_externo, a.resposta_a_id_externo, a.nome_arquivo, a.mime, a.tamanho,
+    a.anexo_arquivo_id, a.anexo_vinculo, a.latitude, a.longitude";
+/// Quantas colunas [`COLUNAS_RESUMO`] ocupa (as seguintes começam neste índice).
+pub(crate) const N_RESUMO: usize = 20;
 
 pub(crate) fn ler_resumo(r: &Row) -> rusqlite::Result<ArtefatoResumo> {
     let dest: String = r.get(5)?;
@@ -293,6 +316,15 @@ pub(crate) fn ler_resumo(r: &Row) -> rusqlite::Result<ArtefatoResumo> {
         conteudo: r.get(8)?,
         conversa_id_externo: r.get(9)?,
         estado_registro: r.get(10)?,
+        id_externo: r.get(11)?,
+        resposta_a_id_externo: r.get(12)?,
+        nome_arquivo: r.get(13)?,
+        mime: r.get(14)?,
+        tamanho: r.get(15)?,
+        anexo_arquivo_id: r.get(16)?,
+        anexo_vinculo: r.get(17)?,
+        latitude: r.get(18)?,
+        longitude: r.get(19)?,
     })
 }
 
@@ -307,12 +339,10 @@ pub fn listar_artefatos(
         [id.to_string()],
         |r| r.get(0),
     )?;
-    let mut stmt = conn.prepare(
-        "SELECT id, tipo, subtipo, app, remetente, destinatarios, de_mim, data_hora_ms, conteudo,
-                conversa_id_externo, estado_registro
-         FROM artefato WHERE extracao_id = ?1
-         ORDER BY data_hora_ms IS NULL, data_hora_ms, id LIMIT ?2 OFFSET ?3",
-    )?;
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {COLUNAS_RESUMO} FROM artefato a WHERE a.extracao_id = ?1
+         ORDER BY a.data_hora_ms IS NULL, a.data_hora_ms, a.id LIMIT ?2 OFFSET ?3"
+    ))?;
     let itens = stmt
         .query_map(params![id.to_string(), limite, deslocamento], ler_resumo)?
         .collect::<Result<_, _>>()?;
@@ -337,6 +367,19 @@ pub struct ReferenciaOrigemDetalhe {
     pub valores_brutos: Value,
 }
 
+/// Arquivo do inventário ligado ao anexo de um artefato.
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
+pub struct AnexoInventario {
+    #[ts(type = "number")]
+    pub id: i64,
+    pub caminho: String,
+    pub sha256: Option<String>,
+    #[ts(type = "number")]
+    pub tamanho: i64,
+    pub categoria: String,
+}
+
 /// Tudo sobre um artefato: dados normalizados, como foi lido e de onde veio.
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
@@ -345,7 +388,9 @@ pub struct ArtefatoDetalhe {
     pub data_hora_original: Option<String>,
     pub formato_data: Option<String>,
     pub id_externo: Option<String>,
+    /// Caminho do anexo como o app gravou.
     pub anexo_caminho: Option<String>,
+    pub anexo_arquivo: Option<AnexoInventario>,
     pub confianca: String,
     #[ts(type = "Record<string, unknown>")]
     pub metadados: Value,
@@ -363,33 +408,48 @@ pub struct ArtefatoDetalhe {
 pub fn detalhe_artefato(conn: &Connection, artefato_id: i64) -> Resultado<ArtefatoDetalhe> {
     let mut d = conn
         .query_row(
-            "SELECT a.id, a.tipo, a.subtipo, a.app, a.remetente, a.destinatarios, a.de_mim, a.data_hora_ms,
-                    a.conteudo, a.conversa_id_externo, a.estado_registro,
+            &format!(
+                "SELECT {COLUNAS_RESUMO},
                     a.data_hora_original, a.formato_data, a.id_externo, a.anexo_caminho, a.confianca,
                     a.metadados, a.hash_registro, x.id, x.importador, x.importador_versao, x.origem_caminho,
-                    x.hash_manifesto, e.parser, e.parser_versao
-             FROM artefato a
-             JOIN extracao x ON x.id = a.extracao_id
-             JOIN execucao_parser e ON e.id = a.execucao_id
-             WHERE a.id = ?1",
+                    x.hash_manifesto, e.parser, e.parser_versao,
+                    f.id, f.caminho, f.sha256, f.tamanho, f.categoria
+                 FROM artefato a
+                 JOIN extracao x ON x.id = a.extracao_id
+                 JOIN execucao_parser e ON e.id = a.execucao_id
+                 LEFT JOIN arquivo f ON f.id = a.anexo_arquivo_id
+                 WHERE a.id = ?1"
+            ),
             [artefato_id],
             |r| {
+                let n = N_RESUMO;
+                let anexo_id: Option<i64> = r.get(n + 14)?;
                 Ok(ArtefatoDetalhe {
                     resumo: ler_resumo(r)?,
-                    data_hora_original: r.get(11)?,
-                    formato_data: r.get(12)?,
-                    id_externo: r.get(13)?,
-                    anexo_caminho: r.get(14)?,
-                    confianca: r.get(15)?,
-                    metadados: json_ou_nulo(r.get(16)?),
-                    hash_registro: r.get(17)?,
-                    extracao_id: uuid(r.get(18)?)?,
-                    importador: r.get(19)?,
-                    importador_versao: r.get(20)?,
-                    origem_caminho: r.get(21)?,
-                    hash_manifesto: r.get(22)?,
-                    parser: r.get(23)?,
-                    parser_versao: r.get(24)?,
+                    data_hora_original: r.get(n)?,
+                    formato_data: r.get(n + 1)?,
+                    id_externo: r.get(n + 2)?,
+                    anexo_caminho: r.get(n + 3)?,
+                    anexo_arquivo: match anexo_id {
+                        Some(id) => Some(AnexoInventario {
+                            id,
+                            caminho: r.get(n + 15)?,
+                            sha256: r.get(n + 16)?,
+                            tamanho: r.get(n + 17)?,
+                            categoria: r.get(n + 18)?,
+                        }),
+                        None => None,
+                    },
+                    confianca: r.get(n + 4)?,
+                    metadados: json_ou_nulo(r.get(n + 5)?),
+                    hash_registro: r.get(n + 6)?,
+                    extracao_id: uuid(r.get(n + 7)?)?,
+                    importador: r.get(n + 8)?,
+                    importador_versao: r.get(n + 9)?,
+                    origem_caminho: r.get(n + 10)?,
+                    hash_manifesto: r.get(n + 11)?,
+                    parser: r.get(n + 12)?,
+                    parser_versao: r.get(n + 13)?,
                     referencias: Vec::new(),
                 })
             },

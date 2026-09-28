@@ -10,4 +10,16 @@ participantes: Array<ParticipanteConversa>, total_participantes: number,
 /**
  * Texto do último registro (para a prévia na lista).
  */
-ultima_mensagem: string | null, };
+ultima_mensagem: string | null, 
+/**
+ * Assunto do registro da conversa (grupos) ou, sem ele, nome do contato.
+ */
+titulo: string | null, 
+/**
+ * "individual", "grupo"... quando o app grava o registro da conversa.
+ */
+tipo: string | null, 
+/**
+ * Registro `conversa` do app (para a visão técnica).
+ */
+registro_id: number | null, };

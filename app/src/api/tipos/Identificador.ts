@@ -4,4 +4,10 @@ export type Identificador = {
 /**
  * Como o parser leu (telefone, jid...), sem normalização.
  */
-identificador: string, app: string, conversas: number, mensagens: number, primeira_ms: number | null, ultima_ms: number | null, };
+identificador: string, app: string, conversas: number, mensagens: number, primeira_ms: number | null, ultima_ms: number | null, 
+/**
+ * Nome gravado no registro de contato do app com o mesmo identificador (se
+ * extrações diferentes tiverem nomes diferentes, vale o primeiro em ordem
+ * alfabética; todos continuam nos registros).
+ */
+nome: string | null, };
