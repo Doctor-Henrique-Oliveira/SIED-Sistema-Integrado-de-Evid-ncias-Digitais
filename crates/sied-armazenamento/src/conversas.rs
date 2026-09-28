@@ -3,13 +3,18 @@
 //! Uma conversa é o agrupamento dos artefatos de um mesmo app com o mesmo
 //! `conversa_id_externo` numa extração. A tabela `conversa` é derivada (mantida por
 //! gatilho, migração 3): os dados continuam nos artefatos e na referência de origem.
+//!
+//! Título, tipo e nomes vêm, na hora da consulta, dos registros que o próprio app
+//! gravou na mesma extração: o registro `conversa` (ex.: assunto do grupo no
+//! WhatsApp) e os registros `contato` com o mesmo identificador. Nada é gravado na
+//! conversa derivada, então um parser novo ou uma reimportação não deixa nome velho.
 
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::Serialize;
 use sied_dominio::ExtracaoId;
 use ts_rs::TS;
 
-use crate::extracoes::{ler_resumo, uuid, ArtefatoResumo, Pagina};
+use crate::extracoes::{ler_resumo, uuid, ArtefatoResumo, Pagina, COLUNAS_RESUMO};
 use crate::{ErroArmazenamento, Resultado};
 
 /// Participantes exibidos na lista de conversas (os mais frequentes).
@@ -22,6 +27,8 @@ pub struct ParticipanteConversa {
     pub identificador: String,
     #[ts(type = "number")]
     pub mensagens: i64,
+    /// Nome do registro de contato com o mesmo identificador, na mesma extração.
+    pub nome: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
@@ -46,17 +53,37 @@ pub struct Conversa {
     pub participantes: Vec<ParticipanteConversa>,
     #[ts(type = "number")]
     pub total_participantes: i64,
-    /// Texto do último registro (para a prévia na lista).
+    /// Texto do último registro, ou o nome do anexo (para a prévia na lista).
     pub ultima_mensagem: Option<String>,
+    /// Assunto do registro da conversa (grupos) ou, sem ele, nome do contato.
+    pub titulo: Option<String>,
+    /// "individual", "grupo"... quando o app grava o registro da conversa.
+    pub tipo: Option<String>,
+    /// Registro `conversa` do app (para a visão técnica).
+    #[ts(type = "number | null")]
+    pub registro_id: Option<i64>,
 }
 
 const COLUNAS: &str = "c.id, c.extracao_id, c.app, c.id_externo, c.total_mensagens, c.enviadas,
     c.com_anexo, c.primeira_ms, c.ultima_ms,
     (SELECT COUNT(*) FROM conversa_participante p WHERE p.conversa_id = c.id),
-    (SELECT a.conteudo FROM artefato a
+    (SELECT coalesce(a.conteudo, a.nome_arquivo) FROM artefato a
       WHERE a.extracao_id = c.extracao_id AND coalesce(a.app, '') = c.app
         AND a.conversa_id_externo = c.id_externo
-      ORDER BY a.data_hora_ms DESC, a.id DESC LIMIT 1)";
+      ORDER BY a.data_hora_ms DESC, a.id DESC LIMIT 1),
+    coalesce(
+      (SELECT r.conteudo FROM artefato r
+        WHERE r.extracao_id = c.extracao_id AND r.app = c.app AND r.tipo = 'conversa'
+          AND r.id_externo = c.id_externo AND r.conteudo IS NOT NULL ORDER BY r.id LIMIT 1),
+      (SELECT r.conteudo FROM artefato r
+        WHERE r.extracao_id = c.extracao_id AND r.app = c.app AND r.tipo = 'contato'
+          AND r.id_externo = c.id_externo AND r.conteudo IS NOT NULL ORDER BY r.id LIMIT 1)),
+    (SELECT r.subtipo FROM artefato r
+      WHERE r.extracao_id = c.extracao_id AND r.app = c.app AND r.tipo = 'conversa'
+        AND r.id_externo = c.id_externo ORDER BY r.id LIMIT 1),
+    (SELECT r.id FROM artefato r
+      WHERE r.extracao_id = c.extracao_id AND r.app = c.app AND r.tipo = 'conversa'
+        AND r.id_externo = c.id_externo ORDER BY r.id LIMIT 1)";
 
 fn ler(r: &Row) -> rusqlite::Result<Conversa> {
     Ok(Conversa {
@@ -72,6 +99,9 @@ fn ler(r: &Row) -> rusqlite::Result<Conversa> {
         participantes: Vec::new(),
         total_participantes: r.get(9)?,
         ultima_mensagem: r.get(10)?,
+        titulo: r.get(11)?,
+        tipo: r.get(12)?,
+        registro_id: r.get(13)?,
     })
 }
 
@@ -81,13 +111,20 @@ fn participantes(
     limite: i64,
 ) -> Resultado<Vec<ParticipanteConversa>> {
     let mut stmt = conn.prepare_cached(
-        "SELECT identificador, mensagens FROM conversa_participante WHERE conversa_id = ?1
-         ORDER BY mensagens DESC, identificador LIMIT ?2",
+        "SELECT p.identificador, p.mensagens,
+                (SELECT r.conteudo FROM artefato r
+                  WHERE r.extracao_id = c.extracao_id AND r.app = c.app AND r.tipo = 'contato'
+                    AND r.id_externo = p.identificador AND r.conteudo IS NOT NULL
+                  ORDER BY r.id LIMIT 1)
+         FROM conversa_participante p JOIN conversa c ON c.id = p.conversa_id
+         WHERE p.conversa_id = ?1
+         ORDER BY p.mensagens DESC, p.identificador LIMIT ?2",
     )?;
     let v = stmt.query_map(params![conversa_id, limite], |r| {
         Ok(ParticipanteConversa {
             identificador: r.get(0)?,
             mensagens: r.get(1)?,
+            nome: r.get(2)?,
         })
     })?;
     Ok(v.collect::<Result<_, _>>()?)
@@ -140,18 +177,16 @@ pub fn mensagens(
     limite: i64,
 ) -> Resultado<Pagina<ArtefatoResumo>> {
     let c = obter(conn, conversa_id)?;
-    let filtro = "extracao_id = ?1 AND coalesce(app, '') = ?2 AND conversa_id_externo = ?3";
+    let filtro = "a.extracao_id = ?1 AND coalesce(a.app, '') = ?2 AND a.conversa_id_externo = ?3";
     let chave = params![c.extracao_id.to_string(), c.app, c.id_externo];
     let total: i64 = conn.query_row(
-        &format!("SELECT COUNT(*) FROM artefato WHERE {filtro}"),
+        &format!("SELECT COUNT(*) FROM artefato a WHERE {filtro}"),
         chave,
         |r| r.get(0),
     )?;
     let mut stmt = conn.prepare(&format!(
-        "SELECT id, tipo, subtipo, app, remetente, destinatarios, de_mim, data_hora_ms, conteudo,
-                conversa_id_externo, estado_registro
-         FROM artefato WHERE {filtro}
-         ORDER BY data_hora_ms IS NULL, data_hora_ms, id LIMIT ?4 OFFSET ?5"
+        "SELECT {COLUNAS_RESUMO} FROM artefato a WHERE {filtro}
+         ORDER BY a.data_hora_ms IS NULL, a.data_hora_ms, a.id LIMIT ?4 OFFSET ?5"
     ))?;
     let itens = stmt
         .query_map(

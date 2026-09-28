@@ -18,6 +18,10 @@ use ts_rs::TS;
 #[ts(export)]
 pub enum TipoArtefato {
     Mensagem,
+    /// Registro da conversa no próprio app (título, tipo, membros do grupo). As
+    /// mensagens continuam agrupadas pelo `conversa_id_externo`; este registro só
+    /// acrescenta o que o app guarda sobre a conversa.
+    Conversa,
     Contato,
     Chamada,
     Midia,

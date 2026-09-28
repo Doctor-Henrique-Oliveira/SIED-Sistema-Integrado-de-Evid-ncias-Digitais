@@ -6,7 +6,8 @@
 //! 3. **Planejar**: o importador da ferramenta diz quais arquivos cada parser lê.
 //! 4. **Processar**: para cada tarefa, copiar os arquivos para a área de trabalho do
 //!    caso conferindo o hash com o inventário, rodar o parser sobre a cópia e gravar
-//!    artefatos com a referência de origem completa.
+//!    artefatos com a referência de origem completa. O anexo que o parser informa
+//!    (caminho gravado pelo app) é ligado ao arquivo do inventário, ver [`escolher_anexo`].
 //!
 //! A extração é acessada só por [`FonteSomenteLeitura`]. Onde gravar é decidido por
 //! [`Destino`] (implementado pelo banco do caso), o que mantém este módulo testável.
@@ -132,11 +133,106 @@ pub struct OrigemResolvida {
     pub arquivo_sha256: String,
 }
 
+/// Como o anexo informado pelo parser foi ligado (ou não) a um arquivo do inventário.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum VinculoAnexo {
+    /// O caminho gravado pelo app é exatamente o caminho na extração.
+    CaminhoExato,
+    /// Um único arquivo termina com as mesmas pastas e nome (2+ componentes) e o
+    /// tamanho confere (quando o app informa o tamanho).
+    SufixoCaminho,
+    /// Um único arquivo com o mesmo nome e exatamente o tamanho informado pelo app.
+    NomeETamanho,
+    /// Mais de um arquivo serve, ou só o nome coincide e o app não informa o
+    /// tamanho; nenhum é escolhido.
+    Ambiguo,
+    /// O único candidato tem tamanho diferente do informado pelo app.
+    TamanhoDiferente,
+    /// Nenhum arquivo com esse nome na extração.
+    NaoEncontrado,
+}
+
+impl VinculoAnexo {
+    pub fn como_str(self) -> &'static str {
+        match self {
+            VinculoAnexo::CaminhoExato => "caminho_exato",
+            VinculoAnexo::SufixoCaminho => "sufixo_caminho",
+            VinculoAnexo::NomeETamanho => "nome_e_tamanho",
+            VinculoAnexo::Ambiguo => "ambiguo",
+            VinculoAnexo::TamanhoDiferente => "tamanho_diferente",
+            VinculoAnexo::NaoEncontrado => "nao_encontrado",
+        }
+    }
+}
+
+/// Arquivo do inventário com o mesmo nome do anexo.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CandidatoAnexo {
+    pub id: i64,
+    pub caminho: String,
+    pub tamanho: u64,
+}
+
+fn componentes(caminho: &str) -> Vec<&str> {
+    caminho
+        .split(['/', '\\'])
+        .filter(|p| !p.is_empty() && *p != ".")
+        .collect()
+}
+
+/// Escolhe, entre os arquivos do inventário com o mesmo nome, o que corresponde ao
+/// caminho gravado pelo app. O app guarda caminhos relativos à pasta dele
+/// (`Media/WhatsApp Images/x.jpg`) ou absolutos no aparelho
+/// (`/storage/emulated/0/...`); a extração os coloca sob outra raiz. Vence o
+/// candidato que compartilha mais componentes finais com o caminho do app, desde que
+/// seja o único com essa pontuação. Só o nome em comum exige tamanho igual.
+pub fn escolher_anexo(
+    caminho_app: &str,
+    tamanho_app: Option<u64>,
+    candidatos: &[CandidatoAnexo],
+) -> (Option<i64>, VinculoAnexo) {
+    let app = componentes(caminho_app);
+    let comum = |c: &CandidatoAnexo| {
+        componentes(&c.caminho)
+            .iter()
+            .rev()
+            .zip(app.iter().rev())
+            .take_while(|(a, b)| a == b)
+            .count()
+    };
+    let pontos: Vec<(usize, &CandidatoAnexo)> = candidatos
+        .iter()
+        .map(|c| (comum(c), c))
+        .filter(|(n, _)| *n > 0)
+        .collect();
+    let Some(melhor) = pontos.iter().map(|(n, _)| *n).max() else {
+        return (None, VinculoAnexo::NaoEncontrado);
+    };
+    let empatados: Vec<&CandidatoAnexo> = pontos
+        .iter()
+        .filter(|(n, _)| *n == melhor)
+        .map(|(_, c)| *c)
+        .collect();
+    let [unico] = empatados.as_slice() else {
+        return (None, VinculoAnexo::Ambiguo);
+    };
+    match (melhor >= 2, tamanho_app) {
+        (_, Some(t)) if t != unico.tamanho => (None, VinculoAnexo::TamanhoDiferente),
+        (true, _) => (Some(unico.id), VinculoAnexo::SufixoCaminho),
+        (false, Some(_)) => (Some(unico.id), VinculoAnexo::NomeETamanho),
+        (false, None) => (None, VinculoAnexo::Ambiguo),
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ArtefatoParaGravar {
     pub artefato: NovoArtefato,
     pub origens: Vec<OrigemResolvida>,
     pub anexo_arquivo_id: Option<i64>,
+    /// Presente quando o artefato informa um anexo.
+    pub anexo_vinculo: Option<VinculoAnexo>,
     /// SHA-256 do artefato normalizado (JSON canônico), para detectar alteração.
     pub hash_registro: String,
 }
@@ -166,6 +262,11 @@ impl EstadoExecucao {
 pub trait Destino {
     fn gravar_arquivos(&mut self, lote: &[ArquivoInventariado]) -> Resultado<()>;
     fn arquivo(&mut self, caminho: &CaminhoFonte) -> Resultado<Option<ArquivoRegistrado>>;
+    /// Arquivos legíveis (com hash) desta extração com exatamente este nome. Usado para
+    /// ligar anexos cujo caminho no app não é o caminho na extração.
+    fn arquivos_com_nome(&mut self, _nome: &str) -> Resultado<Vec<CandidatoAnexo>> {
+        Ok(Vec::new())
+    }
     fn iniciar_execucao(
         &mut self,
         parser: &InfoComponente,
@@ -718,6 +819,23 @@ impl Coletor<'_> {
         }
     }
 
+    fn vincular_anexo(
+        &mut self,
+        caminho: &str,
+        tamanho: Option<u64>,
+    ) -> Resultado<(Option<i64>, VinculoAnexo)> {
+        if let Ok(c) = CaminhoFonte::novo(caminho) {
+            if let Some(a) = self.destino.arquivo(&c)? {
+                return Ok((Some(a.id), VinculoAnexo::CaminhoExato));
+            }
+        }
+        let Some(nome) = componentes(caminho).last().map(|n| n.to_string()) else {
+            return Ok((None, VinculoAnexo::NaoEncontrado));
+        };
+        let candidatos = self.destino.arquivos_com_nome(&nome)?;
+        Ok(escolher_anexo(caminho, tamanho, &candidatos))
+    }
+
     fn descarregar(&mut self) -> Resultado<()> {
         if !self.lote.is_empty() {
             self.destino.gravar_artefatos(self.execucao, &self.lote)?;
@@ -755,14 +873,18 @@ impl SaidaParser for Coletor<'_> {
                 }
             }
         }
-        let anexo_arquivo_id = match artefato.anexo_caminho.as_deref().map(CaminhoFonte::novo) {
-            Some(Ok(c)) => self.destino.arquivo(&c)?.map(|a| a.id),
-            _ => None,
+        let (anexo_arquivo_id, anexo_vinculo) = match artefato.anexo_caminho.as_deref() {
+            Some(c) => {
+                let (id, v) = self.vincular_anexo(c, artefato.tamanho)?;
+                (id, Some(v))
+            }
+            None => (None, None),
         };
         self.lote.push(ArtefatoParaGravar {
             artefato,
             origens,
             anexo_arquivo_id,
+            anexo_vinculo,
             hash_registro,
         });
         self.emitidos += 1;
@@ -782,5 +904,77 @@ impl SaidaParser for Coletor<'_> {
 
     fn cancelado(&self) -> bool {
         self.controle.cancelado()
+    }
+}
+
+#[cfg(test)]
+mod testes {
+    use super::*;
+
+    fn cand(id: i64, caminho: &str, tamanho: u64) -> CandidatoAnexo {
+        CandidatoAnexo {
+            id,
+            caminho: caminho.into(),
+            tamanho,
+        }
+    }
+
+    const APP: &str = "Media/WhatsApp Images/IMG-1.jpg";
+
+    #[test]
+    fn anexo_pelo_sufixo_do_caminho() {
+        let c = [
+            cand(1, "sdcard/WhatsApp/Media/WhatsApp Images/IMG-1.jpg", 64),
+            cand(2, "outra/IMG-1.jpg", 64),
+        ];
+        assert_eq!(
+            escolher_anexo(APP, Some(64), &c),
+            (Some(1), VinculoAnexo::SufixoCaminho)
+        );
+        // Caminho absoluto no aparelho também serve.
+        let abs = "/storage/emulated/0/WhatsApp/Media/WhatsApp Images/IMG-1.jpg";
+        assert_eq!(
+            escolher_anexo(abs, None, &c),
+            (Some(1), VinculoAnexo::SufixoCaminho)
+        );
+    }
+
+    #[test]
+    fn anexo_ambiguo_nao_e_escolhido() {
+        let c = [
+            cand(1, "a/Media/WhatsApp Images/IMG-1.jpg", 64),
+            cand(2, "b/Media/WhatsApp Images/IMG-1.jpg", 64),
+        ];
+        assert_eq!(
+            escolher_anexo(APP, Some(64), &c),
+            (None, VinculoAnexo::Ambiguo)
+        );
+    }
+
+    #[test]
+    fn tamanho_diferente_nao_e_vinculado() {
+        let c = [cand(1, "x/Media/WhatsApp Images/IMG-1.jpg", 10)];
+        assert_eq!(
+            escolher_anexo(APP, Some(64), &c),
+            (None, VinculoAnexo::TamanhoDiferente)
+        );
+    }
+
+    #[test]
+    fn so_o_nome_exige_tamanho_igual() {
+        let c = [cand(7, "copiados/IMG-1.jpg", 64)];
+        assert_eq!(
+            escolher_anexo(APP, Some(64), &c),
+            (Some(7), VinculoAnexo::NomeETamanho)
+        );
+        assert_eq!(escolher_anexo(APP, None, &c), (None, VinculoAnexo::Ambiguo));
+    }
+
+    #[test]
+    fn sem_candidatos_nao_encontrado() {
+        assert_eq!(
+            escolher_anexo(APP, Some(1), &[]),
+            (None, VinculoAnexo::NaoEncontrado)
+        );
     }
 }

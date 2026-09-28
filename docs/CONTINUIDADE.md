@@ -1,8 +1,9 @@
 # SIED — Documento de continuidade
 
-Estado em 28/09/2026, ao mesclar o redesign visual e de navegação (branch `fase1-redesign`) na
-`main` (PR #6). A interface nova está descrita no §15 e o fechamento da etapa em
-`docs/checkpoints/2026-09-28-redesign.md`. Este documento permite retomar o projeto do
+Estado em 28/09/2026, com o **leitor WhatsApp Android** pronto na branch `fase1-whatsapp` (PR #8,
+em rascunho, **aguardando aval para o merge**). A `main` continua em `85273d1` (redesign, PR #6 e
+#7). O fechamento da fase do WhatsApp está em `docs/checkpoints/2026-09-28-fase1-whatsapp.md`; a
+interface do redesign, no §15. Este documento permite retomar o projeto do
 zero: o que existe, onde está, por que foi feito assim e o que vem a seguir. Os detalhes de cada
 etapa ficam nos checkpoints em `docs/checkpoints/` e na preparação em
 `docs/PREPARACAO-AVILLA-WHATSAPP.md`.
@@ -67,8 +68,8 @@ release, execução manual ou PR que muda o build (opção "Só tags", PR #4).
 | `ci-otimizacao` | `ee2738c` | #4 | mesclado (`65eae8d`) |
 | `roadmap-console-importacao` | `df83890` | #5 | mesclado (`5258374`) |
 | `fase1-redesign` | `9bbad7a` | #6 | mesclado (`5e8e734`) |
-| `fase1-redesign-registro` | — | PR do checkpoint | só documentação; o merge dele é o último commit da `main` nesta etapa |
-| `fase1-whatsapp` | — | — | só local, sem commits próprios; será recriada a partir da nova `main` |
+| `fase1-redesign-registro` | — | #7 | mesclado (`85273d1`, último commit da `main`) |
+| `fase1-whatsapp` | ver §3 | #8 | **rascunho, sem merge**: leitor WhatsApp Android (criada da `main` em `85273d1`) |
 
 As branches mescladas **não foram apagadas**. Podem ser removidas depois que a `main` for
 confirmada íntegra e com CI verde, com aval do usuário.
@@ -99,6 +100,9 @@ explícito** e CI completa verde (Linux e Windows).
 | `af482fb` | Testes da interface do redesign |
 | `9bbad7a` | Documentação do redesign (§15) e README |
 | `5e8e734` | Merge do PR #6 na `main`: redesign visual e de navegação |
+| `85273d1` | Merge do PR #7 na `main`: checkpoint do redesign |
+| `314b258` | `fase1-whatsapp`: parser WhatsApp Android, pareamento `msgstore.db`/`wa.db`, anexos ligados ao inventário, migração 4 |
+| `1ebe173` | `fase1-whatsapp`: conversas do WhatsApp na interface e gerador `--whatsapp` |
 
 ---
 
@@ -116,6 +120,14 @@ explícito** e CI completa verde (Linux e Windows).
 - Execução em segundo plano com progresso, cancelamento e registro de interrupção.
 - Importador genérico (pasta); importador Avilla registrado **só como contrato**.
 - Parser de SMS Android (`mmssms.db`), incluindo registros que só existem no `-wal`.
+- Parser **WhatsApp Android** (branch `fase1-whatsapp`, PR #8):
+  - `msgstore.db` nos esquemas novo (`message`) e antigo (`messages`), detectados pelo conteúdo;
+  - `wa.db` (contatos);
+  - mensagens de texto, mídia, localização, contato, sistema, resposta, encaminhada e apagada;
+  - situação de envio, grupos e membros;
+  - backups `.crypt*` só inventariados.
+- Anexos que o app cita são ligados ao arquivo do inventário (caminho exato ou sufixo único com
+  tamanho conferido). O motivo de não ligar fica gravado.
 
 **Extração**
 - Tela da extração com resumo, inventário, registros e visão técnica da origem de cada registro.
@@ -124,6 +136,11 @@ explícito** e CI completa verde (Linux e Windows).
 - Conversas reconstruídas por app e id da conversa, com participantes, contagens e período.
 - Visualização estilo chat: lados enviado/recebido, separadores por dia, hora no fuso do caso.
 - Alternância para "Detalhes técnicos" com o painel de origem do registro selecionado.
+- WhatsApp:
+  - título (assunto do grupo ou nome do contato), tipo e nomes dos participantes, vindos dos
+    registros do próprio app na mesma extração;
+  - mensagem de sistema centralizada;
+  - anexo com situação no inventário, coordenadas, trecho respondido e apagada.
 
 **Interface** (redesign, §15)
 - Casca fixa com barra lateral de 12 módulos, cabeçalho com o caso aberto, busca global (Ctrl+K),
@@ -144,9 +161,9 @@ explícito** e CI completa verde (Linux e Windows).
 
 | Conjunto | Quantidade | Resultado |
 |---|---|---|
-| Rust (`cargo test --workspace`, soma de todos os `test result`) | 114 | todos passam |
+| Rust (`cargo test --workspace`, soma de todos os `test result`) | 140 (114 na `main`) | todos passam |
 | `cargo clippy -D warnings` e `cargo fmt --check` | — | limpos |
-| Interface (`vitest`) | 23 | todos passam |
+| Interface (`vitest`) | 26 (23 na `main`) | todos passam |
 | Build da interface (`npm run build`) e do app (`tauri build --debug --no-bundle`) | — | ok |
 | Typecheck TypeScript | — | limpo |
 | Tipos gerados (ts-rs) atualizados | — | conferido pela CI |
@@ -156,7 +173,8 @@ explícito** e CI completa verde (Linux e Windows).
 O que os testes cobrem, em resumo: migrações (incluindo caso antigo que migra com cópia de
 segurança `.antes-vN.bak`), gatilhos de somente inclusão, inventário e hash, manifesto, detecção
 e plano, parser de SMS (inclusive WAL), conversas, busca (texto, prefixo sem acento, telefone,
-nomes de arquivo, sintaxe maliciosa, filtros), resumo do caso e identificadores, filtro de mídias, e
+nomes de arquivo, sintaxe maliciosa, filtros), resumo do caso e identificadores, filtro de mídias,
+WhatsApp (dois esquemas, `wa.db`, WAL, avisos, anexos, títulos e nomes, migração 3→4), e
 a interface: chat, busca, importação, formulário de dispositivo, barra lateral (12 módulos, módulos
 desativados sem caso), indicador sem dado, seção recolhível, Contatos e Mídias. O ponta a ponta
 continua o mesmo roteiro, sem nenhuma verificação removida.
@@ -165,7 +183,14 @@ continua o mesmo roteiro, sem nenhuma verificação removida.
 
 - **Avilla sem importador**: falta a árvore de uma extração real (ver §10).
 - **Contêineres** (`.tar`, `.zip`, `.ab`) são inventariados com hash, mas não abertos.
-- Só **SMS** é interpretado (sem MMS). WhatsApp, contatos e chamadas vêm a seguir.
+- São interpretados **SMS** (sem MMS) e, na branch `fase1-whatsapp`, **WhatsApp Android**. A
+  agenda e as chamadas do Android vêm a seguir.
+- WhatsApp:
+  - conferido só com bancos sintéticos, com nomes da referência pública do app;
+  - `.crypt*` não decifrados;
+  - `@lid`/`jid_map`, reações, enquetes, edições e chamadas do app não lidos;
+  - dono da conta não identificado;
+  - detalhes no checkpoint da fase.
 - Hash calculado numa única thread. Sem retomada de importação interrompida (importa-se de novo; a
   interrompida fica registrada).
 - Sem exclusão de extração (somente inclusão, de propósito).
@@ -201,6 +226,12 @@ continua o mesmo roteiro, sem nenhuma verificação removida.
    desatualizados.
 9. Avilla: nada presumido; só contrato e fixtures sintéticas identificadas.
 10. Nunca versionar `.env`, credenciais ou dados reais (ver §11).
+11. WhatsApp: esquema detectado pelo conteúdo. O registro `conversa` do app fica separado das
+    mensagens (sem `conversa_id_externo`).
+12. Título, tipo e nomes são resolvidos **na consulta** a partir dos registros da mesma extração,
+    nunca gravados na conversa derivada.
+13. Anexo só é ligado quando o arquivo é único e o tamanho confere. O motivo fica em
+    `artefato.anexo_vinculo`.
 
 ## 8. Estrutura do banco e migrações
 
@@ -217,15 +248,18 @@ Arquivos em `crates/sied-armazenamento/migracoes/`, registrados em `src/migracoe
 | 1 | inicial | `caso` (linha única), `dispositivo`, `auditoria` (somente inclusão) |
 | 2 | importacao | `extracao`, `arquivo` (inventário), `execucao_parser`, `aviso_parser`, `artefato`, `referencia_origem`; gatilhos de somente inclusão em arquivo, artefato e origem |
 | 3 | conversas_busca | `conversa`, `conversa_participante`, FTS5 `busca_artefato` e `busca_arquivo`; gatilhos `artefato_indexa_busca`, `artefato_agrega_conversa`, `arquivo_indexa_busca`; preenchimento dos dados já importados |
+| 4 | whatsapp (branch `fase1-whatsapp`) | coluna `artefato.anexo_vinculo`; índices `idx_arquivo_nome` e `idx_artefato_id_externo` |
 
 Um caso criado em versão anterior é migrado ao abrir, depois da cópia de segurança.
 
 ## 9. Estado da importação, conversas e busca
 
-- **Importação**: completa para pasta genérica com SMS Android, do início (seleção) ao fim
-  (artefatos com origem), em segundo plano e com auditoria.
-- **Conversas**: funcionam para qualquer parser que preencha `conversa_id_externo`; hoje, SMS.
-  Participantes aparecem como identificadores brutos (nomes virão com o WhatsApp e contatos).
+- **Importação**: completa para pasta genérica com SMS Android e, na branch `fase1-whatsapp`,
+  WhatsApp Android (`msgstore.db` + `wa.db`). Vai do início (seleção) ao fim (artefatos com
+  origem), em segundo plano e com auditoria.
+- **Conversas**: funcionam para qualquer parser que preencha `conversa_id_externo`. Título, tipo
+  e nomes aparecem quando o app grava registros `conversa` e `contato` (hoje, o WhatsApp); sem
+  eles, os participantes aparecem como identificadores brutos (SMS).
 - **Busca**: funciona em tudo que for importado, sem trabalho extra por parser.
 
 ## 10. O que ainda depende do Avilla
@@ -243,7 +277,8 @@ Com isso: fixture sintética com os mesmos nomes, `detectar` e `planejar`, teste
 plano e pasta intacta, e importação completa no app real. O roteiro está em
 `docs/PREPARACAO-AVILLA-WHATSAPP.md` §2.
 
-Não dependem do Avilla: parser WhatsApp, contatos, chamadas, evidências e relatório.
+Não dependem do Avilla: agenda de contatos, chamadas, evidências e relatório. O parser do
+WhatsApp já está pronto (PR #8) e vale para qualquer importador.
 
 ## 11. Proteção do repositório
 
@@ -271,19 +306,22 @@ Detalhes no `README.md`.
 
 ## 13. Próximo passo recomendado
 
-**Parser WhatsApp Android** numa branch própria criada a partir da nova `main` (não depende do
-Avilla). Plano já definido:
+**Leitor WhatsApp Android: concluído na branch `fase1-whatsapp` (PR #8, rascunho).** O plano
+desta seção foi cumprido:
+- fixtures sintéticas nos dois esquemas;
+- detecção pelo conteúdo;
+- mensagens, grupos e contatos;
+- anexos ligados ao inventário;
+- títulos e nomes nas conversas.
 
-- Fixtures SQL sintéticas em `testes/fixtures/whatsapp` para os dois esquemas do `msgstore.db`
-  (antigo: `messages`; novo: `message`, `chat`, `jid` e auxiliares) e para o `wa.db`.
-- Detecção pelo esquema presente, nunca pela versão do app; valores brutos sempre preservados.
-- Mensagens (texto, mídia, localização, contato, sistema, resposta, encaminhamento, apagada),
-  estados de envio, grupos e participantes, contatos do `wa.db`.
-- Anexos ligados ao inventário (caminho exato; depois sufixo único com conferência de tamanho).
-- Conversas ganham título, tipo (individual/grupo) e nomes dos participantes.
-- Checkpoint com testes, limitações e amostras reconstruídas antes de qualquer merge.
+Tudo está registrado em `docs/checkpoints/2026-09-28-fase1-whatsapp.md`. Falta o **aval do
+usuário para o merge** na `main`.
 
-Depois: importador Avilla (quando a árvore chegar), evidências selecionadas e relatório PDF.
+Depois, em ordem:
+1. importador Avilla (quando a árvore chegar, §10);
+2. conferência do WhatsApp com um banco de aparelho de teste;
+3. agenda de contatos e chamadas do Android;
+4. evidências selecionadas e relatório PDF.
 
 ---
 

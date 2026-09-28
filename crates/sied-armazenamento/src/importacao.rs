@@ -13,8 +13,8 @@ use sied_ingestao::fonte::CaminhoFonte;
 use sied_ingestao::inventario::ArquivoInventariado;
 use sied_ingestao::parser::{AvisoParser, ResumoParser};
 use sied_ingestao::pipeline::{
-    ArquivoRegistrado, ArtefatoParaGravar, ContextoImportacao, Destino, EstadoExecucao,
-    ResumoImportacao,
+    ArquivoRegistrado, ArtefatoParaGravar, CandidatoAnexo, ContextoImportacao, Destino,
+    EstadoExecucao, ResumoImportacao,
 };
 use sied_ingestao::{ErroIngestao, InfoComponente};
 use std::path::{Path, PathBuf};
@@ -289,6 +289,28 @@ impl Destino for Importacao {
             .map_err(gravacao)
     }
 
+    fn arquivos_com_nome(&mut self, nome: &str) -> Result<Vec<CandidatoAnexo>, ErroIngestao> {
+        let mut stmt = self
+            .conn
+            .prepare_cached(
+                "SELECT id, caminho, tamanho FROM arquivo
+                 WHERE extracao_id = ?1 AND nome = ?2 AND sha256 IS NOT NULL ORDER BY id",
+            )
+            .map_err(gravacao)?;
+        let v = stmt
+            .query_map(params![self.extracao_id.to_string(), nome], |r| {
+                Ok(CandidatoAnexo {
+                    id: r.get(0)?,
+                    caminho: r.get(1)?,
+                    tamanho: r.get::<_, i64>(2)? as u64,
+                })
+            })
+            .map_err(gravacao)?
+            .collect::<Result<_, _>>()
+            .map_err(gravacao)?;
+        Ok(v)
+    }
+
     fn iniciar_execucao(
         &mut self,
         parser: &InfoComponente,
@@ -330,9 +352,9 @@ impl Destino for Importacao {
                          remetente, destinatarios, de_mim, data_hora_ms, data_hora_original, formato_data,
                          conteudo, id_externo, resposta_a_id_externo, conversa_id_externo, anexo_caminho,
                          anexo_arquivo_id, mime, nome_arquivo, tamanho, latitude, longitude, estado_registro,
-                         confianca, metadados, hash_registro)
+                         confianca, metadados, hash_registro, anexo_vinculo)
                      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18,
-                             ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28)",
+                             ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29)",
                 )
                 .map_err(gravacao)?;
             let mut orig = tx
@@ -376,6 +398,7 @@ impl Destino for Importacao {
                     enum_str(&a.confianca),
                     texto_json(&a.metadados),
                     g.hash_registro,
+                    g.anexo_vinculo.map(|v| v.como_str()),
                 ])
                 .map_err(gravacao)?;
                 let artefato_id = tx.last_insert_rowid();

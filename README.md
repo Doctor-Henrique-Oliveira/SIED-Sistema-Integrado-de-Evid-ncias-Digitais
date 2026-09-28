@@ -73,9 +73,18 @@ caso, ou esteja dentro dela.
 4. **Parsers**: cada registro interpretado guarda arquivo, hash, tabela, ID do registro, consulta usada,
    valores brutos da linha, parser e versão. A tela da extração mostra tudo isso em "Detalhes técnicos".
 
-Importadores disponíveis: **Pasta genérica** (qualquer pasta; interpreta `mmssms.db` do Android onde
-estiver). O **Avilla** aparece como "ainda não disponível" até sua estrutura ser documentada a partir de
-uma extração real. Parser disponível: **SMS do Android** (tabela `sms`; MMS ainda não).
+Importadores disponíveis: **Pasta genérica** (qualquer pasta; interpreta `mmssms.db`, `msgstore.db`
+e `wa.db` onde estiverem). O **Avilla** aparece como "ainda não disponível" até sua estrutura ser
+documentada a partir de uma extração real.
+
+Parsers disponíveis:
+- **SMS do Android** (tabela `sms`; MMS ainda não).
+- **WhatsApp Android**:
+  - `msgstore.db` nos esquemas novo e antigo, detectados pelo conteúdo, junto com o `wa.db` da
+    mesma pasta;
+  - mensagens, grupos, contatos e anexos ligados ao inventário;
+  - backups `.crypt*` só inventariados;
+  - conferido até agora só com bancos sintéticos.
 
 ## Interface
 
@@ -94,9 +103,12 @@ uma extração real. Parser disponível: **SMS do Android** (tabela `sms`; MMS a
 ## Conversas e busca
 
 - **Conversas** (três colunas: lista, chat e contexto/origem técnica): os registros de um mesmo app e da
-  mesma conversa (`thread_id` no SMS) são agrupados e mostrados como chat: recebidas à esquerda, enviadas à direita, separador por dia e hora com segundos no
+  mesma conversa (`thread_id` no SMS, jid no WhatsApp) são agrupados e mostrados como chat: recebidas à esquerda, enviadas à direita, separador por dia e hora com segundos no
   fuso do caso. "Detalhes técnicos" mostra, para a mensagem clicada, a origem completa (arquivo, hash,
-  tabela, registro, valores brutos).
+  tabela, registro, valores brutos). No WhatsApp:
+  - título (assunto do grupo ou nome do contato), tipo e nomes dos participantes vêm do próprio
+    app na mesma extração;
+  - anexos mostram se o arquivo foi achado na extração.
 - **Busca global** (SQLite FTS5): conteúdo das mensagens, remetentes/destinatários e nomes de arquivo do
   inventário, sem diferenciar acentos e maiúsculas, com busca por prefixo. Um texto só com dígitos e
   separadores é tratado como telefone e encontrado em qualquer formato (`(11) 90000-0001` acha
@@ -153,6 +165,8 @@ registros, os detalhes técnicos e o manifesto contra os arquivos, e prova que a
 
 Para experimentar a importação manualmente:
 `python3 testes/gerador/extracao_sintetica.py C:\Temp\Extracao-SINTETICA` e importe essa pasta.
+Com `--whatsapp` antes da pasta, a extração ganha também `msgstore.db`, `wa.db`, mídias e um
+backup `.crypt14`, todos sintéticos, gerados a partir de `testes/fixtures/whatsapp`.
 
 ## Regras do repositório
 

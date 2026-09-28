@@ -6,14 +6,15 @@
 //!
 //! Telefones: um texto que só tem dígitos e separadores (`+55 (11) 98765-4321`) é
 //! buscado pelos dígitos em qualquer posição do remetente e dos destinatários, já
-//! que o mesmo número aparece com e sem DDI/DDD conforme o app.
+//! que o mesmo número aparece com e sem DDI/DDD conforme o app. Contatos também são
+//! achados pelo próprio identificador.
 
 use rusqlite::{params_from_iter, types::Value as ValorSql, Connection};
 use serde::{Deserialize, Serialize};
 use sied_dominio::ExtracaoId;
 use ts_rs::TS;
 
-use crate::extracoes::{ler_resumo, uuid, ArtefatoResumo, Pagina};
+use crate::extracoes::{ler_resumo, uuid, ArtefatoResumo, Pagina, COLUNAS_RESUMO, N_RESUMO};
 use crate::Resultado;
 
 /// Marcadores do trecho destacado. Caracteres de controle não aparecem em texto
@@ -96,8 +97,11 @@ pub fn digitos_telefone(texto: &str) -> Option<String> {
 }
 
 /// Mesma normalização da migração 3 (apenas dígitos de remetente + destinatários).
+/// Em contatos, o identificador do próprio contato (ex.: jid do WhatsApp) também
+/// conta, para que o número leve ao nome gravado no aparelho.
 const PESSOAS_SO_DIGITOS: &str = "replace(replace(replace(replace(replace(replace(
-    coalesce(a.remetente, '') || ' ' || a.destinatarios,
+    coalesce(a.remetente, '') || ' ' || a.destinatarios || ' ' ||
+    CASE WHEN a.tipo = 'contato' THEN coalesce(a.id_externo, '') ELSE '' END,
     '+', ''), '-', ''), '(', ''), ')', ''), '.', ''), ' ', '')";
 
 struct Filtros {
@@ -131,18 +135,24 @@ fn filtros_artefato(f: &FiltroBusca) -> Filtros {
     Filtros { sql, valores }
 }
 
-const COLUNAS_ACHADO: &str = "a.id, a.tipo, a.subtipo, a.app, a.remetente, a.destinatarios,
-    a.de_mim, a.data_hora_ms, a.conteudo, a.conversa_id_externo, a.estado_registro,
-    a.extracao_id,
-    (SELECT c.id FROM conversa c WHERE c.extracao_id = a.extracao_id
-       AND c.app = coalesce(a.app, '') AND c.id_externo = a.conversa_id_externo)";
+fn colunas_achado() -> String {
+    format!(
+        "{COLUNAS_RESUMO}, a.extracao_id,
+         (SELECT c.id FROM conversa c WHERE c.extracao_id = a.extracao_id
+            AND c.app = coalesce(a.app, '') AND c.id_externo = a.conversa_id_externo)"
+    )
+}
 
 fn ler_achado(r: &rusqlite::Row, com_trecho: bool) -> rusqlite::Result<AchadoArtefato> {
     Ok(AchadoArtefato {
         artefato: ler_resumo(r)?,
-        extracao_id: uuid(r.get(11)?)?,
-        conversa_id: r.get(12)?,
-        trecho: if com_trecho { r.get(13)? } else { None },
+        extracao_id: uuid(r.get(N_RESUMO)?)?,
+        conversa_id: r.get(N_RESUMO + 1)?,
+        trecho: if com_trecho {
+            r.get(N_RESUMO + 2)?
+        } else {
+            None
+        },
     })
 }
 
@@ -173,8 +183,9 @@ pub fn buscar(
         valores.push(ValorSql::Integer(limite));
         valores.push(ValorSql::Integer(deslocamento));
         let mut stmt = conn.prepare(&format!(
-            "SELECT {COLUNAS_ACHADO} FROM artefato a WHERE {cond}
-             ORDER BY a.data_hora_ms DESC, a.id DESC LIMIT ? OFFSET ?"
+            "SELECT {} FROM artefato a WHERE {cond}
+             ORDER BY a.data_hora_ms DESC, a.id DESC LIMIT ? OFFSET ?",
+            colunas_achado()
         ))?;
         let itens = stmt
             .query_map(params_from_iter(valores.iter()), |r| ler_achado(r, false))?
@@ -209,10 +220,11 @@ pub fn buscar(
     valores.push(ValorSql::Integer(limite));
     valores.push(ValorSql::Integer(deslocamento));
     let mut stmt = conn.prepare(&format!(
-        "SELECT {COLUNAS_ACHADO},
+        "SELECT {},
                 snippet(busca_artefato, -1, '{MARCA_INICIO}', '{MARCA_FIM}', '…', 16)
          FROM busca_artefato JOIN artefato a ON a.id = busca_artefato.rowid
-         WHERE {cond} ORDER BY rank, a.data_hora_ms DESC LIMIT ? OFFSET ?"
+         WHERE {cond} ORDER BY rank, a.data_hora_ms DESC LIMIT ? OFFSET ?",
+        colunas_achado()
     ))?;
     let itens = stmt
         .query_map(params_from_iter(valores.iter()), |r| ler_achado(r, true))?

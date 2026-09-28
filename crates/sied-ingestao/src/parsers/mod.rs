@@ -2,3 +2,4 @@
 
 pub mod android_sms;
 mod sqlite;
+pub mod whatsapp_android;

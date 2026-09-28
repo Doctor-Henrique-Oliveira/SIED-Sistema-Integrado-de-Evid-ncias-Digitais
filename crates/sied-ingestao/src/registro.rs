@@ -6,6 +6,7 @@ use crate::importadores::avilla::AvillaImporter;
 use crate::importadores::generico::ImportadorGenerico;
 use crate::parser::Parser;
 use crate::parsers::android_sms::ParserSmsAndroid;
+use crate::parsers::whatsapp_android::ParserWhatsAppAndroid;
 use crate::Resultado;
 
 #[derive(Default)]
@@ -21,6 +22,7 @@ impl Registro {
         r.adicionar_importador(Box::new(AvillaImporter));
         r.adicionar_importador(Box::new(ImportadorGenerico));
         r.adicionar_parser(Box::new(ParserSmsAndroid));
+        r.adicionar_parser(Box::new(ParserWhatsAppAndroid));
         r
     }
 

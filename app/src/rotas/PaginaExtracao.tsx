@@ -8,7 +8,7 @@ import { Icone, type NomeIcone } from "../componentes/Icone";
 import { PainelTecnico } from "../componentes/PainelTecnico";
 import { nomeSistema } from "../componentes/SecoesCaso";
 import { dataHora, dataHoraMs, duracao, numero, tamanho } from "../util/formatar";
-import { nomeEstadoRegistro, nomeStatusExecucao, nomeStatusExtracao, rotuloApp, tomStatus } from "../util/rotulos";
+import { nomeEstadoRegistro, nomeStatusExecucao, nomeStatusExtracao, nomeTipoArtefato, rotuloApp, tomStatus } from "../util/rotulos";
 import { ComCasoAberto, VoltarAoCaso } from "./PaginaCaso";
 
 const LIMITE = 100;
@@ -202,11 +202,14 @@ function AbaArtefatos({ caso, x }: { caso: Caso; x: Extracao }) {
                   className={`cursor-pointer ${selecionado === a.id ? "bg-ouro/8" : tabela.linha}`}
                 >
                   <td className={`${tabela.td} tabular whitespace-nowrap text-texto-2`}>{dataHoraMs(a.data_hora_ms, caso.fuso_horario)}</td>
-                  <td className={`${tabela.td} whitespace-nowrap text-texto-2`}>{rotuloApp(a.app ?? a.tipo)}</td>
+                  <td className={`${tabela.td} whitespace-nowrap text-texto-2`}>
+                    {rotuloApp(a.app ?? a.tipo)}
+                    {a.tipo !== "mensagem" && <span className="text-texto-3"> · {nomeTipoArtefato[a.tipo] ?? a.tipo}</span>}
+                  </td>
                   <td className={tabela.td}>
                     {a.de_mim == null ? "—" : a.de_mim ? <span className="text-ouro-claro">Enviada</span> : <span className="text-info">Recebida</span>}
                   </td>
-                  <td className={`${tabela.td} whitespace-nowrap font-mono text-xs`}>{a.remetente ?? (a.destinatarios.join(", ") || "—")}</td>
+                  <td className={`${tabela.td} whitespace-nowrap font-mono text-xs`}>{a.remetente ?? (a.destinatarios.join(", ") || (a.tipo !== "mensagem" ? a.id_externo : null) || "—")}</td>
                   <td className={`${tabela.td} max-w-md truncate text-texto`} title={a.conteudo ?? undefined}>
                     {a.conteudo ?? "—"}
                   </td>
