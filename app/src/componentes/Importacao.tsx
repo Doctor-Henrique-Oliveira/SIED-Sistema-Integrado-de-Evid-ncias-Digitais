@@ -8,6 +8,7 @@ import { nomeEtapa, nomeStatusExtracao, nomeSuporte, tomStatus } from "../util/r
 import { Botao } from "./Botao";
 import { Selecao } from "./Campo";
 import { Aviso, BarraProgresso, Selo } from "./Estrutura";
+import { Icone } from "./Icone";
 
 /** Escolha do dispositivo, da pasta e do importador. */
 export function AssistenteImportacao({ caso, dispositivos, aoFechar }: {
@@ -59,7 +60,7 @@ export function AssistenteImportacao({ caso, dispositivos, aoFechar }: {
   }
 
   return (
-    <div className="space-y-5 rounded-lg bg-slate-50 p-4 ring-1 ring-slate-200">
+    <div className="space-y-4 rounded-lg border border-borda-2 bg-sup-2/50 p-4" aria-label="Assistente de importação">
       <Aviso tipo="info">
         A pasta da extração é apenas lida: nada é gravado nela. Todo arquivo recebe SHA-256, e o manifesto, as
         cópias de trabalho e os índices ficam na pasta do caso.
@@ -79,7 +80,7 @@ export function AssistenteImportacao({ caso, dispositivos, aoFechar }: {
           ))}
         </Selecao>
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="pasta-extracao" className="text-sm font-medium text-slate-700">
+          <label htmlFor="pasta-extracao" className="text-xs font-medium text-texto-2">
             Pasta da extração
           </label>
           <form
@@ -94,7 +95,7 @@ export function AssistenteImportacao({ caso, dispositivos, aoFechar }: {
               value={digitada}
               onChange={(e) => setDigitada(e.target.value)}
               placeholder="Cole o caminho ou escolha a pasta"
-              className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-xs outline-none focus:border-marca-500"
+              className="min-w-0 flex-1 rounded-lg border border-borda-2 bg-fundo px-3 py-2 font-mono text-xs text-texto outline-none placeholder:text-texto-3 focus:border-ouro/70 focus:ring-2 focus:ring-ouro/20"
             />
             {digitada.trim() && digitada.trim() !== pasta && (
               <Botao variante="secundario" type="submit" carregando={analisando}>
@@ -110,32 +111,32 @@ export function AssistenteImportacao({ caso, dispositivos, aoFechar }: {
 
       {deteccoes && (
         <fieldset>
-          <legend className="mb-2 text-sm font-medium text-slate-700">Ferramenta de extração</legend>
+          <legend className="mb-2 text-xs font-medium text-texto-2">Ferramenta de extração</legend>
           <div className="space-y-2">
             {deteccoes.map((d) => {
               const disponivel = d.suporte === "completo" || d.suporte === "parcial";
               return (
                 <label
                   key={d.importador.id}
-                  className={`flex gap-3 rounded-lg bg-white p-3 ring-1 ${
-                    importador === d.importador.id ? "ring-marca-500" : "ring-slate-200"
+                  className={`flex gap-3 rounded-lg border bg-sup p-3 ${
+                    importador === d.importador.id ? "border-ouro/60 bg-ouro/5" : "border-borda"
                   } ${disponivel ? "cursor-pointer" : "opacity-60"}`}
                 >
                   <input
                     type="radio"
                     name="importador"
-                    className="mt-1"
+                    className="mt-1 accent-[var(--color-ouro)]"
                     disabled={!disponivel}
                     checked={importador === d.importador.id}
                     onChange={() => setImportador(d.importador.id)}
                   />
                   <span className="min-w-0">
-                    <span className="flex items-center gap-2 text-sm font-medium text-slate-900">
+                    <span className="flex flex-wrap items-center gap-2 text-[13px] font-medium text-texto">
                       {d.importador.nome}
-                      <span className="font-normal text-slate-500">v{d.importador.versao}</span>
+                      <span className="font-normal text-texto-3">v{d.importador.versao}</span>
                       <Selo tom={disponivel ? "ok" : "neutro"}>{nomeSuporte[d.suporte] ?? d.suporte}</Selo>
                     </span>
-                    <ul className="mt-1 list-disc pl-4 text-xs text-slate-600">
+                    <ul className="mt-1 list-disc pl-4 text-xs text-texto-2">
                       {d.motivos.map((m) => (
                         <li key={m}>{m}</li>
                       ))}
@@ -174,15 +175,15 @@ export function PainelImportacao({ caso, estado, aoDispensar }: {
 
   if (estado.terminada) {
     return (
-      <div className="rounded-lg bg-white p-4 ring-1 ring-slate-200" aria-label="Resultado da importação">
+      <div className="rounded-lg border border-borda-2 bg-sup-2/60 p-3.5" aria-label="Resultado da importação">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="flex items-center gap-2 text-sm font-medium text-slate-900">
+          <p className="flex items-center gap-2 text-[13px] font-medium text-texto">
             Importação {x ? <Selo tom={tomStatus(x.status)}>{nomeStatusExtracao[x.status] ?? x.status}</Selo> : "terminada"}
           </p>
           <div className="flex gap-2">
             <Link
               to={`/casos/${caso.id}/extracoes/${estado.extracao_id}`}
-              className="rounded-lg px-3 py-1.5 text-sm font-medium text-marca-700 hover:bg-marca-50"
+              className="rounded-lg bg-ouro px-3 py-1.5 text-[13px] font-medium text-[#1a1305] hover:bg-ouro-claro"
             >
               Abrir extração
             </Link>
@@ -192,22 +193,23 @@ export function PainelImportacao({ caso, estado, aoDispensar }: {
           </div>
         </div>
         {x && (
-          <p className="mt-2 text-sm text-slate-600">
+          <p className="mt-2 text-[13px] text-texto-2">
             {numero(x.total_arquivos)} arquivos ({tamanho(x.total_bytes)}) inventariados,{" "}
             {numero(x.total_artefatos)} registros interpretados
             {x.total_avisos ? `, ${numero(x.total_avisos)} avisos` : ""}.
           </p>
         )}
-        {x?.erro && x.status !== "cancelada" && <p className="mt-2 text-sm text-rose-700">{x.erro}</p>}
-        {estado.erro && <p className="mt-2 text-sm text-rose-700">{estado.erro}</p>}
+        {x?.erro && x.status !== "cancelada" && <p className="mt-2 text-[13px] text-erro">{x.erro}</p>}
+        {estado.erro && <p className="mt-2 text-[13px] text-erro">{estado.erro}</p>}
       </div>
     );
   }
 
   return (
-    <div className="space-y-3 rounded-lg bg-white p-4 ring-1 ring-marca-500" aria-label="Importação em andamento">
+    <div className="space-y-3 rounded-lg border border-ouro/40 bg-ouro/5 p-3.5" aria-label="Importação em andamento">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-medium text-slate-900" data-teste="etapa-importacao">
+        <p className="flex items-center gap-2 text-[13px] font-medium text-texto" data-teste="etapa-importacao">
+          <span className="size-3 animate-spin rounded-full border-2 border-ouro/40 border-r-ouro" aria-hidden />
           {nomeEtapa[p.etapa] ?? p.etapa}…
         </p>
         <Botao
@@ -220,7 +222,7 @@ export function PainelImportacao({ caso, estado, aoDispensar }: {
         </Botao>
       </div>
       <BarraProgresso fracao={fracao} rotulo="Progresso da importação" />
-      <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-600">
+      <div className="tabular flex flex-wrap gap-x-6 gap-y-1 text-xs text-texto-2">
         <span>
           Arquivos: {numero(p.arquivos_feitos)} de {numero(p.arquivos_total)}
         </span>
@@ -235,10 +237,42 @@ export function PainelImportacao({ caso, estado, aoDispensar }: {
         {p.artefatos > 0 && <span>Registros: {numero(p.artefatos)}</span>}
       </div>
       {p.item_atual && (
-        <p className="truncate font-mono text-xs text-slate-500" title={p.item_atual}>
+        <p className="truncate font-mono text-xs text-texto-3" title={p.item_atual}>
           {p.item_atual}
         </p>
       )}
+      <ConsoleImportacao progresso={p} />
     </div>
+  );
+}
+
+/**
+ * Espaço do console técnico da importação (roadmap, CONTINUIDADE.md §14). Hoje mostra só
+ * o estado real que o backend já informa a cada consulta; o registro contínuo de eventos
+ * (hash, cópia verificada, parsers, gravação, indexação) virá do backend, sem simulação.
+ */
+export function ConsoleImportacao({ progresso: p }: { progresso: EstadoImportacao["progresso"] }) {
+  const linhas: [string, string][] = [
+    ["etapa", p.etapa],
+    ["arquivos", `${numero(p.arquivos_feitos)}/${numero(p.arquivos_total)}`],
+    ["bytes", `${tamanho(p.bytes_feitos)}/${tamanho(p.bytes_total)}`],
+    ["bancos", `${numero(p.tarefas_feitas)}/${numero(p.tarefas_total)}`],
+    ["registros", numero(p.artefatos)],
+    ["avisos", numero(p.avisos)],
+  ];
+  if (p.item_atual) linhas.push(["item", p.item_atual]);
+  if (p.mensagem) linhas.push(["mensagem", p.mensagem]);
+  return (
+    <details className="group rounded-md border border-borda bg-fundo">
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-1.5 text-xs text-texto-2 hover:text-texto">
+        <Icone nome="direita" className="size-3.5 transition-transform group-open:rotate-90" />
+        <Icone nome="terminal" className="size-3.5" />
+        Console técnico
+        <span className="text-texto-3">· estado atual informado pelo backend</span>
+      </summary>
+      <pre className="overflow-x-auto border-t border-borda px-3 py-2 font-mono text-[11px] leading-relaxed text-texto-2" aria-label="Estado técnico da importação">
+        {linhas.map(([k, v]) => `${k.padEnd(10)}${v}`).join("\n")}
+      </pre>
+    </details>
   );
 }

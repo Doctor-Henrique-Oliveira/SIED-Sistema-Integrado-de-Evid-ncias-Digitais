@@ -29,8 +29,14 @@ import type { FiltroBusca } from "./tipos/FiltroBusca";
 import type { ResultadoBusca } from "./tipos/ResultadoBusca";
 import type { AchadoArtefato } from "./tipos/AchadoArtefato";
 import type { AchadoArquivo } from "./tipos/AchadoArquivo";
+import type { Identificador } from "./tipos/Identificador";
+import type { ResumoCaso } from "./tipos/ResumoCaso";
+import type { TotalTipo } from "./tipos/TotalTipo";
 
 export type {
+  Identificador,
+  ResumoCaso,
+  TotalTipo,
   AchadoArquivo,
   AchadoArtefato,
   Conversa,
@@ -138,4 +144,8 @@ export const api = {
   conversaDoArtefato: (artefatoId: number) => chamar<number | null>("conversa_do_artefato", { artefatoId }),
   buscar: (filtro: FiltroBusca, deslocamento: number, limite: number) =>
     chamar<ResultadoBusca>("buscar", { filtro, deslocamento, limite }),
+
+  resumoCaso: () => chamar<ResumoCaso>("resumo_caso"),
+  listarIdentificadores: (texto: string | null, deslocamento: number, limite: number) =>
+    chamar<Pagina<Identificador>>("listar_identificadores", { texto, deslocamento, limite }),
 };
