@@ -8,6 +8,7 @@ use sied_armazenamento::extracoes::{
     ArquivoExtracao, ArtefatoDetalhe, ArtefatoResumo, ExecucaoParser, Extracao, Pagina,
     TotalCategoria,
 };
+use sied_armazenamento::resumo::{Identificador, ResumoCaso};
 use sied_armazenamento::CasoCatalogado;
 use sied_dominio::{CasoId, Dispositivo, DispositivoId, ExtracaoId, NovoCaso, NovoDispositivo};
 use sied_ingestao::importador::Deteccao;
@@ -234,4 +235,19 @@ pub fn buscar(
     limite: i64,
 ) -> ResultadoApp<ResultadoBusca> {
     estado.com(|s| s.buscar(&filtro, deslocamento, limite))
+}
+
+#[tauri::command]
+pub fn resumo_caso(estado: State<'_, Estado>) -> ResultadoApp<ResumoCaso> {
+    estado.com(|s| s.resumo_caso())
+}
+
+#[tauri::command]
+pub fn listar_identificadores(
+    estado: State<'_, Estado>,
+    texto: Option<String>,
+    deslocamento: i64,
+    limite: i64,
+) -> ResultadoApp<Pagina<Identificador>> {
+    estado.com(|s| s.listar_identificadores(texto, deslocamento, limite))
 }

@@ -30,6 +30,7 @@ use crate::extracoes::{
 };
 use crate::importacao::Importacao;
 use crate::migracoes::{self, BANCO_CASO};
+use crate::resumo::{self, Identificador, ResumoCaso};
 use crate::{conexao, ErroArmazenamento, Resultado, Sessao};
 
 pub const NOME_ARQUIVO_CASO: &str = "caso.sied.db";
@@ -306,6 +307,19 @@ impl BancoCaso {
         limite: i64,
     ) -> Resultado<ResultadoBusca> {
         busca::buscar(&self.conn, filtro, deslocamento, limite)
+    }
+
+    pub fn resumo(&self) -> Resultado<ResumoCaso> {
+        resumo::resumo(&self.conn)
+    }
+
+    pub fn identificadores(
+        &self,
+        texto: Option<&str>,
+        deslocamento: i64,
+        limite: i64,
+    ) -> Resultado<Pagina<Identificador>> {
+        resumo::identificadores(&self.conn, texto, deslocamento, limite)
     }
 }
 

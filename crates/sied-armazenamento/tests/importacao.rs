@@ -522,3 +522,64 @@ fn caso_v2_ganha_conversas_e_busca_do_que_ja_foi_importado() {
     assert_eq!(conversas_e_busca_de(&banco), esperado);
     banco.verificar_auditoria().unwrap();
 }
+
+#[test]
+fn resumo_do_caso_e_identificadores_contam_o_que_foi_gravado() {
+    let raiz = tempfile::tempdir().unwrap();
+    let origem = raiz.path().join("ext");
+    extracao_sintetica(&origem);
+    let (banco, d) = caso(raiz.path());
+
+    // Caso sem extração: tudo zero, exceto o dispositivo.
+    let vazio = banco.resumo().unwrap();
+    assert_eq!(
+        (vazio.dispositivos, vazio.extracoes, vazio.registros),
+        (1, 0, 0)
+    );
+    assert!(vazio.arquivos_por_categoria.is_empty());
+
+    let x = importar(&banco, &d, &origem, &Controle::default());
+    let r = banco.resumo().unwrap();
+    assert_eq!(r.extracoes, 1);
+    assert_eq!(r.extracoes_concluidas, 1);
+    // Os totais batem com os da própria extração.
+    assert_eq!(Some(r.arquivos), x.total_arquivos);
+    assert_eq!(Some(r.bytes), x.total_bytes);
+    assert_eq!(Some(r.registros), x.total_artefatos);
+    assert_eq!(Some(r.avisos_parser), x.total_avisos);
+    assert_eq!(
+        r.arquivos_por_categoria
+            .iter()
+            .map(|c| c.arquivos)
+            .sum::<i64>(),
+        r.arquivos
+    );
+    assert_eq!(
+        r.registros_por_tipo.iter().map(|t| t.total).sum::<i64>(),
+        r.registros
+    );
+    assert_eq!(r.conversas, banco.conversas(None, 0, 1).unwrap().total);
+    assert_eq!(r.identificadores, 2);
+    assert_eq!(r.execucoes_parser, 1);
+    assert_eq!(r.execucoes_com_problema, 0);
+    assert_eq!(r.localizacoes, 0);
+
+    let ids = banco.identificadores(None, 0, 10).unwrap();
+    assert_eq!(ids.total, 2);
+    let um = ids
+        .itens
+        .iter()
+        .find(|i| i.identificador == "+5511900000001")
+        .unwrap();
+    assert_eq!((um.app.as_str(), um.conversas, um.mensagens), ("sms", 1, 2));
+    assert_eq!(um.primeira_ms, Some(1_767_225_600_000));
+    assert_eq!(um.ultima_ms, Some(1_767_225_660_000));
+    // Filtro por trecho, sem normalizar o número.
+    let filtrado = banco.identificadores(Some("0002"), 0, 10).unwrap();
+    assert_eq!(filtrado.total, 1);
+    assert_eq!(filtrado.itens[0].identificador, "+5511900000002");
+    assert_eq!(
+        banco.identificadores(Some("99999"), 0, 10).unwrap().total,
+        0
+    );
+}
