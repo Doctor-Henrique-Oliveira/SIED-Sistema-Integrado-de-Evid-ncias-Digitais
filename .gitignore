@@ -141,3 +141,38 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# ===================== SIED =====================
+# Rust
+target/
+
+# Tauri
+app/src-tauri/gen/schemas/
+
+# NUNCA versionar dados de casos, extrações, bancos ou relatórios reais.
+*.sied.db
+*.sied.db-wal
+*.sied.db-shm
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+casos/
+Casos/
+extracoes/
+Extracoes/
+relatorios/
+*.ab
+*.tar
+*.avilla
+*.pdf
+# Fixtures sintéticas são permitidas explicitamente:
+!testes/fixtures/**
+
+# Credenciais
+*.pem
+*.key
+*.pfx
+*.p12
+secrets.*

@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "padrao",
+  "description": "Permissões da janela principal. Sem acesso a rede, shell ou sistema de arquivos pelo frontend: todo acesso a disco passa pelos comandos do backend.",
+  "windows": ["main"],
+  "permissions": ["core:default", "dialog:allow-open"]
+}
