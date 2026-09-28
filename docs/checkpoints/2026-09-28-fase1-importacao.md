@@ -108,8 +108,9 @@ O que os novos testes provam:
 
 ## Problemas encontrados e como foram resolvidos
 
-- **O clippy mais novo da CI** apontou `is_multiple_of` no código da fundação (o PR #1 ficou vermelho
-  no Linux). Corrigido no PR #1. O build e os testes no **Windows passaram** nessa execução.
+- **O clippy mais novo da CI** apontou `is_multiple_of` no código da fundação, e o PR #1 ficou vermelho
+  no Linux. Com a correção, o Linux ficou verde. No **Windows, compilação e testes passaram**; a geração
+  do instalador ainda estava em andamento quando este relatório foi escrito.
 - **Teste ponta a ponta com condição de corrida**: as seções da página carregam separadamente, então o
   teste passou a esperar cada uma.
 - **O WebDriver do WebKit não clica em células com reticências**: o teste clica na célula da data, e as
