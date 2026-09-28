@@ -6,7 +6,7 @@ import { Botao } from "../componentes/Botao";
 import { Aviso, Cabecalho, Cartao, Carregando, entrada, Paginacao, Selo, tabela, Vazio } from "../componentes/Estrutura";
 import { Icone } from "../componentes/Icone";
 import { dataHoraMs, limiteDia, numero, tamanho } from "../util/formatar";
-import { nomeApp, nomeCategoria, rotuloApp } from "../util/rotulos";
+import { nomeApp, nomeCategoria, nomeTipoArtefato, rotuloApp, rotuloSubtipo } from "../util/rotulos";
 import { ComCasoAberto, VoltarAoCaso } from "./PaginaCaso";
 
 const LIMITE = 50;
@@ -193,14 +193,19 @@ function Busca({ caso }: { caso: Caso }) {
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-texto-3">
                             <span className="tabular">{dataHoraMs(reg.data_hora_ms, caso.fuso_horario)}</span>
                             <span className="font-medium uppercase text-texto-2">{rotuloApp(reg.app)}</span>
+                            {reg.tipo !== "mensagem" && <Selo tom="info">{nomeTipoArtefato[reg.tipo] ?? reg.tipo}</Selo>}
                             <span>{reg.de_mim == null ? "" : reg.de_mim ? "Enviada" : "Recebida"}</span>
-                            <span className="font-mono">{reg.remetente ?? reg.destinatarios.join(", ")}</span>
+                            <span className="font-mono">{reg.remetente ?? (reg.destinatarios.join(", ") || (reg.tipo !== "mensagem" ? reg.id_externo : ""))}</span>
                             <span className="ml-auto text-ouro-claro opacity-0 transition-opacity group-hover:opacity-100">
                               {a.conversa_id != null ? "abrir na conversa →" : "abrir na extração →"}
                             </span>
                           </div>
                           <p className="mt-0.5 text-[13px] text-texto">
-                            {a.trecho ? <TrechoDestacado texto={a.trecho} /> : (reg.conteudo ?? "—")}
+                            {a.trecho ? (
+                              <TrechoDestacado texto={a.trecho} />
+                            ) : (
+                              (reg.conteudo ?? reg.nome_arquivo ?? (reg.subtipo && reg.subtipo !== reg.app ? rotuloSubtipo(reg.subtipo) : "—"))
+                            )}
                           </p>
                         </Link>
                       </li>

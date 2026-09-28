@@ -21,9 +21,12 @@ const conversa: Conversa = {
   com_anexo: 0,
   primeira_ms: Date.UTC(2026, 0, 1, 12),
   ultima_ms: Date.UTC(2026, 0, 2, 12),
-  participantes: [{ identificador: "+5511900000001", mensagens: 2 }],
+  participantes: [{ identificador: "+5511900000001", mensagens: 2, nome: null }],
   total_participantes: 1,
   ultima_mensagem: "Até amanhã",
+  titulo: null,
+  tipo: null,
+  registro_id: null,
 };
 
 function msg(id: number, deMim: boolean, ms: number, conteudo: string): ArtefatoResumo {
@@ -39,6 +42,15 @@ function msg(id: number, deMim: boolean, ms: number, conteudo: string): Artefato
     conteudo,
     conversa_id_externo: "7",
     estado_registro: "ativo",
+    id_externo: null,
+    resposta_a_id_externo: null,
+    nome_arquivo: null,
+    mime: null,
+    tamanho: null,
+    anexo_arquivo_id: null,
+    anexo_vinculo: null,
+    latitude: null,
+    longitude: null,
   };
 }
 

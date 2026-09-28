@@ -1,6 +1,7 @@
 // Conversas em três colunas: lista (esquerda), chat (centro) e contexto ou origem
 // técnica (direita). As conversas são montadas a partir das mensagens gravadas;
-// nada aqui altera registros.
+// nada aqui altera registros. Título, tipo e nomes vêm dos registros que o próprio
+// app gravou na mesma extração (ex.: assunto do grupo e agenda do WhatsApp).
 
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -9,8 +10,8 @@ import { useConversa, useConversas, useExtracoes, useMensagensConversa } from ".
 import { Aviso, Cabecalho, Carregando, entrada, Filtros, LinkBotao, Paginacao, SecaoRecolhivel, Selo, Vazio } from "../componentes/Estrutura";
 import { Icone } from "../componentes/Icone";
 import { PainelTecnico } from "../componentes/PainelTecnico";
-import { dataHoraMs, dia, hora, numero } from "../util/formatar";
-import { nomeEstadoRegistro, rotuloApp } from "../util/rotulos";
+import { dataHoraMs, dia, hora, numero, tamanho } from "../util/formatar";
+import { nomeEstadoRegistro, nomeTipoConversa, nomeVinculoAnexo, rotuloApp, rotuloSubtipo } from "../util/rotulos";
 import { ComCasoAberto, VoltarAoCaso } from "./PaginaCaso";
 
 const LIMITE_LISTA = 100;
@@ -20,15 +21,52 @@ export function PaginaConversas() {
   return <ComCasoAberto>{(caso) => <Conversas caso={caso} />}</ComCasoAberto>;
 }
 
-/** Nome exibido da conversa: participantes como emitidos pelo parser. */
+/** Nome exibido da conversa: o título gravado pelo app (assunto do grupo ou nome do
+ * contato); sem ele, os participantes (nome do contato ou identificador). */
 export function tituloConversa(c: Conversa): string {
+  if (c.titulo) return c.titulo;
   if (c.participantes.length === 0) return `Conversa ${c.id_externo}`;
-  const nomes = c.participantes.map((p) => p.identificador).join(", ");
+  const nomes = c.participantes.map((p) => p.nome ?? p.identificador).join(", ");
   const resto = c.total_participantes - c.participantes.length;
   return resto > 0 ? `${nomes} e mais ${resto}` : nomes;
 }
 
-const eGrupo = (c: Conversa) => c.total_participantes > 1;
+/** Grupo pelo tipo que o app gravou; sem ele, pela quantidade de participantes. */
+const eGrupo = (c: Conversa) => (c.tipo ? c.tipo === "grupo" : c.total_participantes > 1);
+
+const rotuloTipoConversa = (c: Conversa) =>
+  c.tipo ? (nomeTipoConversa[c.tipo] ?? c.tipo) : eGrupo(c) ? "Grupo" : "Individual";
+
+/** Nome do contato por identificador, para o remetente de cada mensagem. */
+const nomesDe = (c: Conversa) => new Map(c.participantes.flatMap((p) => (p.nome ? [[p.identificador, p.nome] as const] : [])));
+
+/** Resumo curto de como o anexo foi procurado no inventário (a frase completa fica no contexto). */
+function situacaoAnexo(m: ArtefatoResumo): { texto: string; tom: "ok" | "atencao" | "neutro" } {
+  if (m.anexo_arquivo_id != null) return { texto: "Na extração", tom: "ok" };
+  switch (m.anexo_vinculo) {
+    case "ambiguo":
+      return { texto: "Mais de um arquivo possível", tom: "atencao" };
+    case "tamanho_diferente":
+      return { texto: "Tamanho não confere", tom: "atencao" };
+    case "nao_encontrado":
+      return { texto: "Não encontrado na extração", tom: "atencao" };
+    default:
+      return { texto: "Caminho não informado pelo app", tom: "neutro" };
+  }
+}
+
+const iconeAnexo = (subtipo: string | null) =>
+  subtipo === "imagem" || subtipo === "gif" || subtipo === "figurinha"
+    ? "midias"
+    : subtipo === "audio"
+      ? "audio"
+      : subtipo === "video"
+        ? "video"
+        : "documento";
+
+const temAnexo = (m: ArtefatoResumo) => m.nome_arquivo != null || m.anexo_vinculo != null;
+const temLocal = (m: ArtefatoResumo) => m.latitude != null && m.longitude != null;
+const coordenadas = (m: ArtefatoResumo) => `${m.latitude!.toFixed(6)}, ${m.longitude!.toFixed(6)}`;
 
 function Avatar({ c, grande }: { c: Conversa; grande?: boolean }) {
   return (
@@ -117,7 +155,10 @@ function ListaConversas({ caso, selecionada }: { caso: Caso; selecionada: number
   const visiveis = itens.filter(
     (c) =>
       (app == null || c.app === app) &&
-      (!termo || tituloConversa(c).toLowerCase().includes(termo) || (c.ultima_mensagem ?? "").toLowerCase().includes(termo)),
+      (!termo ||
+        tituloConversa(c).toLowerCase().includes(termo) ||
+        c.participantes.some((p) => p.identificador.toLowerCase().includes(termo)) ||
+        (c.ultima_mensagem ?? "").toLowerCase().includes(termo)),
   );
 
   return (
@@ -198,8 +239,8 @@ function ListaConversas({ caso, selecionada }: { caso: Caso; selecionada: number
                         </span>
                       </div>
                       <p className="truncate text-xs text-texto-2">{c.ultima_mensagem ?? "—"}</p>
-                      <div className="mt-0.5 flex items-center gap-2 text-[11px] text-texto-3">
-                        <span className="tabular">{numero(c.total_mensagens)} mensagens · {rotuloApp(c.app)}</span>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-texto-3">
+                        <span className="tabular whitespace-nowrap">{numero(c.total_mensagens)} mensagens · {rotuloApp(c.app)}</span>
                         {eGrupo(c) && <Selo tom="info">Grupo</Selo>}
                         {c.com_anexo > 0 && (
                           <span className="flex items-center gap-0.5" title={`${c.com_anexo} com anexo`}>
@@ -352,6 +393,7 @@ function Chat({
             <Mensagens
               caso={caso}
               grupo={eGrupo(c)}
+              nomes={nomesDe(c)}
               itens={mensagens.data.itens}
               selecionado={selecionado}
               destaque={destaque}
@@ -375,6 +417,10 @@ function Chat({
             c={c}
             selecionada={mensagens.data?.itens.find((m) => m.id === selecionado) ?? null}
             abrirOrigem={() => setTecnica(true)}
+            abrirRegistro={(id) => {
+              setSelecionado(id);
+              setTecnica(true);
+            }}
           />
         )
       )}
@@ -409,6 +455,7 @@ function ComDestaque({ texto, termo }: { texto: string; termo: string }) {
 function Mensagens({
   caso,
   grupo,
+  nomes,
   itens,
   selecionado,
   destaque,
@@ -418,6 +465,7 @@ function Mensagens({
 }: {
   caso: Caso;
   grupo: boolean;
+  nomes: Map<string, string>;
   itens: ArtefatoResumo[];
   selecionado: number | null;
   destaque: number | null;
@@ -431,6 +479,7 @@ function Mensagens({
     alvo.current?.scrollIntoView?.({ block: "center" });
   }, [rolarPara, itens]);
 
+  const porIdExterno = new Map(itens.flatMap((m) => (m.id_externo ? [[m.id_externo, m] as const] : [])));
   let diaAnterior: string | null = null;
   return (
     <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-4 py-3" aria-label="Mensagens da conversa">
@@ -450,37 +499,73 @@ function Mensagens({
                 <span className="rounded-full border border-borda bg-sup-2 px-3 py-0.5 text-[11px] text-texto-2 shadow-sm">{d}</span>
               </div>
             )}
-            <div
-              ref={m.id === rolarPara ? alvo : undefined}
-              className={`render-preguicoso flex ${enviada ? "justify-end" : "justify-start"}`}
-            >
-              <button
-                type="button"
-                onClick={() => selecionar(m.id)}
-                aria-pressed={ativo}
-                data-teste="mensagem"
-                className={`max-w-[min(75%,40rem)] rounded-2xl border px-3 py-2 text-left text-[13px] transition-colors ${
-                  enviada ? "rounded-br-sm border-info/25 bg-info/12 hover:bg-info/18" : "rounded-bl-sm border-borda-2 bg-sup-2 hover:bg-sup-3"
-                } ${ativo ? "outline-2 outline-offset-2 outline-ouro" : ""} ${daBusca || (achado && m.id === achadoAtual) ? "ring-2 ring-ouro/70" : achado ? "ring-1 ring-ouro/35" : ""}`}
+            {m.subtipo === "sistema" ? (
+              <div ref={m.id === rolarPara ? alvo : undefined} className="render-preguicoso flex justify-center">
+                <button
+                  type="button"
+                  onClick={() => selecionar(m.id)}
+                  aria-pressed={ativo}
+                  data-teste="mensagem"
+                  className={`max-w-[min(85%,40rem)] rounded-full border border-borda bg-fundo/60 px-3 py-1 text-center text-[12px] text-texto-2 hover:bg-sup-2 ${
+                    ativo ? "outline-2 outline-offset-2 outline-ouro" : ""
+                  } ${daBusca || (achado && m.id === achadoAtual) ? "ring-2 ring-ouro/70" : ""}`}
+                >
+                  {m.conteudo != null ? <ComDestaque texto={m.conteudo} termo={termo} /> : rotuloSubtipo("sistema")}
+                  <span className="tabular ml-2 text-[11px] text-texto-3">{m.data_hora_ms == null ? "—" : hora(m.data_hora_ms, caso.fuso_horario)}</span>
+                </button>
+              </div>
+            ) : (
+              <div
+                ref={m.id === rolarPara ? alvo : undefined}
+                className={`render-preguicoso flex ${enviada ? "justify-end" : "justify-start"}`}
               >
-                {!enviada && m.remetente && (
-                  <p className={`mb-0.5 font-mono text-[11px] ${grupo ? "text-ouro-claro" : "text-texto-3"}`}>{m.remetente}</p>
-                )}
-                {m.subtipo && m.subtipo !== "texto" && m.subtipo !== m.app && (
-                  <p className="mb-1">
-                    <Selo tom="info">{m.subtipo}</Selo>
+                <button
+                  type="button"
+                  onClick={() => selecionar(m.id)}
+                  aria-pressed={ativo}
+                  data-teste="mensagem"
+                  className={`max-w-[min(75%,40rem)] rounded-2xl border px-3 py-2 text-left text-[13px] transition-colors ${
+                    enviada ? "rounded-br-sm border-info/25 bg-info/12 hover:bg-info/18" : "rounded-bl-sm border-borda-2 bg-sup-2 hover:bg-sup-3"
+                  } ${ativo ? "outline-2 outline-offset-2 outline-ouro" : ""} ${daBusca || (achado && m.id === achadoAtual) ? "ring-2 ring-ouro/70" : achado ? "ring-1 ring-ouro/35" : ""}`}
+                >
+                  {!enviada && m.remetente && (
+                    <p className="mb-0.5 flex min-w-0 items-baseline gap-1.5 text-[11px]">
+                      {nomes.has(m.remetente) && (
+                        <span className={`truncate font-medium ${grupo ? "text-ouro-claro" : "text-texto-2"}`}>{nomes.get(m.remetente)}</span>
+                      )}
+                      <span className={`truncate font-mono ${grupo && !nomes.has(m.remetente) ? "text-ouro-claro" : "text-texto-3"}`}>{m.remetente}</span>
+                    </p>
+                  )}
+                  {m.subtipo && m.subtipo !== "texto" && m.subtipo !== m.app && (
+                    <p className="mb-1">
+                      <Selo tom={m.subtipo === "apagada" || m.subtipo === "desconhecido" ? "atencao" : "info"}>{rotuloSubtipo(m.subtipo)}</Selo>
+                    </p>
+                  )}
+                  {m.resposta_a_id_externo && <Citacao alvo={porIdExterno.get(m.resposta_a_id_externo)} nomes={nomes} />}
+                  {temAnexo(m) && <Anexo m={m} />}
+                  {temLocal(m) && (
+                    <p className="mb-1 flex items-center gap-1 font-mono text-xs text-texto-2" title="Latitude, longitude">
+                      <Icone nome="localizacoes" className="size-3.5 shrink-0 text-texto-3" />
+                      {coordenadas(m)}
+                    </p>
+                  )}
+                  {(m.conteudo != null || !(temAnexo(m) || temLocal(m))) && (
+                    <p className="whitespace-pre-wrap break-words text-texto">
+                      {m.conteudo != null ? (
+                        <ComDestaque texto={m.conteudo} termo={termo} />
+                      ) : (
+                        <span className="italic text-texto-3">{m.subtipo === "apagada" ? "(mensagem apagada: o texto não está no banco)" : "(sem texto)"}</span>
+                      )}
+                    </p>
+                  )}
+                  <p className="mt-1 flex items-center justify-end gap-2 text-[11px] text-texto-3">
+                    {daBusca && <span className="text-ouro-claro">resultado da busca</span>}
+                    {m.estado_registro !== "ativo" && <Selo tom="atencao">{nomeEstadoRegistro[m.estado_registro] ?? m.estado_registro}</Selo>}
+                    <span className="tabular">{m.data_hora_ms == null ? "—" : hora(m.data_hora_ms, caso.fuso_horario)}</span>
                   </p>
-                )}
-                <p className="whitespace-pre-wrap break-words text-texto">
-                  {m.conteudo != null ? <ComDestaque texto={m.conteudo} termo={termo} /> : <span className="italic text-texto-3">(sem texto)</span>}
-                </p>
-                <p className="mt-1 flex items-center justify-end gap-2 text-[11px] text-texto-3">
-                  {daBusca && <span className="text-ouro-claro">resultado da busca</span>}
-                  {m.estado_registro !== "ativo" && <Selo tom="atencao">{nomeEstadoRegistro[m.estado_registro] ?? m.estado_registro}</Selo>}
-                  <span className="tabular">{m.data_hora_ms == null ? "—" : hora(m.data_hora_ms, caso.fuso_horario)}</span>
-                </p>
-              </button>
-            </div>
+                </button>
+              </div>
+            )}
           </Fragment>
         );
       })}
@@ -488,14 +573,57 @@ function Mensagens({
   );
 }
 
+/** Trecho da mensagem respondida, quando ela está nesta página da conversa. */
+function Citacao({ alvo, nomes }: { alvo: ArtefatoResumo | undefined; nomes: Map<string, string> }) {
+  return (
+    <div className="mb-1.5 rounded-md border-l-2 border-ouro/60 bg-fundo/50 px-2 py-1 text-xs" aria-label="Mensagem respondida">
+      {alvo ? (
+        <>
+          <p className="font-medium text-texto-2">
+            {alvo.de_mim ? "Mensagem enviada" : alvo.remetente ? (nomes.get(alvo.remetente) ?? alvo.remetente) : "Mensagem recebida"}
+          </p>
+          <p className="line-clamp-2 text-texto-3">{alvo.conteudo ?? (alvo.nome_arquivo ? alvo.nome_arquivo : alvo.subtipo ? rotuloSubtipo(alvo.subtipo) : "—")}</p>
+        </>
+      ) : (
+        <p className="text-texto-3">Resposta a uma mensagem que não está nesta página.</p>
+      )}
+    </div>
+  );
+}
+
+/** Arquivo anexado, com o que se sabe dele no app e se foi achado na extração. */
+function Anexo({ m }: { m: ArtefatoResumo }) {
+  const s = situacaoAnexo(m);
+  return (
+    <div className="mb-1.5 min-w-[14rem] rounded-md border border-borda bg-fundo/50 px-2 py-1.5" aria-label="Anexo">
+      <div className="flex items-center gap-2">
+        <Icone nome={iconeAnexo(m.subtipo)} className="size-4 shrink-0 text-texto-3" />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-xs text-texto" title={m.nome_arquivo ?? undefined}>
+            {m.nome_arquivo ?? "Arquivo sem nome"}
+          </p>
+          <p className="tabular truncate text-[11px] text-texto-3">
+            {[m.mime, m.tamanho != null ? tamanho(m.tamanho) : null].filter(Boolean).join(" · ") || "Tipo e tamanho não informados"}
+          </p>
+        </div>
+      </div>
+      <p className="mt-1">
+        <Selo tom={s.tom}>{s.texto}</Selo>
+      </p>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------- Contexto
 
-function PainelContexto({ caso, c, selecionada, abrirOrigem }: {
+function PainelContexto({ caso, c, selecionada, abrirOrigem, abrirRegistro }: {
   caso: Caso;
   c: Conversa;
   selecionada: ArtefatoResumo | null;
   abrirOrigem: () => void;
+  abrirRegistro: (id: number) => void;
 }) {
+  const comNomes = c.participantes.some((p) => p.nome);
   const fuso = caso.fuso_horario;
   const par = (rotulo: string, valor: ReactNode, mono = false) => (
     <div className="flex items-baseline justify-between gap-3 py-0.5 text-xs">
@@ -509,7 +637,8 @@ function PainelContexto({ caso, c, selecionada, abrirOrigem }: {
       <SecaoRecolhivel titulo="Conversa" icone="conversas">
         <dl>
           {par("App", rotuloApp(c.app))}
-          {par("Tipo", eGrupo(c) ? "Grupo" : "Individual")}
+          {c.titulo && par("Título", c.titulo)}
+          {par("Tipo", rotuloTipoConversa(c))}
           {par("ID na origem", c.id_externo, true)}
           {par("Mensagens", numero(c.total_mensagens))}
           {par("Enviadas", numero(c.enviadas))}
@@ -522,19 +651,35 @@ function PainelContexto({ caso, c, selecionada, abrirOrigem }: {
           <Icone nome="extracao" className="size-3.5" />
           Ver extração de origem
         </Link>
+        {c.registro_id != null && (
+          <button
+            type="button"
+            onClick={() => abrirRegistro(c.registro_id!)}
+            className="mt-1 flex items-center gap-1 text-xs text-ouro-claro hover:underline"
+          >
+            <Icone nome="banco" className="size-3.5" />
+            Abrir registro da conversa no app
+          </button>
+        )}
       </SecaoRecolhivel>
       <SecaoRecolhivel titulo={`Participantes (${c.total_participantes})`} icone="contatos">
         <ul className="space-y-1 text-xs">
           {c.participantes.map((p) => (
             <li key={p.identificador} className="flex items-baseline justify-between gap-2">
-              <span className="truncate font-mono text-texto" title={p.identificador}>
-                {p.identificador}
+              <span className="min-w-0">
+                {p.nome && <span className="block truncate text-texto">{p.nome}</span>}
+                <span className={`block truncate font-mono ${p.nome ? "text-[11px] text-texto-3" : "text-texto"}`} title={p.identificador}>
+                  {p.identificador}
+                </span>
               </span>
               <span className="tabular shrink-0 text-texto-3">{numero(p.mensagens)} msg</span>
             </li>
           ))}
         </ul>
-        <p className="mt-2 text-[11px] text-texto-3">Identificadores exatamente como o parser leu; o SIED não deduz a quem pertencem.</p>
+        <p className="mt-2 text-[11px] text-texto-3">
+          {comNomes && "Nomes como gravados nos contatos do próprio app nesta extração. "}
+          Identificadores exatamente como o parser leu; o SIED não deduz a quem pertencem.
+        </p>
       </SecaoRecolhivel>
       <SecaoRecolhivel titulo="Mensagem selecionada" icone="info">
         {selecionada ? (
@@ -543,8 +688,20 @@ function PainelContexto({ caso, c, selecionada, abrirOrigem }: {
               {par("Registro nº", selecionada.id)}
               {par("Data", dataHoraMs(selecionada.data_hora_ms, fuso))}
               {par("Direção", selecionada.de_mim == null ? "—" : selecionada.de_mim ? "Enviada" : "Recebida")}
+              {selecionada.subtipo && par("Tipo", rotuloSubtipo(selecionada.subtipo))}
               {par("Estado", nomeEstadoRegistro[selecionada.estado_registro] ?? selecionada.estado_registro)}
+              {temLocal(selecionada) && par("Coordenadas", coordenadas(selecionada), true)}
             </dl>
+            {temAnexo(selecionada) && (
+              <p className="mt-2 text-xs text-texto-2">
+                <span className="text-texto-3">Anexo: </span>
+                {selecionada.anexo_arquivo_id != null
+                  ? (nomeVinculoAnexo[selecionada.anexo_vinculo ?? "caminho_exato"] ?? "Arquivo na extração")
+                  : selecionada.anexo_vinculo
+                    ? (nomeVinculoAnexo[selecionada.anexo_vinculo] ?? selecionada.anexo_vinculo)
+                    : "caminho não informado pelo app"}
+              </p>
+            )}
             <button type="button" onClick={abrirOrigem} className="mt-2 inline-flex items-center gap-1 text-xs text-ouro-claro hover:underline">
               <Icone nome="banco" className="size-3.5" />
               Abrir origem técnica

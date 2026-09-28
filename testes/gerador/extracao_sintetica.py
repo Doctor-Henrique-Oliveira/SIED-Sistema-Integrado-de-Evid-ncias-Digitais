@@ -5,7 +5,12 @@ ATENÇÃO: todos os dados são inventados. A organização das pastas NÃO repre
 nenhuma ferramenta de extração (Avilla, IPED...). Apenas o nome `mmssms.db` e o
 esquema da tabela `sms` seguem o padrão do Android (AOSP), para exercitar o parser.
 
-Uso: python3 testes/gerador/extracao_sintetica.py <pasta de destino>
+Com --whatsapp, acrescenta os bancos do WhatsApp montados a partir das fixtures
+sintéticas de testes/fixtures/whatsapp (msgstore.db no esquema novo e wa.db), mídias
+citadas pelas mensagens e um backup .crypt14 inventado. Sem a opção, a saída é a
+mesma de sempre (é a que o teste E2E usa).
+
+Uso: python3 testes/gerador/extracao_sintetica.py [--whatsapp] <pasta de destino>
 """
 
 import os
@@ -13,6 +18,8 @@ import shutil
 import sqlite3
 import sys
 import tempfile
+
+FIXTURES_WHATSAPP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "fixtures", "whatsapp")
 
 # 2026-01-01 00:00:00 UTC em milissegundos
 BASE_MS = 1767225600000
@@ -32,7 +39,36 @@ MENSAGENS_WAL = [
 ]
 
 
-def gerar(destino: str) -> None:
+def banco_de_fixture(sql: str, destino: str) -> None:
+    with open(os.path.join(FIXTURES_WHATSAPP, sql), encoding="utf-8") as f:
+        script = f.read()
+    conn = sqlite3.connect(destino)
+    conn.executescript(script)
+    conn.close()
+
+
+def arquivo(caminho: str, inicio: bytes, tamanho: int) -> None:
+    os.makedirs(os.path.dirname(caminho), exist_ok=True)
+    with open(caminho, "wb") as f:
+        f.write(inicio + b"\x00" * (tamanho - len(inicio)))
+
+
+def gerar_whatsapp(destino: str) -> None:
+    """Pastas inventadas; só os nomes dos bancos e das pastas de mídia seguem o app."""
+    bancos = os.path.join(destino, "dados", "com.whatsapp", "databases")
+    os.makedirs(bancos)
+    banco_de_fixture("msgstore_novo.sql", os.path.join(bancos, "msgstore.db"))
+    banco_de_fixture("wa.sql", os.path.join(bancos, "wa.db"))
+    midia = os.path.join(destino, "armazenamento", "WhatsApp", "Media")
+    # A foto e o documento citados pelas mensagens existem; o áudio não.
+    arquivo(os.path.join(midia, "WhatsApp Images", "IMG-20260102-WA0001.jpg"), b"\xff\xd8\xff\xe0", 64)
+    arquivo(os.path.join(midia, "WhatsApp Documents", "relatorio-sintetico.pdf"), b"%PDF-1.4\n% SINTETICO\n", 128)
+    # Backup cifrado: só inventariado, nunca interpretado.
+    arquivo(os.path.join(destino, "armazenamento", "WhatsApp", "Databases", "msgstore-2026-01-02.1.db.crypt14"),
+            b"SINTETICO-CIFRADO", 256)
+
+
+def gerar(destino: str, whatsapp: bool = False) -> None:
     if os.path.exists(destino) and os.listdir(destino):
         sys.exit(f"a pasta {destino} já existe e não está vazia")
     os.makedirs(os.path.join(destino, "dados", "com.android.providers.telephony", "databases"))
@@ -71,10 +107,15 @@ def gerar(destino: str) -> None:
         shutil.copyfile(db, os.path.join(pasta_db, "mmssms.db"))
         shutil.copyfile(db + "-wal", os.path.join(pasta_db, "mmssms.db-wal"))
         conn.close()
+    if whatsapp:
+        gerar_whatsapp(destino)
     print(destino)
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
+    args = sys.argv[1:]
+    whatsapp = "--whatsapp" in args
+    args = [a for a in args if a != "--whatsapp"]
+    if len(args) != 1:
         sys.exit(__doc__)
-    gerar(sys.argv[1])
+    gerar(args[0], whatsapp)

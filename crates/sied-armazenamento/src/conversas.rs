@@ -53,7 +53,7 @@ pub struct Conversa {
     pub participantes: Vec<ParticipanteConversa>,
     #[ts(type = "number")]
     pub total_participantes: i64,
-    /// Texto do último registro (para a prévia na lista).
+    /// Texto do último registro, ou o nome do anexo (para a prévia na lista).
     pub ultima_mensagem: Option<String>,
     /// Assunto do registro da conversa (grupos) ou, sem ele, nome do contato.
     pub titulo: Option<String>,
@@ -67,7 +67,7 @@ pub struct Conversa {
 const COLUNAS: &str = "c.id, c.extracao_id, c.app, c.id_externo, c.total_mensagens, c.enviadas,
     c.com_anexo, c.primeira_ms, c.ultima_ms,
     (SELECT COUNT(*) FROM conversa_participante p WHERE p.conversa_id = c.id),
-    (SELECT a.conteudo FROM artefato a
+    (SELECT coalesce(a.conteudo, a.nome_arquivo) FROM artefato a
       WHERE a.extracao_id = c.extracao_id AND coalesce(a.app, '') = c.app
         AND a.conversa_id_externo = c.id_externo
       ORDER BY a.data_hora_ms DESC, a.id DESC LIMIT 1),

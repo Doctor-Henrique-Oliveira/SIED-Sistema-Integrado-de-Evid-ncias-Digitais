@@ -58,6 +58,7 @@ export function tomStatus(status: string): "ok" | "atencao" | "erro" | "neutro" 
 export const nomeApp: Record<string, string> = {
   sms: "SMS",
   whatsapp: "WhatsApp",
+  whatsapp_business: "WhatsApp Business",
   telegram: "Telegram",
 };
 
@@ -74,3 +75,53 @@ export const nomeEstadoRegistro: Record<string, string> = {
 };
 
 export const nomeConfianca: Record<string, string> = { alta: "Alta", media: "Média", baixa: "Baixa" };
+
+export const nomeTipoArtefato: Record<string, string> = {
+  mensagem: "Mensagem",
+  conversa: "Registro da conversa",
+  contato: "Contato",
+  chamada: "Chamada",
+};
+
+/** Subtipos emitidos pelos parsers (o código bruto fica nos detalhes técnicos). */
+export const nomeSubtipo: Record<string, string> = {
+  texto: "Texto",
+  imagem: "Imagem",
+  audio: "Áudio",
+  video: "Vídeo",
+  documento: "Documento",
+  gif: "GIF",
+  figurinha: "Figurinha",
+  contato: "Contato",
+  contatos: "Contatos",
+  localizacao: "Localização",
+  localizacao_tempo_real: "Localização em tempo real",
+  sistema: "Mensagem do sistema",
+  apagada: "Apagada",
+  desconhecido: "Tipo desconhecido",
+  individual: "Individual",
+  grupo: "Grupo",
+};
+
+export function rotuloSubtipo(s: string): string {
+  return nomeSubtipo[s] ?? s;
+}
+
+export const nomeTipoConversa: Record<string, string> = {
+  individual: "Individual",
+  grupo: "Grupo",
+  status: "Status",
+  transmissao: "Lista de transmissão",
+  canal: "Canal",
+  desconhecido: "Desconhecido",
+};
+
+/** Como o anexo informado pelo app foi procurado no inventário da extração. */
+export const nomeVinculoAnexo: Record<string, string> = {
+  caminho_exato: "Arquivo na extração (mesmo caminho)",
+  sufixo_caminho: "Arquivo na extração (mesmo caminho final e tamanho)",
+  nome_e_tamanho: "Arquivo na extração (mesmo nome e tamanho)",
+  ambiguo: "Mais de um arquivo possível: nenhum foi ligado",
+  tamanho_diferente: "Arquivo com o mesmo nome, mas tamanho diferente: não ligado",
+  nao_encontrado: "Não encontrado na extração",
+};

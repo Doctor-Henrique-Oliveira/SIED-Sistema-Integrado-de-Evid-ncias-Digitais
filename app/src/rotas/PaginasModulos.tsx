@@ -97,8 +97,9 @@ function Contatos({ caso }: { caso: Caso }) {
       />
       <div className="space-y-3">
         <Aviso tipo="info">
-          Os identificadores aparecem exatamente como o parser leu. O SIED não junta números parecidos nem deduz a quem pertencem. A
-          agenda de contatos do aparelho será exibida aqui quando o leitor de contatos existir.
+          Os identificadores aparecem exatamente como o parser leu. O SIED não junta números parecidos nem deduz a quem pertencem. O
+          nome, quando existe, é o gravado nos contatos do próprio app na mesma extração (ex.: wa.db do WhatsApp). A agenda de
+          contatos do Android será exibida aqui quando o leitor dela existir.
         </Aviso>
         <Cartao
           denso
@@ -116,7 +117,7 @@ function Contatos({ caso }: { caso: Caso }) {
                 type="search"
                 value={texto}
                 onChange={(e) => setTexto(e.target.value)}
-                placeholder="Filtrar por trecho do identificador"
+                placeholder="Filtrar por identificador ou nome"
                 aria-label="Filtrar identificadores"
                 className={`${entrada} w-64`}
               />
@@ -133,7 +134,7 @@ function Contatos({ caso }: { caso: Caso }) {
             </div>
           ) : lista.data.total === 0 ? (
             <div className="p-4">
-              <Vazio titulo={filtro ? "Nenhum identificador com esse trecho" : "Nenhum identificador nas conversas"} icone="contatos">
+              <Vazio titulo={filtro ? "Nenhum identificador ou nome com esse trecho" : "Nenhum identificador nas conversas"} icone="contatos">
                 {filtro ? undefined : "Importe uma extração com mensagens para ver os identificadores aqui."}
               </Vazio>
             </div>
@@ -144,6 +145,7 @@ function Contatos({ caso }: { caso: Caso }) {
                   <thead className={tabela.cabeca}>
                     <tr>
                       <th className={tabela.th}>Identificador</th>
+                      <th className={tabela.th}>Nome no app</th>
                       <th className={tabela.th}>App</th>
                       <th className={`${tabela.th} text-right`}>Conversas</th>
                       <th className={`${tabela.th} text-right`}>Mensagens</th>
@@ -158,6 +160,7 @@ function Contatos({ caso }: { caso: Caso }) {
                     {lista.data.itens.map((i) => (
                       <tr key={`${i.app}:${i.identificador}`} className={tabela.linha}>
                         <td className={`${tabela.td} font-mono text-xs text-texto`}>{i.identificador}</td>
+                        <td className={`${tabela.td} text-texto`}>{i.nome ?? <span className="text-texto-3">—</span>}</td>
                         <td className={tabela.td}>{rotuloApp(i.app)}</td>
                         <td className={`${tabela.td} tabular text-right`}>{numero(i.conversas)}</td>
                         <td className={`${tabela.td} tabular text-right`}>{numero(i.mensagens)}</td>

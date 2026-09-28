@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import type { Caso } from "../api/cliente";
 import { useDetalheArtefato } from "../api/consultas";
-import { dataHoraMs } from "../util/formatar";
-import { nomeConfianca, nomeEstadoRegistro, rotuloApp } from "../util/rotulos";
+import { dataHoraMs, tamanho } from "../util/formatar";
+import { nomeConfianca, nomeEstadoRegistro, nomeTipoArtefato, nomeVinculoAnexo, rotuloApp, rotuloSubtipo } from "../util/rotulos";
 import { Aviso, Cartao, Carregando, Hash, SecaoRecolhivel, Selo } from "./Estrutura";
 
 function Linha({ rotulo, children, mono }: { rotulo: string; children: ReactNode; mono?: boolean }) {
@@ -50,8 +50,8 @@ export function PainelTecnico({ caso, artefatoId, className = "" }: { caso: Caso
         <div className="border-b border-borda px-4 py-3">
           <p className="tabular text-[13px] text-texto">{dataHoraMs(a.resumo.data_hora_ms, caso.fuso_horario)}</p>
           <p className="text-xs text-texto-3">
-            {rotuloApp(a.resumo.app ?? a.resumo.tipo)} · {a.resumo.tipo}
-            {a.resumo.subtipo ? ` · ${a.resumo.subtipo}` : ""} · registro nº {a.resumo.id}
+            {rotuloApp(a.resumo.app ?? a.resumo.tipo)} · {nomeTipoArtefato[a.resumo.tipo] ?? a.resumo.tipo}
+            {a.resumo.subtipo ? ` · ${rotuloSubtipo(a.resumo.subtipo)}` : ""} · registro nº {a.resumo.id}
           </p>
         </div>
 
@@ -97,6 +97,47 @@ export function PainelTecnico({ caso, artefatoId, className = "" }: { caso: Caso
           </SecaoRecolhivel>
         ))}
 
+        {(a.anexo_caminho || a.resumo.anexo_vinculo) && (
+          <SecaoRecolhivel titulo="Anexo" icone="midias">
+            <dl>
+              <Linha rotulo="Caminho no app" mono>
+                {a.anexo_caminho ?? "—"}
+              </Linha>
+              <Linha rotulo="Nome e tamanho">
+                {[a.resumo.nome_arquivo, a.resumo.mime, a.resumo.tamanho != null ? tamanho(a.resumo.tamanho) : null].filter(Boolean).join(" · ") || "—"}
+              </Linha>
+              <Linha rotulo="Na extração">
+                {a.resumo.anexo_vinculo ? (nomeVinculoAnexo[a.resumo.anexo_vinculo] ?? a.resumo.anexo_vinculo) : "—"}
+                {a.resumo.anexo_vinculo && <span className="ml-1 font-mono text-texto-3">({a.resumo.anexo_vinculo})</span>}
+              </Linha>
+              {a.anexo_arquivo && (
+                <>
+                  <Linha rotulo="Arquivo" mono>
+                    <span data-teste="anexo-arquivo">{a.anexo_arquivo.caminho}</span>
+                  </Linha>
+                  <Linha rotulo="SHA-256">
+                    <Hash valor={a.anexo_arquivo.sha256} />
+                  </Linha>
+                  <Linha rotulo="Tamanho">{tamanho(a.anexo_arquivo.tamanho)}</Linha>
+                </>
+              )}
+            </dl>
+          </SecaoRecolhivel>
+        )}
+
+        {a.resumo.latitude != null && a.resumo.longitude != null && (
+          <SecaoRecolhivel titulo="Localização" icone="localizacoes">
+            <dl>
+              <Linha rotulo="Latitude" mono>
+                {a.resumo.latitude}
+              </Linha>
+              <Linha rotulo="Longitude" mono>
+                {a.resumo.longitude}
+              </Linha>
+            </dl>
+          </SecaoRecolhivel>
+        )}
+
         <SecaoRecolhivel titulo="Data e hora" icone="relogio">
           <dl>
             <Linha rotulo="Fuso do caso">{dataHoraMs(a.resumo.data_hora_ms, caso.fuso_horario)}</Linha>
@@ -129,11 +170,6 @@ export function PainelTecnico({ caso, artefatoId, className = "" }: { caso: Caso
             <Linha rotulo="Hash do registro">
               <Hash valor={a.hash_registro} />
             </Linha>
-            {a.anexo_caminho && (
-              <Linha rotulo="Anexo" mono>
-                {a.anexo_caminho}
-              </Linha>
-            )}
           </dl>
         </SecaoRecolhivel>
 

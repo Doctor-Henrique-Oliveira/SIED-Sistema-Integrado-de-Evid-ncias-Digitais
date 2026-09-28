@@ -8,7 +8,7 @@ export type Conversa = { id: number, extracao_id: ExtracaoId, app: string, id_ex
  */
 participantes: Array<ParticipanteConversa>, total_participantes: number, 
 /**
- * Texto do último registro (para a prévia na lista).
+ * Texto do último registro, ou o nome do anexo (para a prévia na lista).
  */
 ultima_mensagem: string | null, 
 /**
