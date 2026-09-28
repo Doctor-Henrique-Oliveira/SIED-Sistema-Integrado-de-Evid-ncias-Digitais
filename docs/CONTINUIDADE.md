@@ -1,7 +1,8 @@
 # SIED — Documento de continuidade
 
 Estado em 28/09/2026, ao mesclar o redesign visual e de navegação (branch `fase1-redesign`) na
-`main`. A interface nova está descrita no §15. Este documento permite retomar o projeto do
+`main` (PR #6). A interface nova está descrita no §15 e o fechamento da etapa em
+`docs/checkpoints/2026-09-28-redesign.md`. Este documento permite retomar o projeto do
 zero: o que existe, onde está, por que foi feito assim e o que vem a seguir. Os detalhes de cada
 etapa ficam nos checkpoints em `docs/checkpoints/` e na preparação em
 `docs/PREPARACAO-AVILLA-WHATSAPP.md`.
@@ -65,7 +66,8 @@ release, execução manual ou PR que muda o build (opção "Só tags", PR #4).
 | `fase1-preparacao` | `5bad447` | #3 | mesclado (`1f9a0b4`) |
 | `ci-otimizacao` | `ee2738c` | #4 | mesclado (`65eae8d`) |
 | `roadmap-console-importacao` | `df83890` | #5 | mesclado (`5258374`) |
-| `fase1-redesign` | ver §3 | PR do redesign | mesclado nesta etapa |
+| `fase1-redesign` | `9bbad7a` | #6 | mesclado (`5e8e734`) |
+| `fase1-redesign-registro` | — | PR do checkpoint | só documentação; o merge dele é o último commit da `main` nesta etapa |
 | `fase1-whatsapp` | — | — | só local, sem commits próprios; será recriada a partir da nova `main` |
 
 As branches mescladas **não foram apagadas**. Podem ser removidas depois que a `main` for
@@ -92,7 +94,11 @@ explícito** e CI completa verde (Linux e Windows).
 | `65eae8d` | Merge do PR #4: CI sem execuções duplicadas, cache, instaladores só em tag/manual/PR de build |
 | `5258374` | Merge do PR #5: roadmap do console de importação (§14) |
 | `0317a3e` | Backend: resumo do caso e identificadores das conversas para o painel |
-| (redesign) | Filtro "midia" no inventário; tema escuro, casca com 12 módulos, telas novas; testes; documentação |
+| `ecc02ed` | Backend: categoria "midia" no inventário para a galeria de mídias |
+| `64f6d27` | Interface: tema escuro, casca com 12 módulos, Dashboard do caso e telas novas |
+| `af482fb` | Testes da interface do redesign |
+| `9bbad7a` | Documentação do redesign (§15) e README |
+| `5e8e734` | Merge do PR #6 na `main`: redesign visual e de navegação |
 
 ---
 
