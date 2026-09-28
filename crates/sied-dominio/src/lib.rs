@@ -15,5 +15,5 @@ pub mod validacao;
 
 pub use caso::{Caso, NovoCaso};
 pub use dispositivo::{Dispositivo, NovoDispositivo, SistemaOperacional};
-pub use ids::{CasoId, DispositivoId};
+pub use ids::{CasoId, DispositivoId, ExtracaoId};
 pub use validacao::{ErroCampo, ErrosValidacao};

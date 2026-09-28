@@ -7,6 +7,7 @@ import { Layout } from "./rotas/Layout";
 import { PaginaCasos } from "./rotas/PaginaCasos";
 import { PaginaNovoCaso } from "./rotas/PaginaNovoCaso";
 import { PaginaCaso } from "./rotas/PaginaCaso";
+import { PaginaExtracao } from "./rotas/PaginaExtracao";
 
 const clienteConsultas = new QueryClient({
   defaultOptions: {
@@ -24,6 +25,7 @@ const roteador = createHashRouter([
       { index: true, element: <PaginaCasos /> },
       { path: "casos/novo", element: <PaginaNovoCaso /> },
       { path: "casos/:casoId", element: <PaginaCaso /> },
+      { path: "casos/:casoId/extracoes/:extracaoId", element: <PaginaExtracao /> },
     ],
   },
 ]);

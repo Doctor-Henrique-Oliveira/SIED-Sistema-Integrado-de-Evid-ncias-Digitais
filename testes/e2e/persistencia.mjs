@@ -1,7 +1,9 @@
 // Teste ponta a ponta do app REAL (binário Tauri + WebView) via WebDriver.
 //
 // Fluxo: iniciar o SIED → criar caso → cadastrar dispositivo → fechar o programa →
-// abrir novamente → conferir que caso, dispositivo e auditoria persistiram.
+// abrir novamente → conferir que caso, dispositivo e auditoria persistiram →
+// importar uma extração SINTÉTICA (testes/gerador) → conferir registros, origem,
+// inventário e manifesto → provar que a extração não mudou → fechar e reabrir.
 //
 // Requisitos (Linux/CI): tauri-driver (cargo install tauri-driver), WebKitWebDriver e
 // um display (Xvfb). Uso:
@@ -10,7 +12,8 @@
 // Todos os dados usados são sintéticos.
 
 import { spawn, spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, existsSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdtempSync, writeFileSync, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -28,6 +31,22 @@ const URL_WD = "http://127.0.0.1:4444";
 const ELEMENTO = "element-6066-11e4-a52e-4f735466cecf";
 
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
+
+const sha256 = (arquivo) => createHash("sha256").update(readFileSync(arquivo)).digest("hex");
+
+/** Hash e data de modificação de cada arquivo da pasta. */
+function retrato(pasta) {
+  const r = {};
+  const visitar = (p) => {
+    for (const n of readdirSync(p, { withFileTypes: true })) {
+      const c = join(p, n.name);
+      if (n.isDirectory()) visitar(c);
+      else r[c] = `${sha256(c)} ${statSync(c).mtimeMs}`;
+    }
+  };
+  visitar(pasta);
+  return JSON.stringify(r);
+}
 
 async function wd(metodo, caminho, corpo) {
   const r = await fetch(URL_WD + caminho, {
@@ -79,6 +98,9 @@ class Sessao {
   async digitar(nome, texto) {
     const id = await this.achar(`//*[@name='${nome}']`);
     await wd("POST", this.p(`/element/${id}/value`), { text: texto });
+  }
+  async digitarEm(xpath, texto) {
+    await wd("POST", this.p(`/element/${await this.achar(xpath)}/value`), { text: texto });
   }
   async conteudo() {
     return wd("POST", this.p("/execute/sync"), { script: "return document.body.textContent", args: [] });
@@ -168,7 +190,9 @@ async function principal() {
     await s.esperarTexto("IP 0123/2026");
     await s.capturar("sied-2-lista-apos-reabrir");
     await s.clicar("//a[.//p[normalize-space()='IP 0123/2026']]");
-    const pagina = await s.esperarTexto("Galaxy A54");
+    await s.esperarTexto("Galaxy A54");
+    // Dispositivos e atividades carregam separadamente: espera as duas seções.
+    const pagina = await s.esperarTexto("Caso criado");
     const esperados = ["Inquérito Policial", "4567/2026", "Analista de Teste", "DP Central", IMEI, "128 GB",
       "Caso criado", "Dispositivo cadastrado", "Caso aberto"];
     if (process.env.SIED_E2E_WMCTRL) esperados.push("Caso fechado");
@@ -178,8 +202,67 @@ async function principal() {
     await s.clicar(botao("Verificar integridade"));
     await s.esperarTexto("Trilha íntegra");
     await s.capturar("sied-3-caso-reaberto");
+
+    console.log("5. importar uma extração sintética");
+    const extracao = join(raiz, "Extracao-SINTETICA");
+    const gerador = spawnSync("python3", ["testes/gerador/extracao_sintetica.py", extracao], { stdio: "inherit" });
+    if (gerador.status !== 0) throw new Error("falha ao gerar a extração sintética");
+    const antes = retrato(extracao);
+    await s.clicar(botao("Importar extração"));
+    await s.digitarEm("//input[@id='pasta-extracao']", extracao);
+    await s.clicar(botao("Analisar"));
+    await s.esperarTexto("Ainda não disponível"); // Avilla: só contrato, sem presumir estrutura
+    await s.esperarTexto("Aceita (parcial)");
+    await s.capturar("sied-4-assistente-importacao");
+    await s.clicar(botao("Iniciar importação"));
+    await s.esperarTexto("registros interpretados", 60000);
+    await s.capturar("sied-5-importacao-concluida");
+
+    console.log("6. conferir registros, origem técnica, inventário e manifesto");
+    await s.clicar("//a[normalize-space()='Abrir extração']");
+    await s.esperarTexto("Registros interpretados (6)");
+    const tela = await s.esperarTexto("Mensagem que só existe no WAL");
+    for (const esperado of ["Vamos nos encontrar amanhã às 10h?", "+5521900000002", "Recebida", "Enviada", "Pasta genérica"]) {
+      if (!tela.includes(esperado)) throw new Error(`não encontrado na extração: ${esperado}`);
+    }
+    await s.clicar("//tr[td[contains(., 'Vamos nos encontrar')]]/td[1]");
+    const tecnico = await s.esperarTexto("_id=3");
+    for (const esperado of ["dados/com.android.providers.telephony/databases/mmssms.db", "SELECT * FROM sms ORDER BY _id",
+      "android_sms v1.0.0", "unix_milissegundos"]) {
+      if (!tecnico.includes(esperado)) throw new Error(`detalhe técnico ausente: ${esperado}`);
+    }
+    const hashDb = sha256(join(extracao, "dados/com.android.providers.telephony/databases/mmssms.db"));
+    if (!tecnico.includes(hashDb)) throw new Error("SHA-256 do banco de origem não aparece nos detalhes técnicos");
+    await s.capturar("sied-6-detalhes-tecnicos");
+
+    const pastaCaso = join(env.SIED_PASTA_CASOS, readdirSync(env.SIED_PASTA_CASOS)[0]);
+    const pastaImp = join(pastaCaso, "importacoes");
+    const manifesto = join(pastaImp, readdirSync(pastaImp)[0], "manifesto.sha256");
+    const hashManifesto = sha256(manifesto);
+    if (!tecnico.includes(hashManifesto)) throw new Error("hash do manifesto na tela difere do arquivo");
+    for (const linha of readFileSync(manifesto, "utf8").trim().split("\n")) {
+      const [h, caminho] = linha.split(" *");
+      if (sha256(join(extracao, caminho)) !== h) throw new Error(`manifesto não confere: ${caminho}`);
+    }
+    await s.clicar("//button[@role='tab'][starts-with(normalize-space(), 'Arquivos')]");
+    const inventario = await s.esperarTexto("Bancos SQLite (1)");
+    if (!inventario.includes("IMG_0001.dat")) throw new Error("arquivo de mídia ausente no inventário");
+    await s.capturar("sied-7-inventario");
+    if (retrato(extracao) !== antes) throw new Error("a pasta da extração foi alterada!");
+
+    console.log("7. fechar, reabrir e conferir a extração e a auditoria");
     await s.fecharJanela();
-    console.log(`\nOK: dados persistiram após fechar e reabrir.\nPASTA_DADOS=${env.SIED_PASTA_DADOS}\nPASTA_CASOS=${env.SIED_PASTA_CASOS}`);
+    s = await Sessao.abrir();
+    atual = s;
+    await s.clicar("//a[.//p[normalize-space()='IP 0123/2026']]");
+    const reaberto = await s.esperarTexto("Importação concluída");
+    if (!reaberto.includes("Pasta genérica")) throw new Error("extração não listada após reabrir");
+    await s.clicar(botao("Verificar integridade"));
+    await s.esperarTexto("Trilha íntegra");
+    await s.capturar("sied-8-caso-com-extracao");
+    await s.fecharJanela();
+    if (retrato(extracao) !== antes) throw new Error("a pasta da extração foi alterada!");
+    console.log(`\nOK: dados persistiram; importação conferida; extração intacta.\nPASTA_DADOS=${env.SIED_PASTA_DADOS}\nPASTA_CASOS=${env.SIED_PASTA_CASOS}`);
   } catch (e) {
     if (atual) {
       await atual.capturar("sied-falha").catch(() => {});

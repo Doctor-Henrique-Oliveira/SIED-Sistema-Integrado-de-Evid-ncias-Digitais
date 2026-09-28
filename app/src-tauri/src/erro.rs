@@ -3,6 +3,7 @@
 use serde::Serialize;
 use sied_armazenamento::ErroArmazenamento;
 use sied_dominio::ErroCampo;
+use sied_ingestao::ErroIngestao;
 use ts_rs::TS;
 
 #[derive(Debug, Clone, Copy, Serialize, TS)]
@@ -15,6 +16,8 @@ pub enum CodigoErro {
     Conflito,
     VersaoIncompativel,
     Integridade,
+    /// Recurso ainda não implementado (ex.: importador do Avilla).
+    NaoSuportado,
     Interno,
 }
 
@@ -52,7 +55,8 @@ impl From<ErroArmazenamento> for ErroApp {
                     campos: v.erros.clone(),
                 }
             }
-            E::CasoNaoEncontrado(_) => CodigoErro::NaoEncontrado,
+            E::CasoNaoEncontrado(_) | E::NaoEncontrado(_) => CodigoErro::NaoEncontrado,
+            E::OrigemInvalida(_) => CodigoErro::Validacao,
             E::CasoJaExiste(_) | E::PastaNaoVazia(_) => CodigoErro::Conflito,
             E::VersaoMaisNova { .. }
             | E::MigracaoDivergente { .. }
@@ -64,6 +68,23 @@ impl From<ErroArmazenamento> for ErroApp {
             CodigoErro::Interno => tracing::error!(erro = %e, "falha de armazenamento"),
             _ => tracing::warn!(erro = %e, "operação recusada"),
         }
+        ErroApp::novo(codigo, e.to_string())
+    }
+}
+
+impl From<ErroIngestao> for ErroApp {
+    fn from(e: ErroIngestao) -> Self {
+        use ErroIngestao as E;
+        let codigo = match &e {
+            E::NaoImplementado { .. } => CodigoErro::NaoSuportado,
+            E::CaminhoInvalido(_) | E::FormatoNaoReconhecido(_) | E::ItemIgnorado { .. } => {
+                CodigoErro::Validacao
+            }
+            E::Cancelado => CodigoErro::Conflito,
+            E::OrigemAlterada { .. } => CodigoErro::Integridade,
+            E::Io(_) | E::Sqlite(_) | E::Parser { .. } | E::Gravacao(_) => CodigoErro::Interno,
+        };
+        tracing::warn!(erro = %e, "falha de ingestão");
         ErroApp::novo(codigo, e.to_string())
     }
 }

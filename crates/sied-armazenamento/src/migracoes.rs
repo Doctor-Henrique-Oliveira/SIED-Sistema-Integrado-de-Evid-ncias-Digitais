@@ -47,11 +47,18 @@ pub const BANCO_GLOBAL: TipoBanco = TipoBanco {
 pub const BANCO_CASO: TipoBanco = TipoBanco {
     nome: "caso",
     application_id: 0x5345_4443, // "SEDC"
-    migracoes: &[Migracao {
-        versao: 1,
-        nome: "inicial",
-        sql: include_str!("../migracoes/caso/0001_inicial.sql"),
-    }],
+    migracoes: &[
+        Migracao {
+            versao: 1,
+            nome: "inicial",
+            sql: include_str!("../migracoes/caso/0001_inicial.sql"),
+        },
+        Migracao {
+            versao: 2,
+            nome: "importacao",
+            sql: include_str!("../migracoes/caso/0002_importacao.sql"),
+        },
+    ],
 };
 
 const TABELA_CONTROLE: &str = "CREATE TABLE IF NOT EXISTS schema_migracao (

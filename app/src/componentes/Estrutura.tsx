@@ -75,3 +75,77 @@ export function Vazio({ titulo, children }: { titulo: string; children?: ReactNo
     </div>
   );
 }
+
+export function Selo({ tom = "neutro", children }: { tom?: "ok" | "atencao" | "erro" | "neutro"; children: ReactNode }) {
+  const cores = {
+    ok: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+    atencao: "bg-amber-50 text-amber-800 ring-amber-200",
+    erro: "bg-rose-50 text-rose-700 ring-rose-200",
+    neutro: "bg-slate-100 text-slate-700 ring-slate-200",
+  }[tom];
+  return (
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${cores}`}>
+      {children}
+    </span>
+  );
+}
+
+/** Hash completo em fonte monoespaçada, quebrando linha quando precisar. */
+export function Hash({ valor }: { valor: string | null | undefined }) {
+  if (!valor) return <>—</>;
+  return <span className="break-all font-mono text-xs">{valor}</span>;
+}
+
+export function BarraProgresso({ fracao, rotulo }: { fracao: number | null; rotulo: string }) {
+  const pct = fracao == null ? null : Math.max(0, Math.min(100, fracao * 100));
+  return (
+    <div
+      role="progressbar"
+      aria-label={rotulo}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={pct == null ? undefined : Math.round(pct)}
+      className="h-2 w-full overflow-hidden rounded-full bg-slate-200"
+    >
+      <div
+        className={`h-full rounded-full bg-marca-600 transition-[width] duration-300 ${pct == null ? "w-1/3 animate-pulse" : ""}`}
+        style={pct == null ? undefined : { width: `${pct}%` }}
+      />
+    </div>
+  );
+}
+
+export function Paginacao({ total, deslocamento, limite, mudar }: {
+  total: number;
+  deslocamento: number;
+  limite: number;
+  mudar: (deslocamento: number) => void;
+}) {
+  if (total <= limite) return null;
+  const fim = Math.min(deslocamento + limite, total);
+  return (
+    <div className="mt-3 flex items-center justify-between text-sm text-slate-600">
+      <span>
+        {(deslocamento + 1).toLocaleString("pt-BR")}–{fim.toLocaleString("pt-BR")} de {total.toLocaleString("pt-BR")}
+      </span>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          className="rounded-md px-3 py-1 ring-1 ring-slate-300 hover:bg-slate-50 disabled:opacity-40"
+          disabled={deslocamento === 0}
+          onClick={() => mudar(Math.max(0, deslocamento - limite))}
+        >
+          Anterior
+        </button>
+        <button
+          type="button"
+          className="rounded-md px-3 py-1 ring-1 ring-slate-300 hover:bg-slate-50 disabled:opacity-40"
+          disabled={fim >= total}
+          onClick={() => mudar(deslocamento + limite)}
+        >
+          Próxima
+        </button>
+      </div>
+    </div>
+  );
+}

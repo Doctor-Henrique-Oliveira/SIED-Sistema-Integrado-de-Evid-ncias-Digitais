@@ -20,7 +20,10 @@ pub mod erro;
 pub mod fonte;
 pub mod importador;
 pub mod importadores;
+pub mod inventario;
 pub mod parser;
+pub mod parsers;
+pub mod pipeline;
 pub mod protocolo;
 pub mod registro;
 

@@ -1,11 +1,21 @@
-import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
-import { api, normalizarErro, type Caso, type VerificacaoAuditoria } from "../api/cliente";
-import { useAbrirCaso, useAuditoria, useCadastrarDispositivo, useCasoAtual, useDispositivos } from "../api/consultas";
+import { useEffect, useState, type ReactNode } from "react";
+import { Link, useParams } from "react-router-dom";
+import { api, normalizarErro, type Caso, type Dispositivo, type VerificacaoAuditoria } from "../api/cliente";
+import {
+  useAbrirCaso,
+  useAuditoria,
+  useCadastrarDispositivo,
+  useCasoAtual,
+  useDispositivos,
+  useEstadoImportacao,
+  useExtracoes,
+} from "../api/consultas";
 import { Botao } from "../componentes/Botao";
-import { Aviso, Cabecalho, Cartao, Carregando, Definicoes, Vazio } from "../componentes/Estrutura";
+import { Aviso, Cabecalho, Cartao, Carregando, Definicoes, Selo, Vazio } from "../componentes/Estrutura";
 import { FormDispositivo } from "../componentes/FormDispositivo";
-import { bytes, dataHora, identificacaoCaso } from "../util/formatar";
+import { AssistenteImportacao, PainelImportacao } from "../componentes/Importacao";
+import { bytes, dataHora, identificacaoCaso, numero, tamanho } from "../util/formatar";
+import { nomeStatusExtracao, tomStatus } from "../util/rotulos";
 
 const nomeSistema = { android: "Android", ios: "iOS", outro: "Outro", desconhecido: "Desconhecido" } as const;
 
@@ -14,9 +24,19 @@ const nomeAcao: Record<string, string> = {
   caso_aberto: "Caso aberto",
   caso_fechado: "Caso fechado",
   dispositivo_cadastrado: "Dispositivo cadastrado",
+  importacao_iniciada: "Importação iniciada",
+  importacao_concluida: "Importação concluída",
+  importacao_cancelada: "Importação cancelada",
+  importacao_falhou: "Importação falhou",
+  importacao_interrompida: "Importação interrompida",
 };
 
 export function PaginaCaso() {
+  return <ComCasoAberto>{(caso, pasta) => <DetalheCaso caso={caso} pasta={pasta} />}</ComCasoAberto>;
+}
+
+/** Garante que o caso da rota esteja aberto no backend antes de mostrar o conteúdo. */
+export function ComCasoAberto({ children }: { children: (caso: Caso, pasta: string) => ReactNode }) {
   const { casoId = "" } = useParams();
   const atual = useCasoAtual();
   const abrir = useAbrirCaso();
@@ -29,7 +49,7 @@ export function PaginaCaso() {
 
   if (abrir.isError) return <Aviso>{abrir.error.message}</Aviso>;
   if (!abertoAqui || !atual.data) return <Carregando texto="Abrindo caso…" />;
-  return <DetalheCaso caso={atual.data.caso} pasta={atual.data.pasta} />;
+  return <>{children(atual.data.caso, atual.data.pasta)}</>;
 }
 
 function DetalheCaso({ caso, pasta }: { caso: Caso; pasta: string }) {
@@ -62,6 +82,7 @@ function DetalheCaso({ caso, pasta }: { caso: Caso; pasta: string }) {
           {caso.observacoes && <p className="mt-4 whitespace-pre-wrap text-sm text-slate-700">{caso.observacoes}</p>}
         </Cartao>
         <SecaoDispositivos caso={caso} />
+        <SecaoExtracoes caso={caso} />
         <SecaoAtividades caso={caso} />
       </div>
     </>
@@ -134,6 +155,97 @@ function SecaoDispositivos({ caso }: { caso: Caso }) {
           </table>
         </div>
       )}
+    </Cartao>
+  );
+}
+
+function SecaoExtracoes({ caso }: { caso: Caso }) {
+  const extracoes = useExtracoes(caso.id);
+  const dispositivos = useDispositivos(caso.id);
+  const importacao = useEstadoImportacao(caso.id);
+  const [assistente, setAssistente] = useState(false);
+  const [dispensada, setDispensada] = useState<string | null>(null);
+  const estado = importacao.data;
+  const emCurso = !!estado && !estado.terminada;
+  const listaDisp: Dispositivo[] = dispositivos.data ?? [];
+  const apelido = (id: string) => listaDisp.find((d) => d.id === id)?.apelido ?? "—";
+
+  return (
+    <Cartao
+      titulo="Extrações"
+      acoes={
+        !assistente && (
+          <Botao
+            variante="secundario"
+            onClick={() => setAssistente(true)}
+            disabled={emCurso || listaDisp.length === 0}
+            title={listaDisp.length === 0 ? "Cadastre um dispositivo primeiro" : undefined}
+          >
+            Importar extração
+          </Botao>
+        )
+      }
+    >
+      <div className="space-y-4">
+        {assistente && (
+          <AssistenteImportacao caso={caso} dispositivos={listaDisp} aoFechar={() => setAssistente(false)} />
+        )}
+        {estado && dispensada !== estado.extracao_id && (
+          <PainelImportacao caso={caso} estado={estado} aoDispensar={() => setDispensada(estado.extracao_id)} />
+        )}
+        {extracoes.isPending ? (
+          <Carregando />
+        ) : extracoes.isError ? (
+          <Aviso>{extracoes.error.message}</Aviso>
+        ) : extracoes.data.length === 0 ? (
+          !assistente && (
+            <Vazio titulo="Nenhuma extração importada">
+              Importe a pasta gerada pela ferramenta de extração. Os originais nunca são alterados.
+            </Vazio>
+          )
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm" aria-label="Extrações do caso">
+              <thead className="text-xs uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="py-2 pr-4 font-medium">Dispositivo</th>
+                  <th className="py-2 pr-4 font-medium">Ferramenta</th>
+                  <th className="py-2 pr-4 font-medium">Situação</th>
+                  <th className="py-2 pr-4 font-medium">Arquivos</th>
+                  <th className="py-2 pr-4 font-medium">Registros</th>
+                  <th className="py-2 font-medium">Importada em</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {extracoes.data.map((x) => (
+                  <tr key={x.id}>
+                    <td className="py-2.5 pr-4">
+                      <Link
+                        to={`/casos/${caso.id}/extracoes/${x.id}`}
+                        className="font-medium text-marca-700 hover:underline"
+                      >
+                        {apelido(x.dispositivo_id)}
+                      </Link>
+                      <div className="max-w-xs truncate font-mono text-xs text-slate-500" title={x.origem_caminho}>
+                        {x.origem_caminho}
+                      </div>
+                    </td>
+                    <td className="py-2.5 pr-4">{x.importador_nome}</td>
+                    <td className="py-2.5 pr-4">
+                      <Selo tom={tomStatus(x.status)}>{nomeStatusExtracao[x.status] ?? x.status}</Selo>
+                    </td>
+                    <td className="py-2.5 pr-4">
+                      {numero(x.total_arquivos)} <span className="text-slate-500">({tamanho(x.total_bytes)})</span>
+                    </td>
+                    <td className="py-2.5 pr-4">{numero(x.total_artefatos)}</td>
+                    <td className="py-2.5 text-slate-500">{dataHora(x.iniciada_em, caso.fuso_horario)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </Cartao>
   );
 }

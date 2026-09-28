@@ -1,6 +1,6 @@
 //! Identificadores globais.
 //!
-//! Casos e dispositivos usam UUID v7 (ordenável por tempo e único entre máquinas).
+//! Casos, dispositivos e extrações usam UUID v7 (ordenável por tempo e único entre máquinas).
 //! Assim, bancos de casos diferentes podem ser anexados e correlacionados no futuro
 //! sem colisão de chaves.
 
@@ -41,3 +41,4 @@ macro_rules! id_uuid {
 
 id_uuid!(CasoId);
 id_uuid!(DispositivoId);
+id_uuid!(ExtracaoId);

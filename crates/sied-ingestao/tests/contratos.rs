@@ -212,8 +212,10 @@ fn detecta_planeja_e_processa_com_rastreabilidade() {
         deteccoes[0].importador.id, "sintetico",
         "o reconhecido vem primeiro"
     );
-    assert_eq!(deteccoes[1].importador.id, "avilla");
-    assert_eq!(deteccoes[1].suporte, Suporte::NaoImplementado);
+    assert_eq!(deteccoes[1].importador.id, "generico");
+    assert_eq!(deteccoes[1].suporte, Suporte::Parcial);
+    assert_eq!(deteccoes[2].importador.id, "avilla");
+    assert_eq!(deteccoes[2].suporte, Suporte::NaoImplementado);
 
     let plano = registro
         .importador("sintetico")
