@@ -248,3 +248,50 @@ Avilla). Plano já definido:
 - Checkpoint com testes, limitações e amostras reconstruídas antes de qualquer merge.
 
 Depois: importador Avilla (quando a árvore chegar), evidências selecionadas e relatório PDF.
+
+---
+
+## 14. Roadmap: itens futuros registrados
+
+Itens pedidos pelo usuário para depois. **Não implementar antes do momento indicado.**
+
+### 14.1 Console de importação em tempo real
+
+**Quando:** depois que o fluxo real de importação estiver estabilizado (importador Avilla e
+parsers principais funcionando com extrações reais). Registrado em 28/09/2026.
+
+**O que é:** um painel com aparência de terminal técnico/forense dentro do SIED que complementa
+(ou substitui) a barra de progresso simples durante importações de extrações, relatórios e
+resultados do Avilla/IPED. Exemplo do que deve aparecer:
+
+```
+[10:42:11] Iniciando importação...
+[10:42:12] Fonte selecionada: avilla_export.zip
+[10:42:14] Calculando SHA-256...
+[10:42:21] Hash confirmado.
+[10:42:22] Inventariando arquivos...
+[10:42:30] Banco do WhatsApp localizado.
+[10:42:31] Executando parser de mensagens...
+[10:42:39] 12.483 mensagens processadas.
+[10:42:41] 1.284 mídias catalogadas.
+[10:42:45] Indexando busca global...
+[10:42:51] Importação concluída com sucesso.
+```
+
+**Requisitos:**
+- Mostrar etapas, progresso, quantidade de itens processados, avisos, erros e tempo decorrido.
+- **Eventos reais do backend, não animação.** Cada linha corresponde a algo que aconteceu:
+  leitura de arquivos, cálculo e conferência de hashes, validação da cópia de trabalho, detecção e
+  execução de importadores e parsers, gravação de artefatos, indexação da busca.
+- Barra ou percentual de progresso resumido acima do console.
+- Console recolhível/expansível.
+- Aparência coerente com o restante do SIED.
+
+**Ponto de partida no código atual:** a importação já roda em segundo plano e expõe um
+*retrato* do progresso (`pipeline::Progresso`: etapa, arquivos, bytes e tarefas feitos/total),
+que a interface consulta a cada 500 ms. O console exige um **registro de eventos** com horário
+(etapa iniciada/concluída, arquivo, hash conferido, parser iniciado com contagem, aviso, erro),
+guardado em ordem durante a execução e entregue à interface de forma incremental. O protocolo de
+parsers externos (`protocolo.rs`) já tem mensagens de `progresso`, `aviso`, `fim` e `falha`, que
+entram nesse mesmo registro. Vale avaliar gravar os eventos também na auditoria ou no manifesto
+da importação, para que o console de uma importação passada possa ser reaberto.
