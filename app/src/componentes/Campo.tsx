@@ -1,7 +1,7 @@
 import { useId, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
 
 const base =
-  "w-full rounded-lg border bg-white px-3 py-2 text-sm text-slate-900 shadow-xs outline-none transition placeholder:text-slate-400 focus:border-marca-500 focus:ring-3 focus:ring-marca-100";
+  "w-full rounded-lg border bg-fundo px-3 py-2 text-[13px] text-texto outline-none transition placeholder:text-texto-3 focus:border-ouro/70 focus:ring-2 focus:ring-ouro/20";
 
 function Rotulo({ id, rotulo, obrigatorio, erro, ajuda, children }: {
   id: string;
@@ -13,15 +13,15 @@ function Rotulo({ id, rotulo, obrigatorio, erro, ajuda, children }: {
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={id} className="text-sm font-medium text-slate-700">
+      <label htmlFor={id} className="text-xs font-medium text-texto-2">
         {rotulo}
-        {obrigatorio && <span className="ml-0.5 text-rose-600" aria-hidden>*</span>}
+        {obrigatorio && <span className="ml-0.5 text-ouro" aria-hidden>*</span>}
       </label>
       {children}
       {erro ? (
-        <p id={`${id}-erro`} role="alert" className="text-xs text-rose-600">{erro}</p>
+        <p id={`${id}-erro`} role="alert" className="text-xs text-erro">{erro}</p>
       ) : ajuda ? (
-        <p className="text-xs text-slate-500">{ajuda}</p>
+        <p className="text-xs text-texto-3">{ajuda}</p>
       ) : null}
     </div>
   );
@@ -37,7 +37,7 @@ export function Campo({ rotulo, erro, ajuda, obrigatorio, ...resto }: Comum & In
         id={id}
         aria-invalid={!!erro}
         aria-describedby={erro ? `${id}-erro` : undefined}
-        className={`${base} ${erro ? "border-rose-400" : "border-slate-300"}`}
+        className={`${base} ${erro ? "border-erro/70" : "border-borda-2"}`}
         {...resto}
       />
     </Rotulo>
@@ -52,7 +52,7 @@ export function AreaTexto({ rotulo, erro, ajuda, obrigatorio, ...resto }: Comum 
         id={id}
         rows={3}
         aria-invalid={!!erro}
-        className={`${base} ${erro ? "border-rose-400" : "border-slate-300"}`}
+        className={`${base} ${erro ? "border-erro/70" : "border-borda-2"}`}
         {...resto}
       />
     </Rotulo>
@@ -63,7 +63,7 @@ export function Selecao({ rotulo, erro, ajuda, obrigatorio, children, ...resto }
   const id = useId();
   return (
     <Rotulo id={id} rotulo={rotulo} obrigatorio={obrigatorio} erro={erro} ajuda={ajuda}>
-      <select id={id} aria-invalid={!!erro} className={`${base} ${erro ? "border-rose-400" : "border-slate-300"}`} {...resto}>
+      <select id={id} aria-invalid={!!erro} className={`${base} ${erro ? "border-erro/70" : "border-borda-2"}`} {...resto}>
         {children}
       </select>
     </Rotulo>

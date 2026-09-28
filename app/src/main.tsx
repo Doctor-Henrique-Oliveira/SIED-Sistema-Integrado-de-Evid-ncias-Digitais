@@ -7,9 +7,18 @@ import { Layout } from "./rotas/Layout";
 import { PaginaCasos } from "./rotas/PaginaCasos";
 import { PaginaNovoCaso } from "./rotas/PaginaNovoCaso";
 import { PaginaCaso } from "./rotas/PaginaCaso";
+import { PaginaDispositivos } from "./rotas/PaginaDispositivos";
+import { PaginaExtracoes } from "./rotas/PaginaExtracoes";
 import { PaginaExtracao } from "./rotas/PaginaExtracao";
 import { PaginaConversas } from "./rotas/PaginaConversas";
 import { PaginaBusca } from "./rotas/PaginaBusca";
+import { PaginaArquivos, PaginaContatos, PaginaMidias } from "./rotas/PaginasModulos";
+import {
+  PaginaConfiguracoes,
+  PaginaConsultas,
+  PaginaLocalizacoes,
+  PaginaRelatorios,
+} from "./rotas/PaginasEstruturais";
 
 const clienteConsultas = new QueryClient({
   defaultOptions: {
@@ -25,12 +34,21 @@ const roteador = createHashRouter([
     element: <Layout />,
     children: [
       { index: true, element: <PaginaCasos /> },
+      { path: "configuracoes", element: <PaginaConfiguracoes /> },
       { path: "casos/novo", element: <PaginaNovoCaso /> },
       { path: "casos/:casoId", element: <PaginaCaso /> },
+      { path: "casos/:casoId/dispositivos", element: <PaginaDispositivos /> },
+      { path: "casos/:casoId/extracoes", element: <PaginaExtracoes /> },
       { path: "casos/:casoId/extracoes/:extracaoId", element: <PaginaExtracao /> },
       { path: "casos/:casoId/conversas", element: <PaginaConversas /> },
       { path: "casos/:casoId/conversas/:conversaId", element: <PaginaConversas /> },
       { path: "casos/:casoId/busca", element: <PaginaBusca /> },
+      { path: "casos/:casoId/midias", element: <PaginaMidias /> },
+      { path: "casos/:casoId/arquivos", element: <PaginaArquivos /> },
+      { path: "casos/:casoId/contatos", element: <PaginaContatos /> },
+      { path: "casos/:casoId/localizacoes", element: <PaginaLocalizacoes /> },
+      { path: "casos/:casoId/consultas", element: <PaginaConsultas /> },
+      { path: "casos/:casoId/relatorios", element: <PaginaRelatorios /> },
     ],
   },
 ]);

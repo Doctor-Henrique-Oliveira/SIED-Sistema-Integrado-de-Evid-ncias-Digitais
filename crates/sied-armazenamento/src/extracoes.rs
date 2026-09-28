@@ -174,7 +174,10 @@ pub fn listar_arquivos(
     deslocamento: i64,
     limite: i64,
 ) -> Resultado<Pagina<ArquivoExtracao>> {
-    let filtro = "extracao_id = ?1 AND (?2 IS NULL OR categoria = ?2)
+    // "midia" agrupa imagens, vídeos, áudios e documentos (galeria de mídias).
+    let filtro = "extracao_id = ?1
+         AND (?2 IS NULL OR categoria = ?2
+              OR (?2 = 'midia' AND categoria IN ('imagem', 'video', 'audio', 'documento')))
          AND (?3 IS NULL OR instr(lower(caminho), lower(?3)) > 0 OR sha256 = lower(?3))";
     let texto = texto.map(str::trim).filter(|t| !t.is_empty());
     let total: i64 = conn.query_row(

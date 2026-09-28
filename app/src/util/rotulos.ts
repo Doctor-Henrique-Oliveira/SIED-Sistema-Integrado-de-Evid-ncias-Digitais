@@ -65,3 +65,12 @@ export function rotuloApp(app: string | null | undefined): string {
   if (!app) return "—";
   return nomeApp[app] ?? app;
 }
+
+export const nomeEstadoRegistro: Record<string, string> = {
+  ativo: "Ativo",
+  apagado: "Apagado",
+  recuperado_wal: "Recuperado do WAL",
+  desconhecido: "Desconhecido",
+};
+
+export const nomeConfianca: Record<string, string> = { alta: "Alta", media: "Média", baixa: "Baixa" };

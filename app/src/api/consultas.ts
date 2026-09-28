@@ -25,6 +25,8 @@ export const chaves = {
   // Conversas e busca derivam das importações: invalidadas junto com elas.
   conversas: (casoId: CasoId) => ["conversas", casoId] as const,
   busca: (casoId: CasoId) => ["busca", casoId] as const,
+  // Números do painel: mudam com dispositivos e importações.
+  resumo: (casoId: CasoId) => ["resumo", casoId] as const,
 };
 
 export function useInfoApp() {
@@ -95,6 +97,7 @@ export function useCadastrarDispositivo(casoId: CasoId) {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: chaves.dispositivos(casoId) });
       void qc.invalidateQueries({ queryKey: chaves.auditoria(casoId) });
+      void qc.invalidateQueries({ queryKey: chaves.resumo(casoId) });
     },
   });
 }
@@ -119,6 +122,7 @@ export function useEstadoImportacao(casoId: CasoId) {
       void qc.invalidateQueries({ queryKey: ["extracao"] });
       void qc.invalidateQueries({ queryKey: chaves.conversas(casoId) });
       void qc.invalidateQueries({ queryKey: chaves.busca(casoId) });
+      void qc.invalidateQueries({ queryKey: chaves.resumo(casoId) });
     }
     anterior.current = terminada;
   }, [terminada, casoId, qc]);
@@ -221,6 +225,19 @@ export function useBusca(casoId: CasoId, filtro: FiltroBusca | null, deslocament
     queryKey: [...chaves.busca(casoId), filtro, deslocamento, limite],
     queryFn: () => api.buscar(filtro!, deslocamento, limite),
     enabled: filtro != null && filtro.texto.trim() !== "",
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useResumoCaso(casoId: CasoId) {
+  return useQuery({ queryKey: chaves.resumo(casoId), queryFn: api.resumoCaso });
+}
+
+/** Identificadores das conversas (contatos como o parser leu, sem deduzir quem são). */
+export function useIdentificadores(casoId: CasoId, texto: string | null, deslocamento: number, limite: number) {
+  return useQuery({
+    queryKey: [...chaves.conversas(casoId), "identificadores", texto, deslocamento, limite],
+    queryFn: () => api.listarIdentificadores(texto, deslocamento, limite),
     placeholderData: keepPreviousData,
   });
 }

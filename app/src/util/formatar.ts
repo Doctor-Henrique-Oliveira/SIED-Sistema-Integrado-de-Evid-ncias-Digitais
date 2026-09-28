@@ -110,3 +110,27 @@ export function limiteDia(data: string, fuso: string = FUSO_PADRAO, fim = false)
   const ms = utc - (comoLocal - utc);
   return fim ? ms - 1 : ms;
 }
+
+/** Duração entre dois instantes ISO ("2 min 13 s"); "—" se faltar um deles. */
+export function duracao(inicio: string | null | undefined, fim: string | null | undefined): string {
+  if (!inicio || !fim) return "—";
+  const ms = new Date(fim).getTime() - new Date(inicio).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return "—";
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s} s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m} min ${s % 60} s`;
+  return `${Math.floor(m / 60)} h ${m % 60} min`;
+}
+
+/** Extensão do arquivo em minúsculas, sem o ponto ("" quando não há). */
+export function extensao(caminho: string): string {
+  const nome = caminho.split(/[\\/]/).pop() ?? "";
+  const i = nome.lastIndexOf(".");
+  return i > 0 ? nome.slice(i + 1).toLowerCase() : "";
+}
+
+/** Último componente do caminho. */
+export function nomeArquivo(caminho: string): string {
+  return caminho.split(/[\\/]/).pop() ?? caminho;
+}

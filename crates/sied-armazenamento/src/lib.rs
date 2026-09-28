@@ -18,6 +18,7 @@ pub mod extracoes;
 pub mod global;
 pub mod importacao;
 pub mod migracoes;
+pub mod resumo;
 pub mod sessao;
 
 pub use caso::BancoCaso;

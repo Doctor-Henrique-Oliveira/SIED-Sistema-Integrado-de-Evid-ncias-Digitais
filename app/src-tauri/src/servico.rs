@@ -10,6 +10,7 @@ use sied_armazenamento::extracoes::{
     ArquivoExtracao, ArtefatoDetalhe, ArtefatoResumo, ExecucaoParser, Extracao, Pagina,
     TotalCategoria,
 };
+use sied_armazenamento::resumo::{Identificador, ResumoCaso};
 use sied_armazenamento::{BancoCaso, CasoCatalogado, CatalogoGlobal, Sessao};
 use sied_dominio::{
     Caso, CasoId, Dispositivo, DispositivoId, ExtracaoId, NovoCaso, NovoDispositivo,
@@ -455,6 +456,23 @@ impl Servico {
         Ok(self
             .banco()?
             .buscar(filtro, deslocamento.max(0), limite.clamp(1, 200))?)
+    }
+
+    pub fn resumo_caso(&mut self) -> ResultadoApp<ResumoCaso> {
+        Ok(self.banco()?.resumo()?)
+    }
+
+    pub fn listar_identificadores(
+        &mut self,
+        texto: Option<String>,
+        deslocamento: i64,
+        limite: i64,
+    ) -> ResultadoApp<Pagina<Identificador>> {
+        Ok(self.banco()?.identificadores(
+            texto.as_deref(),
+            deslocamento.max(0),
+            limite.clamp(1, 500),
+        )?)
     }
 
     /// Chamado ao encerrar o aplicativo.

@@ -8,7 +8,10 @@ arquitetura aprovada em [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md).
 > dispositivos e importa uma pasta de extração: inventário com SHA-256 de todos os arquivos,
 > manifesto `sha256sum`, SMS do Android interpretados com a origem de cada registro, tudo
 > com trilha de auditoria. Conversas reconstruídas e busca global sobre o que foi importado.
-> O importador do Avilla aguarda uma extração real para ser escrito
+> Interface em tema escuro com barra lateral de 12 módulos (Dashboard, Casos, Dispositivos,
+> Extrações, Conversas, Mídias, Arquivos, Contatos, Localizações, Consultas, Relatórios,
+> Configurações); os módulos sem dados ainda dizem "ainda não disponível", nunca mostram números
+> fictícios. O importador do Avilla aguarda uma extração real para ser escrito
 > (roteiro em [`docs/PREPARACAO-AVILLA-WHATSAPP.md`](docs/PREPARACAO-AVILLA-WHATSAPP.md)).
 
 ## Estrutura
@@ -26,6 +29,9 @@ app/
   src-tauri/           camada Tauri: comandos, estado, logs
   src/                 interface React + TypeScript
     api/tipos/         tipos gerados do Rust (ts-rs) — não editar à mão
+    componentes/       casca (BarraLateral, BarraSuperior), blocos reutilizáveis (Estrutura, Icone),
+                       painel técnico, importação, inventário de arquivos
+    rotas/             uma página por módulo (rotas em main.tsx)
 testes/e2e/            teste ponta a ponta do app real (WebDriver)
 testes/gerador/        gera extrações SINTÉTICAS para teste (nenhum dado real)
 docs/                  visão e arquitetura
@@ -71,16 +77,31 @@ Importadores disponíveis: **Pasta genérica** (qualquer pasta; interpreta `mmss
 estiver). O **Avilla** aparece como "ainda não disponível" até sua estrutura ser documentada a partir de
 uma extração real. Parser disponível: **SMS do Android** (tabela `sms`; MMS ainda não).
 
+## Interface
+
+- **Tema escuro** com tokens em `app/src/estilos.css` (dourado só para o institucional e a ação
+  principal; verde, azul, laranja e vermelho para estados). Fontes do sistema, ícones embutidos:
+  nada vem da internet.
+- **Casca**: barra lateral fixa com os 12 módulos (os do caso ficam desativados sem caso aberto) e
+  cabeçalho com o caso aberto, busca global do caso (**Ctrl+K**), importação em curso e usuário @
+  estação.
+- **Dashboard do caso**: dados do procedimento, atalhos, indicadores contados no banco do caso,
+  dispositivos, extrações, alertas e trilha de auditoria com verificação.
+- **Detalhes técnicos** em blocos recolhíveis: origem (arquivo, SHA-256, tabela, registro,
+  consulta, valores brutos), data original e formato, parser, importador, estado e confiança.
+- Estrutura completa das telas e componentes em [`docs/CONTINUIDADE.md`](docs/CONTINUIDADE.md) §15.
+
 ## Conversas e busca
 
-- **Conversas**: os registros de um mesmo app e da mesma conversa (`thread_id` no SMS) são agrupados e
-  mostrados como chat: recebidas à esquerda, enviadas à direita, separador por dia e hora com segundos no
+- **Conversas** (três colunas: lista, chat e contexto/origem técnica): os registros de um mesmo app e da
+  mesma conversa (`thread_id` no SMS) são agrupados e mostrados como chat: recebidas à esquerda, enviadas à direita, separador por dia e hora com segundos no
   fuso do caso. "Detalhes técnicos" mostra, para a mensagem clicada, a origem completa (arquivo, hash,
   tabela, registro, valores brutos).
 - **Busca global** (SQLite FTS5): conteúdo das mensagens, remetentes/destinatários e nomes de arquivo do
   inventário, sem diferenciar acentos e maiúsculas, com busca por prefixo. Um texto só com dígitos e
   separadores é tratado como telefone e encontrado em qualquer formato (`(11) 90000-0001` acha
-  `+5511900000001`). Filtros por extração e período.
+  `+5511900000001`). Filtros por extração, app e período. Abrir um resultado leva à conversa, rola até a
+  mensagem e a destaca.
 - As duas coisas são **derivadas** (migração 3 do banco do caso): mantidas por gatilhos a cada registro
   gravado e reconstruíveis a partir dos artefatos. Casos antigos ganham conversas e índice ao abrir.
 

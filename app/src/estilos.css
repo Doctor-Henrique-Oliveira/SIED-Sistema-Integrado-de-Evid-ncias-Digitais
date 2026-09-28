@@ -1,18 +1,40 @@
 @import "tailwindcss";
 
-/* Tokens do SIED. Fontes do sistema: nada é baixado da internet. */
+/*
+ * Identidade visual do SIED: tema escuro técnico.
+ * - Superfícies em azul-quase-preto, cada nível um pouco mais claro.
+ * - Dourado/âmbar para o que é institucional ou prioritário (marca, item ativo, ação principal).
+ * - Verde só para estado positivo, azul para informação, laranja para atenção, vermelho só para erro.
+ * Fontes do sistema: nada é baixado da internet (o SIED funciona 100% offline).
+ */
 @theme {
-  --font-sans: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
-  --font-mono: "Cascadia Mono", Consolas, ui-monospace, monospace;
+  --font-sans: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  --font-mono: "Cascadia Mono", "Cascadia Code", Consolas, ui-monospace, "DejaVu Sans Mono", monospace;
 
-  --color-marca-50: #effcf9;
-  --color-marca-100: #c9f5ec;
-  --color-marca-500: #14b8a6;
-  --color-marca-600: #0d9488;
-  --color-marca-700: #0f766e;
+  /* Superfícies */
+  --color-fundo: #090d14;
+  --color-lateral: #0b111a;
+  --color-sup: #101824;
+  --color-sup-2: #152030;
+  --color-sup-3: #1b283b;
+  --color-borda: #1f2b3d;
+  --color-borda-2: #2c3b52;
 
-  --color-painel: #0f2742;
-  --color-painel-claro: #173657;
+  /* Texto */
+  --color-texto: #e6ebf2;
+  --color-texto-2: #a7b2c2;
+  --color-texto-3: #6f7d92;
+
+  /* Acento institucional */
+  --color-ouro: #d5a64c;
+  --color-ouro-claro: #e8c27a;
+  --color-ouro-escuro: #a57b2c;
+
+  /* Semântica */
+  --color-ok: #3cb88a;
+  --color-info: #4e9de6;
+  --color-atencao: #e3923b;
+  --color-erro: #e5534b;
 }
 
 html,
@@ -21,11 +43,70 @@ body,
   height: 100%;
 }
 
+html {
+  color-scheme: dark;
+}
+
 body {
-  @apply bg-slate-100 text-slate-800 antialiased;
+  @apply bg-fundo text-texto antialiased;
   font-family: var(--font-sans);
+  font-size: 14px;
 }
 
 ::selection {
-  @apply bg-marca-100;
+  background: color-mix(in srgb, var(--color-ouro) 35%, transparent);
+  color: var(--color-texto);
+}
+
+/* Foco visível e consistente em tudo que é interativo. */
+:focus-visible {
+  outline: 2px solid var(--color-ouro);
+  outline-offset: 2px;
+}
+
+/* Barras de rolagem discretas no tema escuro. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-borda-2) transparent;
+}
+
+/* Números alinhados em tabelas e contadores. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Listas longas: o navegador pula a renderização do que está fora da tela
+   (primeiro passo antes de uma virtualização de verdade). */
+.render-preguicoso {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 64px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Listas de seleção com a mesma cara dos campos (o WebView desenharia o controle nativo claro). */
+select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236f7d92' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.55rem center;
+  background-size: 1rem;
+  padding-right: 2rem !important;
+}
+
+select option {
+  background: var(--color-sup);
+  color: var(--color-texto);
+}
+
+/* Ícone do calendário visível no tema escuro. */
+::-webkit-calendar-picker-indicator {
+  filter: invert(0.7);
 }

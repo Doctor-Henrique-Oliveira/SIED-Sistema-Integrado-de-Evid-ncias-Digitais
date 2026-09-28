@@ -1,38 +1,14 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
-import { api, normalizarErro, type Caso, type Dispositivo, type VerificacaoAuditoria } from "../api/cliente";
-import {
-  useAbrirCaso,
-  useAuditoria,
-  useCadastrarDispositivo,
-  useCasoAtual,
-  useDispositivos,
-  useEstadoImportacao,
-  useExtracoes,
-} from "../api/consultas";
-import { Botao } from "../componentes/Botao";
-import { Aviso, Cabecalho, Cartao, Carregando, Definicoes, Selo, Vazio } from "../componentes/Estrutura";
-import { FormDispositivo } from "../componentes/FormDispositivo";
-import { AssistenteImportacao, PainelImportacao } from "../componentes/Importacao";
-import { bytes, dataHora, identificacaoCaso, numero, tamanho } from "../util/formatar";
-import { nomeStatusExtracao, tomStatus } from "../util/rotulos";
-
-const nomeSistema = { android: "Android", ios: "iOS", outro: "Outro", desconhecido: "Desconhecido" } as const;
-
-const nomeAcao: Record<string, string> = {
-  caso_criado: "Caso criado",
-  caso_aberto: "Caso aberto",
-  caso_fechado: "Caso fechado",
-  dispositivo_cadastrado: "Dispositivo cadastrado",
-  importacao_iniciada: "Importação iniciada",
-  importacao_concluida: "Importação concluída",
-  importacao_cancelada: "Importação cancelada",
-  importacao_falhou: "Importação falhou",
-  importacao_interrompida: "Importação interrompida",
-};
+import type { Caso, Extracao, ResumoCaso } from "../api/cliente";
+import { useAbrirCaso, useCasoAtual, useExtracoes, useResumoCaso } from "../api/consultas";
+import { Aviso, Cartao, Carregando, Indicador, Selo } from "../componentes/Estrutura";
+import { Icone, type NomeIcone } from "../componentes/Icone";
+import { SecaoAtividades, SecaoDispositivos, SecaoExtracoes } from "../componentes/SecoesCaso";
+import { dataHora, identificacaoCaso, numero, tamanho } from "../util/formatar";
 
 export function PaginaCaso() {
-  return <ComCasoAberto>{(caso, pasta) => <DetalheCaso caso={caso} pasta={pasta} />}</ComCasoAberto>;
+  return <ComCasoAberto>{(caso, pasta) => <PainelCaso caso={caso} pasta={pasta} />}</ComCasoAberto>;
 }
 
 /** Garante que o caso da rota esteja aberto no backend antes de mostrar o conteúdo. */
@@ -52,277 +28,220 @@ export function ComCasoAberto({ children }: { children: (caso: Caso, pasta: stri
   return <>{children(atual.data.caso, atual.data.pasta)}</>;
 }
 
-function DetalheCaso({ caso, pasta }: { caso: Caso; pasta: string }) {
+/** Link "← Voltar ao caso" das páginas internas. */
+export function VoltarAoCaso({ caso }: { caso: Caso }) {
+  return (
+    <Link to={`/casos/${caso.id}`} className="normal-case tracking-normal text-texto-2 hover:text-ouro-claro">
+      ← Voltar ao caso
+    </Link>
+  );
+}
+
+// ---------------------------------------------------------------- Dashboard do caso
+
+function PainelCaso({ caso, pasta }: { caso: Caso; pasta: string }) {
+  const resumo = useResumoCaso(caso.id);
+  return (
+    <div className="space-y-4">
+      <CabecalhoCaso caso={caso} pasta={pasta} />
+      <Atalhos caso={caso} />
+      <Indicadores caso={caso} r={resumo.data} />
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
+        <div className="min-w-0 space-y-4">
+          <SecaoDispositivos caso={caso} compacto />
+          <SecaoExtracoes caso={caso} compacto />
+        </div>
+        <div className="min-w-0 space-y-4">
+          <Alertas caso={caso} r={resumo.data} />
+          <SecaoAtividades caso={caso} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CabecalhoCaso({ caso, pasta }: { caso: Caso; pasta: string }) {
   const fuso = caso.fuso_horario;
+  const campos: [string, ReactNode][] = [
+    ["Nº do procedimento", caso.numero_procedimento],
+    ["Nº do BO", caso.numero_bo],
+    ["Investigado", caso.investigado],
+    ["Vítima", caso.vitima],
+    ["Delegado(a)", caso.delegado],
+    ["Responsável pela análise", caso.responsavel_analise],
+    ["Unidade", caso.unidade],
+    ["Criado em", dataHora(caso.criado_em, fuso)],
+  ];
   return (
-    <>
-      <Cabecalho
-        titulo={identificacaoCaso(caso)}
-        subtitulo={
-          <span className="font-mono text-xs" title="Pasta do caso">
-            {pasta}
+    <section
+      aria-label="Identificação do caso"
+      className="overflow-hidden rounded-xl border border-borda bg-gradient-to-br from-sup-2 via-sup to-sup"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-borda px-5 pb-3.5 pt-4">
+        <div className="flex min-w-0 items-start gap-3.5">
+          <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-ouro/12 text-ouro ring-1 ring-ouro/35">
+            <Icone nome="casos" className="size-6" />
           </span>
-        }
-        acoes={
-          <div className="flex gap-2">
-            <Link
-              to={`/casos/${caso.id}/conversas`}
-              className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 ring-1 ring-inset ring-slate-300 hover:bg-slate-50"
-            >
-              Conversas
-            </Link>
-            <Link
-              to={`/casos/${caso.id}/busca`}
-              className="rounded-lg bg-marca-600 px-4 py-2 text-sm font-medium text-white hover:bg-marca-700"
-            >
-              Buscar
-            </Link>
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-ouro">
+              {caso.procedimento ?? "Procedimento não informado"}
+            </p>
+            <h1 className="truncate text-2xl font-semibold tracking-tight text-texto">{identificacaoCaso(caso)}</h1>
+            <p className="mt-0.5 truncate font-mono text-[11px] text-texto-3" title="Pasta do caso">
+              {pasta}
+            </p>
           </div>
-        }
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Selo tom="ok" titulo="O banco deste caso está aberto nesta estação">
+            <Icone nome="check" className="size-3" /> Aberto nesta estação
+          </Selo>
+          <Selo tom="neutro" titulo="Fuso usado para exibir todas as datas do caso">
+            <Icone nome="relogio" className="size-3" /> {caso.fuso_horario}
+          </Selo>
+        </div>
+      </div>
+      <dl className="grid grid-cols-2 gap-x-6 gap-y-3 px-5 py-3.5 md:grid-cols-4 2xl:grid-cols-8">
+        {campos.map(([rotulo, valor]) => (
+          <div key={rotulo} className="min-w-0">
+            <dt className="text-[11px] font-medium uppercase tracking-wider text-texto-3">{rotulo}</dt>
+            <dd className="mt-0.5 truncate text-[13px] text-texto" title={typeof valor === "string" ? valor : undefined}>
+              {valor ?? "—"}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      {caso.observacoes && (
+        <p className="whitespace-pre-wrap border-t border-borda px-5 py-3 text-[13px] text-texto-2">{caso.observacoes}</p>
+      )}
+    </section>
+  );
+}
+
+function Atalhos({ caso }: { caso: Caso }) {
+  const itens: [string, NomeIcone, string][] = [
+    ["Conversas", "conversas", "conversas"],
+    ["Buscar", "busca", "busca"],
+    ["Mídias", "midias", "midias"],
+    ["Arquivos", "arquivos", "arquivos"],
+    ["Localizações", "localizacoes", "localizacoes"],
+    ["Relatórios", "relatorios", "relatorios"],
+  ];
+  return (
+    <nav aria-label="Atalhos do caso" className="flex flex-wrap gap-2">
+      {itens.map(([rotulo, icone, rota]) => (
+        <Link
+          key={rota}
+          to={`/casos/${caso.id}/${rota}`}
+          className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-[13px] font-medium transition-colors ${
+            rota === "busca"
+              ? "border-ouro/50 bg-ouro text-[#1a1305] hover:bg-ouro-claro"
+              : "border-borda-2 bg-sup text-texto hover:bg-sup-2"
+          }`}
+        >
+          <Icone nome={icone} className="size-4" />
+          {rotulo}
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
+const CATEGORIAS_MIDIA = ["imagem", "video", "audio", "documento"];
+
+function Indicadores({ caso, r }: { caso: Caso; r: ResumoCaso | undefined }) {
+  const base = `/casos/${caso.id}`;
+  const midias = r?.arquivos_por_categoria.filter((c) => CATEGORIAS_MIDIA.includes(c.categoria)).reduce((s, c) => s + c.arquivos, 0);
+  const principais = r?.registros_por_tipo
+    .slice(0, 2)
+    .map((t) => `${t.tipo}: ${numero(t.total)}`)
+    .join(" · ");
+  const n = (v: number | undefined) => (v == null ? null : numero(v));
+  return (
+    <section aria-label="Indicadores do caso" className="grid grid-cols-2 gap-3 md:grid-cols-4 2xl:grid-cols-8">
+      <Indicador rotulo="Dispositivos" icone="dispositivo" valor={n(r?.dispositivos)} para={`${base}/dispositivos`} />
+      <Indicador
+        rotulo="Extrações"
+        icone="extracao"
+        valor={n(r?.extracoes)}
+        detalhe={r && `${numero(r.extracoes_concluidas)} concluídas`}
+        para={`${base}/extracoes`}
       />
-      <div className="grid gap-6">
-        <Cartao titulo="Procedimento">
-          <Definicoes
-            itens={[
-              ["Tipo", caso.procedimento],
-              ["Número do procedimento", caso.numero_procedimento],
-              ["Número do BO", caso.numero_bo],
-              ["Investigado", caso.investigado],
-              ["Vítima", caso.vitima],
-              ["Delegado(a)", caso.delegado],
-              ["Responsável pela análise", caso.responsavel_analise],
-              ["Unidade", caso.unidade],
-              ["Criado em", dataHora(caso.criado_em, fuso)],
-            ]}
-          />
-          {caso.observacoes && <p className="mt-4 whitespace-pre-wrap text-sm text-slate-700">{caso.observacoes}</p>}
-        </Cartao>
-        <SecaoDispositivos caso={caso} />
-        <SecaoExtracoes caso={caso} />
-        <SecaoAtividades caso={caso} />
-      </div>
-    </>
+      <Indicador rotulo="Arquivos" icone="arquivos" valor={n(r?.arquivos)} detalhe={r && tamanho(r.bytes)} para={`${base}/arquivos`} />
+      <Indicador rotulo="Mídias" icone="midias" valor={n(midias)} detalhe="imagens, vídeos, áudios, docs" para={`${base}/midias`} />
+      <Indicador rotulo="Registros" icone="banco" tom="ouro" valor={n(r?.registros)} detalhe={principais || (r && "interpretados")} />
+      <Indicador rotulo="Conversas" icone="conversas" valor={n(r?.conversas)} para={`${base}/conversas`} />
+      <Indicador
+        rotulo="Identificadores"
+        icone="contatos"
+        valor={n(r?.identificadores)}
+        detalhe="nas conversas"
+        para={`${base}/contatos`}
+      />
+      <Indicador
+        rotulo="Localizações"
+        icone="localizacoes"
+        valor={n(r?.localizacoes)}
+        detalhe="registros com coordenadas"
+        para={`${base}/localizacoes`}
+      />
+    </section>
   );
 }
 
-function SecaoDispositivos({ caso }: { caso: Caso }) {
-  const dispositivos = useDispositivos(caso.id);
-  const cadastrar = useCadastrarDispositivo(caso.id);
-  const [formAberto, setFormAberto] = useState(false);
+type Alerta = { tom: "erro" | "atencao" | "info"; texto: string; para?: string };
 
-  return (
-    <Cartao
-      titulo="Dispositivos"
-      acoes={
-        !formAberto && (
-          <Botao variante="secundario" onClick={() => setFormAberto(true)}>
-            Adicionar dispositivo
-          </Botao>
-        )
-      }
-    >
-      {formAberto && (
-        <div className="mb-6 rounded-lg bg-slate-50 p-4 ring-1 ring-slate-200">
-          <FormDispositivo
-            salvar={(d) => cadastrar.mutateAsync(d).catch((e: unknown) => Promise.reject(normalizarErro(e)))}
-            aoConcluir={() => setFormAberto(false)}
-            aoCancelar={() => setFormAberto(false)}
-          />
-        </div>
-      )}
-      {dispositivos.isPending ? (
-        <Carregando />
-      ) : dispositivos.isError ? (
-        <Aviso>{dispositivos.error.message}</Aviso>
-      ) : dispositivos.data.length === 0 ? (
-        !formAberto && <Vazio titulo="Nenhum dispositivo cadastrado">Cadastre o aparelho examinado antes de importar extrações.</Vazio>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm" aria-label="Dispositivos do caso">
-            <thead className="text-xs uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="py-2 pr-4 font-medium">Identificação</th>
-                <th className="py-2 pr-4 font-medium">Aparelho</th>
-                <th className="py-2 pr-4 font-medium">Sistema</th>
-                <th className="py-2 pr-4 font-medium">IMEI</th>
-                <th className="py-2 pr-4 font-medium">Capacidade</th>
-                <th className="py-2 font-medium">Cadastrado em</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {dispositivos.data.map((d) => (
-                <tr key={d.id}>
-                  <td className="py-2.5 pr-4 font-medium text-slate-900">{d.apelido}</td>
-                  <td className="py-2.5 pr-4">
-                    {[d.fabricante, d.nome_comercial ?? d.modelo].filter(Boolean).join(" ") || "—"}
-                    {d.nome_comercial && d.modelo && <span className="text-slate-500"> ({d.modelo})</span>}
-                  </td>
-                  <td className="py-2.5 pr-4">
-                    {nomeSistema[d.sistema]} {d.versao_sistema}
-                  </td>
-                  <td className="py-2.5 pr-4 font-mono text-xs">
-                    {[d.imei1, d.imei2].filter(Boolean).join(" / ") || "—"}
-                  </td>
-                  <td className="py-2.5 pr-4">{bytes(d.capacidade_bytes)}</td>
-                  <td className="py-2.5 text-slate-500">{dataHora(d.criado_em, caso.fuso_horario)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </Cartao>
-  );
-}
-
-function SecaoExtracoes({ caso }: { caso: Caso }) {
+function Alertas({ caso, r }: { caso: Caso; r: ResumoCaso | undefined }) {
   const extracoes = useExtracoes(caso.id);
-  const dispositivos = useDispositivos(caso.id);
-  const importacao = useEstadoImportacao(caso.id);
-  const [assistente, setAssistente] = useState(false);
-  const [dispensada, setDispensada] = useState<string | null>(null);
-  const estado = importacao.data;
-  const emCurso = !!estado && !estado.terminada;
-  const listaDisp: Dispositivo[] = dispositivos.data ?? [];
-  const apelido = (id: string) => listaDisp.find((d) => d.id === id)?.apelido ?? "—";
-
-  return (
-    <Cartao
-      titulo="Extrações"
-      acoes={
-        !assistente && (
-          <Botao
-            variante="secundario"
-            onClick={() => setAssistente(true)}
-            disabled={emCurso || listaDisp.length === 0}
-            title={listaDisp.length === 0 ? "Cadastre um dispositivo primeiro" : undefined}
-          >
-            Importar extração
-          </Botao>
-        )
-      }
-    >
-      <div className="space-y-4">
-        {assistente && (
-          <AssistenteImportacao caso={caso} dispositivos={listaDisp} aoFechar={() => setAssistente(false)} />
-        )}
-        {estado && dispensada !== estado.extracao_id && (
-          <PainelImportacao caso={caso} estado={estado} aoDispensar={() => setDispensada(estado.extracao_id)} />
-        )}
-        {extracoes.isPending ? (
-          <Carregando />
-        ) : extracoes.isError ? (
-          <Aviso>{extracoes.error.message}</Aviso>
-        ) : extracoes.data.length === 0 ? (
-          !assistente && (
-            <Vazio titulo="Nenhuma extração importada">
-              Importe a pasta gerada pela ferramenta de extração. Os originais nunca são alterados.
-            </Vazio>
-          )
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm" aria-label="Extrações do caso">
-              <thead className="text-xs uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="py-2 pr-4 font-medium">Dispositivo</th>
-                  <th className="py-2 pr-4 font-medium">Ferramenta</th>
-                  <th className="py-2 pr-4 font-medium">Situação</th>
-                  <th className="py-2 pr-4 font-medium">Arquivos</th>
-                  <th className="py-2 pr-4 font-medium">Registros</th>
-                  <th className="py-2 font-medium">Importada em</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {extracoes.data.map((x) => (
-                  <tr key={x.id}>
-                    <td className="py-2.5 pr-4">
-                      <Link
-                        to={`/casos/${caso.id}/extracoes/${x.id}`}
-                        className="font-medium text-marca-700 hover:underline"
-                      >
-                        {apelido(x.dispositivo_id)}
-                      </Link>
-                      <div className="max-w-xs truncate font-mono text-xs text-slate-500" title={x.origem_caminho}>
-                        {x.origem_caminho}
-                      </div>
-                    </td>
-                    <td className="py-2.5 pr-4">{x.importador_nome}</td>
-                    <td className="py-2.5 pr-4">
-                      <Selo tom={tomStatus(x.status)}>{nomeStatusExtracao[x.status] ?? x.status}</Selo>
-                    </td>
-                    <td className="py-2.5 pr-4">
-                      {numero(x.total_arquivos)} <span className="text-slate-500">({tamanho(x.total_bytes)})</span>
-                    </td>
-                    <td className="py-2.5 pr-4">{numero(x.total_artefatos)}</td>
-                    <td className="py-2.5 text-slate-500">{dataHora(x.iniciada_em, caso.fuso_horario)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-    </Cartao>
-  );
-}
-
-function SecaoAtividades({ caso }: { caso: Caso }) {
-  const auditoria = useAuditoria(caso.id);
-  const [verificacao, setVerificacao] = useState<VerificacaoAuditoria | null>(null);
-  const [erroVerificacao, setErroVerificacao] = useState<string | null>(null);
-  const [verificando, setVerificando] = useState(false);
-
-  async function verificar() {
-    setVerificando(true);
-    setErroVerificacao(null);
-    try {
-      setVerificacao(await api.verificarAuditoria());
-    } catch (e) {
-      setVerificacao(null);
-      setErroVerificacao(normalizarErro(e).message);
-    } finally {
-      setVerificando(false);
+  const alertas: Alerta[] = [];
+  for (const x of extracoes.data ?? ([] as Extracao[])) {
+    if (x.status === "falhou" || x.status === "interrompida" || x.status === "cancelada") {
+      alertas.push({
+        tom: x.status === "falhou" ? "erro" : "atencao",
+        texto: `Extração ${x.status === "falhou" ? "falhou" : x.status === "cancelada" ? "cancelada" : "interrompida"}: ${x.importador_nome}, ${dataHora(x.iniciada_em, caso.fuso_horario)}`,
+        para: `/casos/${caso.id}/extracoes/${x.id}`,
+      });
+    }
+    if (x.arquivos_ilegiveis) {
+      alertas.push({
+        tom: "atencao",
+        texto: `${numero(x.arquivos_ilegiveis)} arquivo(s) ilegível(is) na extração ${x.importador_nome}`,
+        para: `/casos/${caso.id}/extracoes/${x.id}`,
+      });
     }
   }
+  if (r?.execucoes_com_problema) {
+    alertas.push({ tom: "atencao", texto: `${numero(r.execucoes_com_problema)} execução(ões) de parser com problema` });
+  }
+  if (r?.avisos_parser) {
+    alertas.push({ tom: "info", texto: `${numero(r.avisos_parser)} aviso(s) registrados pelos parsers` });
+  }
+  const cor = { erro: "text-erro", atencao: "text-atencao", info: "text-info" };
 
   return (
-    <Cartao
-      titulo="Registro de atividades"
-      acoes={
-        <Botao variante="secundario" onClick={verificar} carregando={verificando}>
-          Verificar integridade
-        </Botao>
-      }
-    >
-      {verificacao && (
-        <div className="mb-4">
-          <Aviso tipo="sucesso">
-            Trilha íntegra: {verificacao.registros} registros. Hash final{" "}
-            <span className="font-mono text-xs">{verificacao.hash_final.slice(0, 16)}…</span>
-          </Aviso>
-        </div>
-      )}
-      {erroVerificacao && (
-        <div className="mb-4">
-          <Aviso>{erroVerificacao}</Aviso>
-        </div>
-      )}
-      {auditoria.isPending ? (
+    <Cartao titulo="Alertas e pendências" icone="alerta">
+      {extracoes.isPending ? (
         <Carregando />
-      ) : auditoria.isError ? (
-        <Aviso>{auditoria.error.message}</Aviso>
+      ) : alertas.length === 0 ? (
+        <p className="flex items-center gap-2 text-[13px] text-texto-2">
+          <Icone nome="check" className="size-4 text-ok" />
+          Nenhum alerta nas importações deste caso.
+        </p>
       ) : (
-        <ol className="space-y-2 text-sm" aria-label="Atividades recentes">
-          {auditoria.data.map((r) => (
-            <li key={r.seq} className="flex items-baseline gap-3">
-              <span className="w-40 shrink-0 text-xs text-slate-500">{dataHora(r.ts, caso.fuso_horario)}</span>
-              <span className="text-slate-900">{nomeAcao[r.acao] ?? r.acao}</span>
-              <span className="truncate text-xs text-slate-500">
-                {r.usuario} · {r.maquina}
-              </span>
+        <ul className="space-y-2 text-[13px]" aria-label="Alertas do caso">
+          {alertas.map((a, i) => (
+            <li key={i} className="flex items-start gap-2">
+              <Icone nome={a.tom === "info" ? "info" : "alerta"} className={`mt-0.5 size-4 ${cor[a.tom]}`} />
+              {a.para ? (
+                <Link to={a.para} className="text-texto hover:text-ouro-claro hover:underline">
+                  {a.texto}
+                </Link>
+              ) : (
+                <span className="text-texto">{a.texto}</span>
+              )}
             </li>
           ))}
-        </ol>
+        </ul>
       )}
     </Cartao>
   );
