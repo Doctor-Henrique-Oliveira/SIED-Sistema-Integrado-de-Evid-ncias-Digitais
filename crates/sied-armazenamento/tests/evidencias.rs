@@ -183,6 +183,33 @@ fn trecho_so_dentro_de_uma_conversa_e_pedido_precisa_de_alvo() {
     assert!(banco.evidencias().unwrap().is_empty());
 }
 
+/// Enquanto a importação grava em lotes a conversa ainda pode ganhar mensagens: um
+/// trecho marcado nesse momento divergiria depois, sem adulteração nenhuma.
+#[test]
+fn trecho_de_extracao_em_andamento_e_recusado() {
+    let (_raiz, _origem, mut banco, x) = preparado();
+    let msgs = mensagens_ana(&banco);
+    let c = Connection::open(banco.pasta().join(NOME_ARQUIVO_CASO)).unwrap();
+    c.execute(
+        "UPDATE extracao SET status = 'em_andamento' WHERE id = ?1",
+        [&x.id.to_string()],
+    )
+    .unwrap();
+    let m = recusa(banco.adicionar_evidencia(NovaEvidencia {
+        artefato_id: Some(msgs[0].id),
+        trecho_fim_id: Some(msgs[3].id),
+        ..Default::default()
+    }));
+    assert!(m.contains("em andamento"), "{m}");
+    // Um registro isolado não muda com a importação: continua permitido.
+    banco
+        .adicionar_evidencia(NovaEvidencia {
+            artefato_id: Some(msgs[0].id),
+            ..Default::default()
+        })
+        .unwrap();
+}
+
 #[test]
 fn alvo_hash_e_evidencia_removida_nao_mudam_nem_somem_do_banco() {
     let (_raiz, _origem, mut banco, _x) = preparado();
