@@ -15,7 +15,7 @@ use std::collections::HashMap;
 
 use super::super::sqlite::{colunas, linha_bruta};
 use super::comum::{
-    data_ms, faltando, inteiro, nome_do_caminho, real, referencia, situacao_envio,
+    coordenadas, data_ms, faltando, inteiro, nome_do_caminho, referencia, situacao_envio,
     subtipo_mensagem, tem_arquivo, texto, tipo_conversa, Auxiliar, Emissor, Linha,
 };
 use super::PAPEL_MSGSTORE;
@@ -276,8 +276,14 @@ fn mensagens(
                 .push(x.citacao.referencia(PAPEL_MSGSTORE, q));
         }
         if let Some(loc) = x.local.primeira(id) {
-            a.latitude = real(loc, "latitude");
-            a.longitude = real(loc, "longitude");
+            let (coord, descartadas) = coordenadas(loc);
+            if let Some((la, lo)) = coord {
+                a.latitude = Some(la);
+                a.longitude = Some(lo);
+            }
+            if descartadas {
+                m.insert("coordenadas_invalidas".into(), json!(true));
+            }
             for (c, k) in [
                 ("place_name", "local_nome"),
                 ("place_address", "local_endereco"),

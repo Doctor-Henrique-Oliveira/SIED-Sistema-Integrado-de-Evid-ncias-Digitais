@@ -13,7 +13,7 @@ use std::collections::HashMap;
 
 use super::super::sqlite::{colunas, linha_bruta};
 use super::comum::{
-    data_ms, faltando, inteiro, nome_do_caminho, real, referencia, situacao_envio,
+    coordenadas, data_ms, faltando, inteiro, nome_do_caminho, referencia, situacao_envio,
     subtipo_mensagem, tem_arquivo, texto, tipo_conversa, Auxiliar, Emissor, Linha,
 };
 use super::PAPEL_MSGSTORE;
@@ -191,8 +191,14 @@ fn mensagens(conn: &Connection, app: &str, e: &mut Emissor) -> Resultado<()> {
                 .push(midia.referencia(PAPEL_MSGSTORE, md));
         }
         if matches!(subtipo, Some("localizacao" | "localizacao_tempo_real")) {
-            a.latitude = real(&l, "latitude");
-            a.longitude = real(&l, "longitude");
+            let (coord, descartadas) = coordenadas(&l);
+            if let Some((la, lo)) = coord {
+                a.latitude = Some(la);
+                a.longitude = Some(lo);
+            }
+            if descartadas {
+                m.insert("coordenadas_invalidas".into(), json!(true));
+            }
             if let Some(nome) = texto(&l, "media_name") {
                 m.insert("local_nome".into(), json!(nome));
                 if a.conteudo.is_none() {

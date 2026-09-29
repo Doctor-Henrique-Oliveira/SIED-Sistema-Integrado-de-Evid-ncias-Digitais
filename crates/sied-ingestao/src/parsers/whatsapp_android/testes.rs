@@ -497,3 +497,38 @@ fn sem_arquivos_de_entrada_e_erro() {
     let r = ParserWhatsAppAndroid.processar(&entrada(vec![]), &mut Coletor::default());
     assert!(matches!(r, Err(ErroIngestao::Parser { .. })));
 }
+
+/// "Prefira não sei a inventar": coordenada fora do intervalo (ou infinita) não é
+/// interpretada; o valor continua nos valores brutos da origem.
+#[test]
+fn coordenadas_invalidas_nao_sao_interpretadas() {
+    let dir = tempfile::tempdir().unwrap();
+    let e = completo(dir.path());
+    let msgstore = &e.arquivos[0].copia_verificada;
+    let c = rusqlite::Connection::open(msgstore).unwrap();
+    for (lat, lon) in [("123.0", "-46.6"), ("9e999", "-46.6"), ("-23.5", "NULL")] {
+        c.execute_batch(&format!(
+            "UPDATE message_location SET latitude = {lat}, longitude = {lon} WHERE message_row_id = 5"
+        ))
+        .unwrap();
+        let (col, _) = rodar(&e);
+        let m = col.mensagem("SINT0000000005");
+        assert_eq!((m.latitude, m.longitude), (None, None), "{lat} {lon}");
+        assert_eq!(
+            m.metadados["coordenadas_invalidas"],
+            json!(true),
+            "{lat} {lon}"
+        );
+        let bruto = &m
+            .origens_adicionais
+            .iter()
+            .find(|o| o.tabela.as_deref() == Some("message_location"))
+            .unwrap()
+            .valores_brutos;
+        assert_ne!(
+            bruto["latitude"],
+            json!(null),
+            "{lat}: o valor bruto fica preservado"
+        );
+    }
+}
