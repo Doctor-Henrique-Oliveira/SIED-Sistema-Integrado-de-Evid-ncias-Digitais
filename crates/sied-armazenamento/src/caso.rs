@@ -614,7 +614,23 @@ pub fn nome_pasta_sugerido(novo: &NovoCaso) -> String {
     let nome: String = nome.chars().take(60).collect();
     if nome.is_empty() {
         "caso".into()
+    } else if reservado_no_windows(&nome) {
+        format!("caso-{nome}")
     } else {
         nome
     }
+}
+
+/// Nomes que o Windows reserva para dispositivos (a pasta não poderia ser criada).
+fn reservado_no_windows(nome: &str) -> bool {
+    let n = nome.to_uppercase();
+    matches!(n.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        || ["COM", "LPT"].iter().any(|p| {
+            n.strip_prefix(p).is_some_and(|resto| {
+                matches!(
+                    resto,
+                    "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "¹" | "²" | "³"
+                )
+            })
+        })
 }

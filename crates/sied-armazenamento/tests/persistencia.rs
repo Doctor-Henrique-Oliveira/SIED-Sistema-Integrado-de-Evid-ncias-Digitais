@@ -374,6 +374,18 @@ fn nome_de_pasta_seguro() {
     c.numero_procedimento = None;
     c.numero_bo = Some("  BO: 45/2026 \\ <x> ".into());
     assert_eq!(nome_pasta_sugerido(&c), "BO-45-2026-x");
+    // Nomes reservados pelo Windows não viram pasta.
+    for (numero, pasta) in [
+        ("con", "caso-con"),
+        ("NUL", "caso-NUL"),
+        ("Com1", "caso-Com1"),
+        ("LPT9", "caso-LPT9"),
+        ("COM10", "COM10"),
+        ("CONSULTA", "CONSULTA"),
+    ] {
+        c.numero_bo = Some(numero.into());
+        assert_eq!(nome_pasta_sugerido(&c), pasta, "{numero}");
+    }
 }
 
 /// Duas janelas do SIED (ou duas estações na mesma pasta de rede) não abrem o mesmo
