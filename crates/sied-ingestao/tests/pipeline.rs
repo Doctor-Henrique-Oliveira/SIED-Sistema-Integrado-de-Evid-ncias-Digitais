@@ -83,6 +83,7 @@ struct Memoria {
     arquivos: Vec<ArquivoInventariado>,
     execucoes: Vec<(String, Option<EstadoExecucao>, Option<String>)>,
     artefatos: usize,
+    avisos: Vec<String>,
 }
 
 impl Destino for Memoria {
@@ -114,7 +115,8 @@ impl Destino for Memoria {
         self.artefatos += lote.len();
         Ok(())
     }
-    fn gravar_aviso(&mut self, _: i64, _: &AvisoParser) -> Resultado<()> {
+    fn gravar_aviso(&mut self, _: i64, aviso: &AvisoParser) -> Resultado<()> {
+        self.avisos.push(aviso.mensagem.clone());
         Ok(())
     }
     fn concluir_execucao(
@@ -274,4 +276,83 @@ fn parser_em_panico_vira_execucao_com_falha() {
     assert!(erro.contains("index out of bounds"), "{erro}");
     // O que foi emitido antes do pânico foi gravado.
     assert_eq!(destino.artefatos, 1);
+}
+
+/// Banco com `-wal` listado, mas que não pode ser lido (ex.: sem permissão).
+struct FonteComWalIlegivel;
+
+impl FonteSomenteLeitura for FonteComWalIlegivel {
+    fn descricao(&self) -> String {
+        "FIXTURE SINTÉTICA".into()
+    }
+    fn listar(&self) -> Box<dyn Iterator<Item = Resultado<EntradaFonte>> + '_> {
+        Box::new(
+            ["dados/mmssms.db", "dados/mmssms.db-wal"]
+                .into_iter()
+                .map(|c| {
+                    Ok(EntradaFonte {
+                        caminho: CaminhoFonte::novo(c).unwrap(),
+                        diretorio: false,
+                        tamanho: 4,
+                        modificado_em: None,
+                        criado_em: None,
+                    })
+                }),
+        )
+    }
+    fn entrada(&self, c: &CaminhoFonte) -> Resultado<Option<EntradaFonte>> {
+        Ok(self.listar().flatten().find(|e| &e.caminho == c))
+    }
+    fn abrir(&self, c: &CaminhoFonte) -> Resultado<Box<dyn LeitorFonte>> {
+        if c.como_str().ends_with("-wal") {
+            return Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied).into());
+        }
+        Ok(Box::new(Cursor::new(b"fixo".to_vec())))
+    }
+}
+
+struct ParserQuieto;
+
+impl Parser for ParserQuieto {
+    fn info(&self) -> InfoComponente {
+        InfoComponente {
+            id: "quieto".into(),
+            nome: "Parser sintético sem registros".into(),
+            versao: "1".into(),
+        }
+    }
+    fn papeis(&self) -> &'static [&'static str] {
+        &["mmssms"]
+    }
+    fn processar(&self, _: &EntradaParser, _: &mut dyn SaidaParser) -> Resultado<ResumoParser> {
+        Ok(ResumoParser::default())
+    }
+}
+
+/// Antes, um `-wal` que constava no inventário mas não pôde ser lido era pulado em
+/// silêncio e o banco era interpretado sem ele. Agora a execução fica parcial, com aviso.
+#[test]
+fn wal_ilegivel_gera_aviso_e_execucao_parcial() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut registro = Registro::default();
+    registro.adicionar_parser(Box::new(ParserQuieto));
+    let mut destino = Memoria::default();
+    let r = pipeline::executar(
+        &FonteComWalIlegivel,
+        &ImportadorFixo("quieto"),
+        &registro,
+        &mut destino,
+        &Controle::default(),
+        &contexto(dir.path()),
+    )
+    .unwrap();
+    assert_eq!(r.execucoes_com_falha, 0);
+    assert_eq!(destino.execucoes[0].1, Some(EstadoExecucao::Parcial));
+    assert_eq!(destino.avisos.len(), 1, "{:?}", destino.avisos);
+    assert!(
+        destino.avisos[0].contains("dados/mmssms.db-wal consta na extração mas não pôde ser lido"),
+        "{:?}",
+        destino.avisos
+    );
+    assert_eq!(r.avisos, 1);
 }

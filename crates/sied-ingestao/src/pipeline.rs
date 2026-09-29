@@ -656,17 +656,19 @@ fn copiar_verificado(
     Ok(destino)
 }
 
-/// Prepara as cópias de trabalho de uma tarefa. Devolve os arquivos para o parser e,
-/// por papel, (id no inventário, sha256).
+/// Prepara as cópias de trabalho de uma tarefa. Devolve os arquivos para o parser,
+/// por papel (id no inventário, sha256), e avisos sobre auxiliares que não puderam
+/// ser lidos.
 fn preparar_entrada(
     fonte: &dyn FonteSomenteLeitura,
     destino: &mut dyn Destino,
     controle: &Controle,
     ctx: &ContextoImportacao,
     tarefa: &TarefaParser,
-) -> Resultado<(Vec<ArquivoDeTrabalho>, PorPapel)> {
+) -> Resultado<(Vec<ArquivoDeTrabalho>, PorPapel, Vec<AvisoParser>)> {
     let mut arquivos = Vec::new();
     let mut por_papel = HashMap::new();
+    let mut avisos = Vec::new();
     for a in &tarefa.arquivos {
         let reg = destino
             .arquivo(&a.caminho)?
@@ -682,11 +684,25 @@ fn preparar_entrada(
         let copia = copiar_verificado(fonte, controle, &a.caminho, &sha, &pasta)?;
         for sufixo in AUXILIARES_SQLITE {
             let aux = CaminhoFonte::novo(&format!("{}{sufixo}", a.caminho))?;
-            if let Some(ArquivoRegistrado {
-                sha256: Some(s), ..
-            }) = destino.arquivo(&aux)?
-            {
-                copiar_verificado(fonte, controle, &aux, &s, &pasta)?;
+            match destino.arquivo(&aux)? {
+                Some(ArquivoRegistrado {
+                    sha256: Some(s), ..
+                }) => {
+                    copiar_verificado(fonte, controle, &aux, &s, &pasta)?;
+                }
+                // Consta na extração mas não pôde ser lido no inventário: o banco é
+                // interpretado sem ele, e isso tem de aparecer (registros recentes que
+                // só estão no -wal/-journal ficariam de fora).
+                Some(_) => avisos.push(AvisoParser {
+                    mensagem: format!(
+                        "{aux} consta na extração mas não pôde ser lido; {} foi interpretado \
+                         sem ele e registros que só estejam nele podem faltar",
+                        a.caminho
+                    ),
+                    papel_arquivo: Some(a.papel.clone()),
+                    id_registro: None,
+                }),
+                None => {}
             }
         }
         por_papel.insert(a.papel.clone(), (reg.id, sha.clone()));
@@ -697,7 +713,7 @@ fn preparar_entrada(
             copia_verificada: copia,
         });
     }
-    Ok((arquivos, por_papel))
+    Ok((arquivos, por_papel, avisos))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -730,32 +746,33 @@ fn processar_tarefa(
     controle.atualizar(|p| p.item_atual = Some(format!("{} — {principal}", info.nome)));
     resumo.execucoes += 1;
 
-    let (arquivos, por_papel) = match preparar_entrada(fonte, destino, controle, ctx, tarefa) {
-        Ok(x) => x,
-        Err(ErroIngestao::Cancelado) => return Err(ErroIngestao::Cancelado),
-        Err(e) => {
-            // Registra a execução como falha (por exemplo, original alterado) e segue.
-            let principal_id = match tarefa.arquivos.first() {
-                Some(a) => destino.arquivo(&a.caminho)?.map(|r| r.id),
-                None => None,
-            };
-            let exec = destino.iniciar_execucao(&info, principal_id, None)?;
-            destino.concluir_execucao(
-                exec,
-                EstadoExecucao::Falhou,
-                &ResumoParser::default(),
-                Some(&e.to_string()),
-            )?;
-            resumo.execucoes_com_falha += 1;
-            log.registrar(
-                "erro",
-                "copia_de_trabalho",
-                json!({ "parser": info, "erro": e.to_string() }),
-            );
-            observar(resumo, format!("{}: {e}", info.nome));
-            return Ok(());
-        }
-    };
+    let (arquivos, por_papel, avisos_entrada) =
+        match preparar_entrada(fonte, destino, controle, ctx, tarefa) {
+            Ok(x) => x,
+            Err(ErroIngestao::Cancelado) => return Err(ErroIngestao::Cancelado),
+            Err(e) => {
+                // Registra a execução como falha (por exemplo, original alterado) e segue.
+                let principal_id = match tarefa.arquivos.first() {
+                    Some(a) => destino.arquivo(&a.caminho)?.map(|r| r.id),
+                    None => None,
+                };
+                let exec = destino.iniciar_execucao(&info, principal_id, None)?;
+                destino.concluir_execucao(
+                    exec,
+                    EstadoExecucao::Falhou,
+                    &ResumoParser::default(),
+                    Some(&e.to_string()),
+                )?;
+                resumo.execucoes_com_falha += 1;
+                log.registrar(
+                    "erro",
+                    "copia_de_trabalho",
+                    json!({ "parser": info, "erro": e.to_string() }),
+                );
+                observar(resumo, format!("{}: {e}", info.nome));
+                return Ok(());
+            }
+        };
     let principal = arquivos
         .first()
         .and_then(|a| por_papel.get(&a.papel).cloned());
@@ -789,6 +806,9 @@ fn processar_tarefa(
         emitidos: 0,
         avisos: 0,
     };
+    for aviso in avisos_entrada {
+        coletor.avisar(aviso);
+    }
     // Um parser que entra em pânico com dados hostis não derruba a importação: a
     // execução fica registrada como falha e os demais parsers seguem.
     let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
