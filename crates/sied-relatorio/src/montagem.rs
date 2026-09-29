@@ -825,9 +825,11 @@ pub fn montar(
         Campo::novo("Hash do último registro conferido", auditoria.hash_final.clone()),
         Campo::novo(
             "Registro desta geração",
+            // Sem número exato: uma importação que termine durante a geração também
+            // grava na trilha, e o registro deste relatório pode não ser o seguinte.
             format!(
-                "A geração deste relatório é gravada na trilha como o registro nº {} (relatorio_gerado), com o SHA-256 deste PDF.",
-                auditoria.registros + 1
+                "A geração deste relatório é gravada na trilha em um registro posterior ao nº {} (ação relatorio_gerado), com o SHA-256 deste PDF.",
+                milhar(auditoria.registros)
             ),
         ),
         Campo::novo(
