@@ -3,7 +3,8 @@
 Estado em 29/09/2026: a fase 1 fecha o ciclo **importar → analisar → selecionar → relatar**. Na
 `main` estão a interface para volume real (PR #9, merge `24791ff`), as **evidências selecionadas
 com o relatório PDF** em Typst (PR #10, merge `5b68c8d`) e a **auditoria pré-produção com
-hardening** (PR #11, branch `claude/auditoria-hardening-7p20bx`). Quem for continuar o projeto
+hardening** (PR #11, merge `9f87f89`, último commit com código; CI da `main` verde nele, Linux e
+Windows). Quem for continuar o projeto
 deve começar por `docs/HANDOFF-CODEX.md`. O fechamento da auditoria está em
 `docs/checkpoints/2026-09-29-auditoria-hardening.md`; o das evidências e relatório, em
 `docs/checkpoints/2026-09-29-fase1-evidencias-relatorio.md`; o do volume real, em
@@ -78,7 +79,8 @@ release, execução manual ou PR que muda o build (opção "Só tags", PR #4).
 | `fase1-whatsapp` | `baee700` | #8 | mesclado (`dc402cf`) |
 | `fase1-visual-volume` | `181f2c5` | #9 | mesclado (`24791ff`) |
 | `fase1-evidencias-relatorio` | — | #10 | mesclado (`5b68c8d`) |
-| `claude/auditoria-hardening-7p20bx` | ver §3 | #11 | auditoria pré-produção e hardening; mesclado por merge commit (ver `git log --merges -1`) |
+| `claude/auditoria-hardening-7p20bx` | `e1916af` | #11 | mesclado (`9f87f89`) |
+| `claude/auditoria-hardening-7p20bx` (reiniciada da `main`) | — | #12 | só documentos: registra o commit final |
 
 As branches mescladas **não foram apagadas**. Podem ser removidas depois que a `main` for
 confirmada íntegra e com CI verde, com aval do usuário.
@@ -133,6 +135,8 @@ explícito** e CI completa verde (Linux e Windows).
 | `985e20c`, `6ca06ef` | Auditoria: aviso de pasta na nuvem ou em compartilhamento de rede |
 | `1a49ab0`, `004ac16` | Auditoria: índice certo nas consultas da conversa; medições com volume |
 | `eb89f48`, `72a4672`, `2e48156` | Auditoria: `.gitignore`, coordenadas e REAL infinito, datas absurdas |
+| `6324102`, `e1916af` | Auditoria: HANDOFF-CODEX, continuidade e checkpoint; dependências sem depuração nos builds de teste (CI Linux sem disco) |
+| `9f87f89` | Merge do PR #11 na `main`: auditoria pré-produção e hardening |
 
 ---
 

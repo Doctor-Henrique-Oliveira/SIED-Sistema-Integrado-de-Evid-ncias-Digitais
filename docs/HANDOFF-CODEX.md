@@ -581,9 +581,14 @@ Histórico de PRs e commits: `docs/CONTINUIDADE.md` §2 e §3.
 
 ## 31. Commit final da `main`
 
-A auditoria entrou pela PR #11 (branch `claude/auditoria-hardening-7p20bx`, sobre `5b68c8d`).
-O hash do merge e o resultado da CI da `main` ficam registrados em `docs/CONTINUIDADE.md` (topo)
-e no checkpoint `docs/checkpoints/2026-09-29-auditoria-hardening.md` §8. Para conferir:
+A auditoria entrou pelo PR #11 (branch `claude/auditoria-hardening-7p20bx`, sobre `5b68c8d`),
+mesclado em 29/09/2026 no commit **`9f87f89`** (merge commit; último commit da branch:
+`e1916af`). É o último commit com código: a CI da `main` rodou nele e ficou verde (Linux e
+Windows; instaladores pulados na `main`, como previsto em "Só tags"). Os instaladores Windows
+(NSIS e MSI) foram gerados e ficaram verdes no PR, sobre o mesmo código (`e1916af`).
+
+Depois dele só entrou o registro deste hash nos documentos (PR #12, só `.md`, que por
+configuração não dispara a CI). Para conferir o topo atual:
 
 ```
 git fetch origin && git log --oneline -1 origin/main
