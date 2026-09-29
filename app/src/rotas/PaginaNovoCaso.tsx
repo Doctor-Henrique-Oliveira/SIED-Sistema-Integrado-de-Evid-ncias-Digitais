@@ -6,7 +6,7 @@ import { useCriarCaso, useInfoApp } from "../api/consultas";
 import { Botao } from "../componentes/Botao";
 import { AreaTexto, Campo } from "../componentes/Campo";
 import { Aviso, Cabecalho, Cartao } from "../componentes/Estrutura";
-import { ouNulo } from "../util/formatar";
+import { ouNulo, servicoDeNuvem } from "../util/formatar";
 
 const vazio = {
   procedimento: "",
@@ -35,6 +35,9 @@ export function PaginaNovoCaso() {
     onChange: (e: { target: { value: string } }) => setForm((f) => ({ ...f, [nome]: e.target.value })),
     erro: erro(nome),
   });
+
+  const pastaExibida = pastaBase ?? info.data?.pasta_casos_padrao ?? null;
+  const nuvem = pastaExibida ? servicoDeNuvem(pastaExibida) : null;
 
   async function escolherPasta() {
     const p = await open({ directory: true, title: "Pasta onde os casos serão criados" });
@@ -98,12 +101,21 @@ export function PaginaNovoCaso() {
           <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
             <div className="min-w-0">
               <p className="text-texto-2">O caso será criado numa nova pasta dentro de:</p>
-              <p className="truncate font-mono text-xs text-texto">{pastaBase ?? info.data?.pasta_casos_padrao ?? "…"}</p>
+              <p className="truncate font-mono text-xs text-texto">{pastaExibida ?? "…"}</p>
             </div>
             <Botao variante="secundario" onClick={escolherPasta}>
               Alterar pasta…
             </Botao>
           </div>
+          {nuvem && (
+            <div className="mt-3">
+              <Aviso tipo="atencao">
+                Esta pasta parece sincronizada com o {nuvem}. Os dados do caso seriam copiados para fora desta estação,
+                e a sincronização pode danificar o banco do caso enquanto ele está aberto. Prefira uma pasta local, como
+                C:\SIED\Casos.
+              </Aviso>
+            </div>
+          )}
         </Cartao>
       </div>
 

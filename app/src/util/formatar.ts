@@ -134,3 +134,19 @@ export function extensao(caminho: string): string {
 export function nomeArquivo(caminho: string): string {
   return caminho.split(/[\\/]/).pop() ?? caminho;
 }
+
+/**
+ * Serviço de nuvem que sincroniza a pasta, pelo nome de algum componente do caminho
+ * (no Windows 11 a pasta Documentos costuma ficar dentro do OneDrive). `null` quando
+ * parece local.
+ */
+export function servicoDeNuvem(caminho: string): string | null {
+  for (const parte of caminho.split(/[\\/]/)) {
+    const p = parte.toLowerCase();
+    if (p === "onedrive" || p.startsWith("onedrive - ")) return "OneDrive";
+    if (p === "dropbox" || p.startsWith("dropbox (")) return "Dropbox";
+    if (p === "google drive" || p === "googledrive" || p === "meu drive" || p === "my drive") return "Google Drive";
+    if (p === "iclouddrive" || p === "icloud drive") return "iCloud";
+  }
+  return null;
+}
