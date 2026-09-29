@@ -60,7 +60,7 @@ pub fn data_ms(l: &Linha, c: &str) -> Option<DataHora> {
     let v = l.get(c)?;
     let ms = inteiro(l, c).filter(|&ms| ms > 0)?;
     Some(DataHora {
-        utc_ms: Some(ms),
+        utc_ms: DataHora::ms_plausivel(ms),
         original: match v {
             Value::String(s) => s.clone(),
             outro => outro.to_string(),

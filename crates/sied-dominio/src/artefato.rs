@@ -83,6 +83,19 @@ pub struct DataHora {
     pub formato: FormatoData,
 }
 
+impl DataHora {
+    /// Último milissegundo de 31/12/9999 UTC. Acima disso a data não é exibível (o
+    /// JavaScript não representa depois de 275760 e as bibliotecas de data recusam).
+    pub const UTC_MS_MAXIMO: i64 = 253_402_300_799_999;
+
+    /// `utc_ms` só para valores plausíveis (depois de 1970 e até 9999). Fora disso o
+    /// parser deixa `utc_ms` vazio e guarda o valor em `original`: prefira "não sei" a
+    /// inventar uma data.
+    pub fn ms_plausivel(ms: i64) -> Option<i64> {
+        (ms > 0 && ms <= Self::UTC_MS_MAXIMO).then_some(ms)
+    }
+}
+
 /// Onde, dentro do arquivo de origem, o dado foi lido.
 ///
 /// O parser preenche isto. O pipeline completa com o que o parser não sabe
@@ -277,6 +290,22 @@ mod testes {
             let volta: f64 = serde_json::from_str(&txt).unwrap();
             assert_eq!(f.to_bits(), volta.to_bits(), "{txt}");
         }
+    }
+
+    #[test]
+    fn data_plausivel_so_entre_1970_e_9999() {
+        assert_eq!(
+            DataHora::ms_plausivel(1_767_225_600_000),
+            Some(1_767_225_600_000)
+        );
+        assert_eq!(DataHora::ms_plausivel(0), None);
+        assert_eq!(DataHora::ms_plausivel(-1), None);
+        assert_eq!(
+            DataHora::ms_plausivel(DataHora::UTC_MS_MAXIMO),
+            Some(DataHora::UTC_MS_MAXIMO)
+        );
+        assert_eq!(DataHora::ms_plausivel(DataHora::UTC_MS_MAXIMO + 1), None);
+        assert_eq!(DataHora::ms_plausivel(i64::MAX), None);
     }
 
     #[test]

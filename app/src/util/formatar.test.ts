@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   bytes,
   dataHora,
+  dataHoraMs,
+  dia,
   duracao,
   extensao,
   hora,
@@ -76,5 +78,14 @@ describe("duração e caminhos", () => {
     expect(servicoDeNuvem("C:\\Users\\a\\Documents\\SIED\\Casos")).toBeNull();
     expect(servicoDeNuvem("C:\\SIED\\OneDriveAntigo\\Casos")).toBeNull();
     expect(servicoDeNuvem("/home/a/SIED/Casos")).toBeNull();
+  });
+
+  it("data fora do intervalo do JavaScript não derruba a tela", () => {
+    for (const ms of [9e15, 9223372036854775807, -9e15]) {
+      expect(dataHoraMs(ms)).toContain("fora do intervalo");
+      expect(hora(ms)).toContain("fora do intervalo");
+      expect(dia(ms)).toContain("fora do intervalo");
+    }
+    expect(dataHoraMs(1767225600000)).toBe("31/12/2025, 21:00:00");
   });
 });

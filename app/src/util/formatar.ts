@@ -55,7 +55,20 @@ export function identificacaoCaso(c: {
 
 /** Data a partir de milissegundos UTC, no fuso do caso. */
 export function dataHoraMs(ms: number | null | undefined, fuso: string = FUSO_PADRAO): string {
-  return ms == null ? "—" : dataHora(new Date(ms).toISOString(), fuso);
+  if (ms == null) return "—";
+  const d = dataValida(ms);
+  return d ? dataHora(d.toISOString(), fuso) : foraDoIntervalo(ms);
+}
+
+/** `Date` exibível, ou `null` (fora de ±8,64e15 ms o JavaScript dá "Invalid Date", e
+ *  formatá-la lança exceção e derrubaria a tela inteira). */
+function dataValida(ms: number): Date | null {
+  const d = new Date(ms);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function foraDoIntervalo(ms: number): string {
+  return `data fora do intervalo (${ms})`;
 }
 
 /** Tamanho de arquivo (unidades decimais, como o Windows Explorer usa KB/MB). */
@@ -69,23 +82,27 @@ export function numero(n: number | null | undefined): string {
 
 /** Dia por extenso no fuso do caso, para os separadores da conversa. */
 export function dia(ms: number, fuso: string = FUSO_PADRAO): string {
+  const d = dataValida(ms);
+  if (!d) return foraDoIntervalo(ms);
   return new Intl.DateTimeFormat("pt-BR", {
     timeZone: fuso,
     weekday: "long",
     day: "2-digit",
     month: "long",
     year: "numeric",
-  }).format(new Date(ms));
+  }).format(d);
 }
 
 /** Hora com segundos no fuso do caso (o segundo importa em análise forense). */
 export function hora(ms: number, fuso: string = FUSO_PADRAO): string {
+  const d = dataValida(ms);
+  if (!d) return foraDoIntervalo(ms);
   return new Intl.DateTimeFormat("pt-BR", {
     timeZone: fuso,
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
-  }).format(new Date(ms));
+  }).format(d);
 }
 
 /** Início de um dia (AAAA-MM-DD) no fuso do caso, em ms UTC. `fim` pega o último ms do dia. */
