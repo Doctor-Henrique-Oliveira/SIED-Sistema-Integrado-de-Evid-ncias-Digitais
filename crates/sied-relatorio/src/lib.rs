@@ -134,13 +134,39 @@ fn livre(pasta: &Path, base: &str) -> (String, PathBuf) {
     }
 }
 
-/// Grava num arquivo temporário e renomeia: nunca fica um PDF pela metade.
+/// Grava num arquivo temporário e renomeia: nunca fica um PDF pela metade. Se algo
+/// falhar (disco cheio, sem permissão), o temporário é apagado.
 fn gravar(destino: &Path, bytes: &[u8]) -> std::io::Result<()> {
     let tmp = destino.with_extension("parcial");
-    {
+    let r = (|| {
         let mut f = fs::File::create(&tmp)?;
         f.write_all(bytes)?;
         f.sync_all()?;
+        drop(f);
+        fs::rename(&tmp, destino)
+    })();
+    if r.is_err() {
+        let _ = fs::remove_file(&tmp);
     }
-    fs::rename(&tmp, destino)
+    r
+}
+
+#[cfg(test)]
+mod testes {
+    use super::*;
+
+    #[test]
+    fn falha_ao_gravar_nao_deixa_temporario() {
+        let dir = tempfile::tempdir().unwrap();
+        // Um diretório no lugar do destino faz a renomeação falhar.
+        let destino = dir.path().join("x_relatorio.pdf");
+        fs::create_dir(&destino).unwrap();
+        assert!(gravar(&destino, b"%PDF-sintetico").is_err());
+        assert!(!dir.path().join("x_relatorio.parcial").exists());
+
+        let bom = dir.path().join("y_relatorio.pdf");
+        gravar(&bom, b"%PDF-sintetico").unwrap();
+        assert_eq!(fs::read(&bom).unwrap(), b"%PDF-sintetico");
+        assert!(!dir.path().join("y_relatorio.parcial").exists());
+    }
 }
