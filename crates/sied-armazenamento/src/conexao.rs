@@ -1,3 +1,4 @@
+use rusqlite::functions::FunctionFlags;
 use rusqlite::{Connection, OpenFlags};
 use std::path::Path;
 use std::time::Duration;
@@ -30,6 +31,42 @@ pub(crate) fn corrompido_em(e: ErroArmazenamento, caminho: &Path) -> ErroArmazen
         ErroArmazenamento::Sqlite(s) => corrompido(s, caminho),
         outro => outro,
     }
+}
+
+/// Forma de comparação dos filtros de texto (conversas, arquivos, identificadores):
+/// minúsculas e sem acentos, como a busca geral (FTS5 com `remove_diacritics`).
+/// O `lower()` do SQLite só troca letras ASCII: "JOSÉ" virava "josÉ" e não casava.
+pub fn normalizar_busca(t: &str) -> String {
+    use unicode_normalization::char::is_combining_mark;
+    use unicode_normalization::UnicodeNormalization;
+    t.nfd()
+        .filter(|c| !is_combining_mark(*c))
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+/// `sied_normal(x)`: [`normalizar_busca`] nas consultas. Usada só em consultas, nunca
+/// no esquema (gatilhos, índices, visões): o banco do caso continua legível por
+/// qualquer ferramenta SQLite.
+fn registrar_funcoes(conn: &Connection) -> rusqlite::Result<()> {
+    conn.create_scalar_function(
+        "sied_normal",
+        1,
+        FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC,
+        |ctx| {
+            Ok(match ctx.get_raw(0) {
+                rusqlite::types::ValueRef::Text(t) => {
+                    Some(normalizar_busca(&String::from_utf8_lossy(t)))
+                }
+                rusqlite::types::ValueRef::Null => None,
+                outro => Some(normalizar_busca(&match outro {
+                    rusqlite::types::ValueRef::Integer(i) => i.to_string(),
+                    rusqlite::types::ValueRef::Real(f) => f.to_string(),
+                    _ => String::new(),
+                })),
+            })
+        },
+    )
 }
 
 /// Abre um banco de trabalho do SIED (nunca um banco da evidência) com as
@@ -74,5 +111,18 @@ pub(crate) fn abrir(caminho: &Path, tipo: &TipoBanco, abertura: Abertura) -> Res
     conn.pragma_update(None, "journal_mode", "WAL")?;
     // FULL: cada transação confirmada sobrevive a queda de energia.
     conn.pragma_update(None, "synchronous", "FULL")?;
+    registrar_funcoes(&conn)?;
     Ok(conn)
+}
+
+#[cfg(test)]
+mod testes {
+    use super::normalizar_busca;
+
+    #[test]
+    fn minusculas_sem_acento() {
+        assert_eq!(normalizar_busca("JOSÉ Ção Ü ñ"), "jose cao u n");
+        assert_eq!(normalizar_busca("ÁRVORE"), normalizar_busca("arvore"));
+        assert_eq!(normalizar_busca("+55 (11) 9"), "+55 (11) 9");
+    }
 }

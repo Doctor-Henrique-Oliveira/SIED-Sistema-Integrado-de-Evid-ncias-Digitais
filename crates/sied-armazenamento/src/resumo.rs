@@ -147,8 +147,8 @@ pub fn identificadores(
                            AND r.tipo = 'contato' AND r.id_externo = p.identificador
                            AND r.conteudo IS NOT NULL ORDER BY r.id LIMIT 1) AS nome
                 FROM conversa_participante p JOIN conversa c ON c.id = p.conversa_id) x
-                WHERE ?1 IS NULL OR instr(lower(x.identificador), lower(?1)) > 0
-                   OR instr(lower(coalesce(x.nome, '')), lower(?1)) > 0";
+                WHERE ?1 IS NULL OR instr(sied_normal(x.identificador), sied_normal(?1)) > 0
+                   OR instr(sied_normal(coalesce(x.nome, '')), sied_normal(?1)) > 0";
     let total: i64 = conn.query_row(
         &format!("SELECT COUNT(*) FROM (SELECT DISTINCT x.app, x.identificador {base})"),
         params![texto],

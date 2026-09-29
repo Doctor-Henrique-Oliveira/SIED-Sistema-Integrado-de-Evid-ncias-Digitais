@@ -18,6 +18,7 @@ sied-ingestao.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 ts-rs.workspace = true
+unicode-normalization.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]

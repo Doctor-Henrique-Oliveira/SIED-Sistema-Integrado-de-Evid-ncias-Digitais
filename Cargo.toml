@@ -18,13 +18,15 @@ publish = false
 [workspace.dependencies]
 chrono = { version = "0.4", features = ["serde"] }
 hex = "0.4"
-rusqlite = { version = "0.32", features = ["bundled"] }
+# functions: sied_normal (minúsculas e sem acento, em Rust) nas consultas de filtro.
+rusqlite = { version = "0.32", features = ["bundled", "functions"] }
 serde = { version = "1", features = ["derive"] }
 # float_roundtrip: números reais relidos do banco do caso voltam idênticos, bit a bit,
 # para que o hash_registro possa ser recalculado (ver NovoArtefato::hash_registro).
 serde_json = { version = "1", features = ["float_roundtrip"] }
 sha2 = "0.10"
 thiserror = "2"
+unicode-normalization = "0.1"
 tracing = "0.1"
 ts-rs = { version = "10", features = ["uuid-impl", "chrono-impl", "serde-json-impl"] }
 uuid = { version = "1", features = ["v7", "serde"] }

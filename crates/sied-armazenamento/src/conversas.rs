@@ -199,19 +199,19 @@ fn condicoes(f: &FiltroConversas) -> (String, Vec<ValorSql>) {
         sql.push_str(" AND c.com_anexo > 0");
     }
     if let Some(t) = f.texto.as_deref().map(str::trim).filter(|t| !t.is_empty()) {
-        v.push(ValorSql::Text(t.to_lowercase()));
+        v.push(ValorSql::Text(crate::normalizar_busca(t)));
         let n = v.len();
         let mut ou = format!(
-            "instr(lower(c.id_externo), ?{n}) > 0
+            "instr(sied_normal(c.id_externo), ?{n}) > 0
              OR EXISTS (SELECT 1 FROM artefato r
                 WHERE r.extracao_id = c.extracao_id AND r.app = c.app
                   AND r.tipo IN ('conversa', 'contato') AND r.id_externo = c.id_externo
-                  AND instr(lower(r.conteudo), ?{n}) > 0)
+                  AND instr(sied_normal(r.conteudo), ?{n}) > 0)
              OR EXISTS (SELECT 1 FROM conversa_participante p WHERE p.conversa_id = c.id
-                AND (instr(lower(p.identificador), ?{n}) > 0
+                AND (instr(sied_normal(p.identificador), ?{n}) > 0
                   OR EXISTS (SELECT 1 FROM artefato r
                     WHERE r.extracao_id = c.extracao_id AND r.app = c.app AND r.tipo = 'contato'
-                      AND r.id_externo = p.identificador AND instr(lower(r.conteudo), ?{n}) > 0)))"
+                      AND r.id_externo = p.identificador AND instr(sied_normal(r.conteudo), ?{n}) > 0)))"
         );
         if let Some(d) = digitos_telefone(t) {
             v.push(ValorSql::Text(d));
@@ -364,15 +364,15 @@ pub struct PosicaoMensagem {
     pub posicao: i64,
 }
 
-/// Mensagens da conversa cujo texto contém `termo` (sem diferenciar maiúsculas
-/// ASCII), em ordem; `total` conta todas, `itens` traz até `limite`.
+/// Mensagens da conversa cujo texto contém `termo` (sem diferenciar maiúsculas nem
+/// acentos, ver [`crate::normalizar_busca`]), em ordem; `total` conta todas, `itens` traz até `limite`.
 pub fn localizar(
     conn: &Connection,
     conversa_id: i64,
     termo: &str,
     limite: i64,
 ) -> Resultado<Pagina<PosicaoMensagem>> {
-    let termo = termo.trim().to_lowercase();
+    let termo = crate::normalizar_busca(termo.trim());
     if termo.is_empty() {
         return Ok(Pagina {
             total: 0,
@@ -385,12 +385,12 @@ pub fn localizar(
          FROM artefato a WHERE {DA_CONVERSA}"
     );
     let total: i64 = conn.query_row(
-        &format!("SELECT COUNT(*) FROM ({base}) WHERE instr(lower(conteudo), ?4) > 0"),
+        &format!("SELECT COUNT(*) FROM ({base}) WHERE instr(sied_normal(conteudo), ?4) > 0"),
         params![x, app, id, termo],
         |r| r.get(0),
     )?;
     let mut stmt = conn.prepare(&format!(
-        "SELECT id, posicao FROM ({base}) WHERE instr(lower(conteudo), ?4) > 0
+        "SELECT id, posicao FROM ({base}) WHERE instr(sied_normal(conteudo), ?4) > 0
          ORDER BY posicao LIMIT ?5"
     ))?;
     let itens = stmt
