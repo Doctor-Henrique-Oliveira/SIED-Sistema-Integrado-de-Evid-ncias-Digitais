@@ -184,9 +184,13 @@ impl NovoArtefato {
     }
 
     /// Ajusta o que o banco do caso não preservaria, para que o artefato gravado seja
-    /// idêntico ao artefato do hash: uma coluna REAL do SQLite guarda -0.0 como 0.
-    /// Chamado pelo pipeline antes de calcular o hash.
+    /// idêntico ao artefato do hash: uma coluna REAL do SQLite guarda -0.0 como 0; e
+    /// app vazio vira ausente (a conversa derivada não distingue os dois, e as
+    /// consultas de conversa contam com isso). Chamado pelo pipeline antes do hash.
     pub fn normalizar(&mut self) {
+        if self.app.as_deref() == Some("") {
+            self.app = None;
+        }
         for v in [&mut self.latitude, &mut self.longitude]
             .into_iter()
             .flatten()
@@ -276,7 +280,7 @@ mod testes {
     }
 
     #[test]
-    fn normalizar_troca_zero_negativo() {
+    fn normalizar_troca_zero_negativo_e_app_vazio() {
         let origem = ReferenciaRegistro {
             papel_arquivo: "x".into(),
             tabela: None,
@@ -288,8 +292,13 @@ mod testes {
         let mut a = NovoArtefato::novo(TipoArtefato::Localizacao, origem);
         a.latitude = Some(-0.0);
         a.longitude = Some(-23.5);
+        a.app = Some(String::new());
         a.normalizar();
         assert!(a.latitude.unwrap().is_sign_positive());
         assert_eq!(a.longitude, Some(-23.5));
+        assert_eq!(a.app, None);
+        a.app = Some("sms".into());
+        a.normalizar();
+        assert_eq!(a.app.as_deref(), Some("sms"));
     }
 }

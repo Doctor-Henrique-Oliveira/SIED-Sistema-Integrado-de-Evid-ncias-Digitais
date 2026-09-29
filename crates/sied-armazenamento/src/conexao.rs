@@ -39,6 +39,9 @@ pub(crate) fn corrompido_em(e: ErroArmazenamento, caminho: &Path) -> ErroArmazen
 pub fn normalizar_busca(t: &str) -> String {
     use unicode_normalization::char::is_combining_mark;
     use unicode_normalization::UnicodeNormalization;
+    if t.is_ascii() {
+        return t.to_ascii_lowercase();
+    }
     t.nfd()
         .filter(|c| !is_combining_mark(*c))
         .flat_map(char::to_lowercase)
@@ -124,5 +127,6 @@ mod testes {
         assert_eq!(normalizar_busca("JOSÉ Ção Ü ñ"), "jose cao u n");
         assert_eq!(normalizar_busca("ÁRVORE"), normalizar_busca("arvore"));
         assert_eq!(normalizar_busca("+55 (11) 9"), "+55 (11) 9");
+        assert_eq!(normalizar_busca("Mensagem ABC"), "mensagem abc");
     }
 }

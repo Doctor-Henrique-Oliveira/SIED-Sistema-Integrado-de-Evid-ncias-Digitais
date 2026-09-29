@@ -70,8 +70,8 @@ pub struct Conversa {
 const COLUNAS: &str = "c.id, c.extracao_id, c.app, c.id_externo, c.total_mensagens, c.enviadas,
     c.com_anexo, c.primeira_ms, c.ultima_ms,
     (SELECT COUNT(*) FROM conversa_participante p WHERE p.conversa_id = c.id),
-    (SELECT coalesce(a.conteudo, a.nome_arquivo) FROM artefato a
-      WHERE a.extracao_id = c.extracao_id AND coalesce(a.app, '') = c.app
+    (SELECT coalesce(a.conteudo, a.nome_arquivo) FROM artefato a INDEXED BY idx_artefato_conversa
+      WHERE a.extracao_id = c.extracao_id AND a.app IS nullif(c.app, '')
         AND a.conversa_id_externo = c.id_externo
       ORDER BY a.data_hora_ms DESC, a.id DESC LIMIT 1),
     coalesce(
@@ -285,8 +285,19 @@ pub fn obter(conn: &Connection, conversa_id: i64) -> Resultado<Conversa> {
 }
 
 /// Os registros de uma conversa: mesma extração, mesmo app, mesmo id externo.
+///
+/// `a.app IS nullif(?2, '')` equivale a `coalesce(a.app, '') = ?2` (a conversa guarda
+/// app vazio quando o artefato não tem app, e o pipeline nunca grava app vazio, ver
+/// `NovoArtefato::normalizar`), mas usa o índice `idx_artefato_conversa`: com
+/// `coalesce` o SQLite percorria todos os artefatos da extração a cada conversa.
 const DA_CONVERSA: &str =
-    "a.extracao_id = ?1 AND coalesce(a.app, '') = ?2 AND a.conversa_id_externo = ?3";
+    "a.extracao_id = ?1 AND a.app IS nullif(?2, '') AND a.conversa_id_externo = ?3";
+
+/// Artefatos lidos pela chave da conversa. Sem estatísticas (`ANALYZE`), o SQLite
+/// empatava este índice com `idx_artefato_id_externo (extracao_id, app)` e escolhia o
+/// segundo, percorrendo a extração inteira para abrir até uma conversa de 20
+/// mensagens (~100 ms com 200 mil mensagens; 0,1 ms com o índice certo).
+const ARTEFATOS_DA_CONVERSA: &str = "artefato a INDEXED BY idx_artefato_conversa";
 
 /// Ordem cronológica; sem data vão para o fim, pelo id. A posição de uma mensagem
 /// (usada para rolar a lista até ela) segue esta mesma ordem.
@@ -311,12 +322,12 @@ pub fn mensagens(
 ) -> Resultado<Pagina<ArtefatoResumo>> {
     let (x, app, id) = chave(conn, conversa_id)?;
     let total: i64 = conn.query_row(
-        &format!("SELECT COUNT(*) FROM artefato a WHERE {DA_CONVERSA}"),
+        &format!("SELECT COUNT(*) FROM {ARTEFATOS_DA_CONVERSA} WHERE {DA_CONVERSA}"),
         params![x, app, id],
         |r| r.get(0),
     )?;
     let mut stmt = conn.prepare(&format!(
-        "SELECT {COLUNAS_RESUMO} FROM artefato a WHERE {DA_CONVERSA}
+        "SELECT {COLUNAS_RESUMO} FROM {ARTEFATOS_DA_CONVERSA} WHERE {DA_CONVERSA}
          ORDER BY {ORDEM_MENSAGENS} LIMIT ?4 OFFSET ?5"
     ))?;
     let itens = stmt
@@ -343,7 +354,7 @@ pub fn posicao_mensagem(
     let Some(ms) = alvo else { return Ok(None) };
     let antes: i64 = conn.query_row(
         &format!(
-            "SELECT COUNT(*) FROM artefato a WHERE {DA_CONVERSA} AND CASE
+            "SELECT COUNT(*) FROM {ARTEFATOS_DA_CONVERSA} WHERE {DA_CONVERSA} AND CASE
                WHEN ?4 IS NULL THEN a.data_hora_ms IS NOT NULL OR a.id < ?5
                ELSE a.data_hora_ms IS NOT NULL
                     AND (a.data_hora_ms < ?4 OR (a.data_hora_ms = ?4 AND a.id < ?5)) END"
@@ -382,7 +393,7 @@ pub fn localizar(
     let (x, app, id) = chave(conn, conversa_id)?;
     let base = format!(
         "SELECT a.id, a.conteudo, ROW_NUMBER() OVER (ORDER BY {ORDEM_MENSAGENS}) - 1 AS posicao
-         FROM artefato a WHERE {DA_CONVERSA}"
+         FROM {ARTEFATOS_DA_CONVERSA} WHERE {DA_CONVERSA}"
     );
     let total: i64 = conn.query_row(
         &format!("SELECT COUNT(*) FROM ({base}) WHERE instr(sied_normal(conteudo), ?4) > 0"),
@@ -455,7 +466,7 @@ pub fn trecho(conn: &Connection, inicio_id: i64, fim_id: i64) -> Resultado<Trech
     let base = format!(
         "SELECT {COLUNAS_RESUMO}, a.hash_registro,
                 ROW_NUMBER() OVER (ORDER BY {ORDEM_MENSAGENS}) AS posicao
-         FROM artefato a WHERE {DA_CONVERSA}"
+         FROM {ARTEFATOS_DA_CONVERSA} WHERE {DA_CONVERSA}"
     );
     let posicao = |alvo: i64| -> Resultado<i64> {
         Ok(conn.query_row(
