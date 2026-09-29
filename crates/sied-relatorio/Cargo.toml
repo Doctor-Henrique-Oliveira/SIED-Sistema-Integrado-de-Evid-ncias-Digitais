@@ -1,0 +1,12 @@
+[package]
+name = "sied-relatorio"
+description = "Relatório PDF do SIED: evidências selecionadas, hashes, origem e cadeia de custódia, diagramados com Typst embutido (offline)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+typst = "0.15.1"
+typst-pdf = "0.15.1"
+typst-kit = { version = "0.15.1", default-features = false, features = ["embedded-fonts"] }

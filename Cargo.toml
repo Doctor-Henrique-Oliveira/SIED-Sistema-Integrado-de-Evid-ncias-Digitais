@@ -5,6 +5,7 @@ members = [
     "crates/sied-armazenamento",
     "crates/sied-ingestao",
     "crates/sied-midia",
+    "crates/sied-relatorio",
     "app/src-tauri",
 ]
 
