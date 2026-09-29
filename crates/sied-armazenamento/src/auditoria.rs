@@ -130,7 +130,40 @@ pub fn listar(conn: &Connection, limite: i64) -> Resultado<Vec<RegistroAuditoria
     Ok(linhas.collect::<Result<_, _>>()?)
 }
 
-/// Recalcula toda a cadeia e falha no primeiro registro inconsistente.
+/// Cada relatório guarda até onde a trilha ia (seq e hash) quando foi gerado, e esse
+/// ponto também está impresso no PDF. Se os registros finais forem apagados ou a
+/// trilha for reescrita inteira (fora do SIED, sem os gatilhos), a cadeia recalculada
+/// sozinha pode parecer íntegra; a âncora do relatório não confere mais.
+fn conferir_ancoras(conn: &Connection) -> Resultado<()> {
+    let mut stmt = conn.prepare(
+        "SELECT r.id, r.auditoria_ate_seq, r.auditoria_hash, a.hash
+         FROM relatorio r LEFT JOIN auditoria a ON a.seq = r.auditoria_ate_seq
+         ORDER BY r.id",
+    )?;
+    let mut linhas = stmt.query([])?;
+    while let Some(r) = linhas.next()? {
+        let id: i64 = r.get(0)?;
+        let seq: i64 = r.get(1)?;
+        let ancora: String = r.get(2)?;
+        let atual: Option<String> = r.get(3)?;
+        let motivo = match atual {
+            None => format!(
+                "o relatório de id {id} foi gerado com a trilha até este registro, que não \
+                 existe mais (registros apagados)"
+            ),
+            Some(h) if h != ancora => format!(
+                "o relatório de id {id} registrou outro hash para este registro (trilha \
+                 reescrita)"
+            ),
+            Some(_) => continue,
+        };
+        return Err(ErroArmazenamento::AuditoriaCorrompida { seq, motivo });
+    }
+    Ok(())
+}
+
+/// Recalcula toda a cadeia e falha no primeiro registro inconsistente. Confere também
+/// as âncoras gravadas pelos relatórios (ver [`conferir_ancoras`]).
 pub fn verificar(conn: &Connection) -> Resultado<VerificacaoAuditoria> {
     let mut stmt = conn
         .prepare("SELECT seq, ts, usuario, maquina, acao, detalhes, hash_anterior, hash FROM auditoria ORDER BY seq")?;
@@ -164,6 +197,8 @@ pub fn verificar(conn: &Connection) -> Resultado<VerificacaoAuditoria> {
         anterior_esperado = hash;
         seq_esperado += 1;
     }
+    drop(linhas);
+    conferir_ancoras(conn)?;
     Ok(VerificacaoAuditoria {
         registros: seq_esperado - 1,
         hash_final: anterior_esperado,

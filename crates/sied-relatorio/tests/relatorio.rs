@@ -235,6 +235,85 @@ fn trilha_de_auditoria_adulterada_impede_o_relatorio() {
     assert!(banco.relatorios().unwrap().is_empty());
 }
 
+/// Recalcula a cadeia inteira como faria quem a reescrevesse fora do SIED.
+fn reescrever_trilha(c: &Connection) {
+    use sha2::{Digest, Sha256};
+    let linhas: Vec<(i64, String, String, String, String, String)> = c
+        .prepare("SELECT seq, ts, usuario, maquina, acao, detalhes FROM auditoria ORDER BY seq")
+        .unwrap()
+        .query_map([], |r| {
+            Ok((
+                r.get(0)?,
+                r.get(1)?,
+                r.get(2)?,
+                r.get(3)?,
+                r.get(4)?,
+                r.get(5)?,
+            ))
+        })
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+    let mut anterior = sied_armazenamento::auditoria::HASH_GENESE.to_string();
+    for (seq, ts, usuario, maquina, acao, detalhes) in linhas {
+        let hash = hex::encode(Sha256::digest(
+            format!(
+                "{seq}\x1f{ts}\x1f{usuario}\x1f{maquina}\x1f{acao}\x1f{detalhes}\x1f{anterior}"
+            )
+            .as_bytes(),
+        ));
+        c.execute(
+            "UPDATE auditoria SET hash_anterior = ?1, hash = ?2 WHERE seq = ?3",
+            rusqlite::params![anterior, hash, seq],
+        )
+        .unwrap();
+        anterior = hash;
+    }
+}
+
+/// Apagar os registros finais da trilha, ou reescrevê-la inteira, deixa uma cadeia que
+/// sozinha parece íntegra; a âncora gravada pelo relatório denuncia.
+#[test]
+fn ancora_do_relatorio_denuncia_trilha_truncada_ou_reescrita() {
+    let agora = Utc.with_ymd_and_hms(2026, 3, 4, 15, 16, 17).unwrap();
+    for truncar in [true, false] {
+        let (_raiz, _origem, mut banco, x) = preparado();
+        marcar(&mut banco, &x);
+        let r = sied_relatorio::gerar_em(&mut banco, PedidoRelatorio::default(), agora).unwrap();
+        banco.verificar_auditoria().unwrap();
+        let c = Connection::open(banco.pasta().join(NOME_ARQUIVO_CASO)).unwrap();
+        if truncar {
+            c.execute_batch("DROP TRIGGER auditoria_sem_delete;")
+                .unwrap();
+            c.execute(
+                "DELETE FROM auditoria WHERE seq >= ?1",
+                [r.auditoria_ate_seq],
+            )
+            .unwrap();
+        } else {
+            c.execute_batch(
+                "DROP TRIGGER auditoria_sem_update;
+                 UPDATE auditoria SET detalhes = '{\"adulterado\":true}' WHERE seq = 2;",
+            )
+            .unwrap();
+            reescrever_trilha(&c);
+        }
+        drop(c);
+        match banco.verificar_auditoria() {
+            Err(sied_armazenamento::ErroArmazenamento::AuditoriaCorrompida { seq, motivo }) => {
+                assert_eq!(seq, r.auditoria_ate_seq);
+                let esperado = if truncar {
+                    "não existe mais"
+                } else {
+                    "reescrita"
+                };
+                assert!(motivo.contains(esperado), "{motivo}");
+            }
+            outro => panic!("esperava trilha corrompida (truncar={truncar}), veio {outro:?}"),
+        }
+    }
+}
+
 #[test]
 fn caso_sem_evidencias_gera_relatorio_so_com_as_secoes_escolhidas() {
     let (_raiz, _origem, mut banco, _x) = preparado();
