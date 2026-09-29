@@ -347,6 +347,9 @@ REAL infinito. Medições com volume em `tests/desempenho.rs` (ignoradas; ver o 
 23. (Auditoria) A verificação da trilha confere as âncoras gravadas por cada relatório.
 24. (Auditoria) Comandos Tauri assíncronos (`spawn_blocking`); `catch_unwind` no parser, no
     pipeline, na decodificação de imagem e no Typst.
+25. (Auditoria) Dependências sem informação de depuração nos builds de desenvolvimento e teste
+    (`[profile.dev.package."*"] debug = false`): os binários de teste com Typst caíram de ~530
+    para ~170 MB e a CI Linux deixou de ficar sem disco ao ligá-los.
 
 ## 8. Estrutura do banco e migrações
 

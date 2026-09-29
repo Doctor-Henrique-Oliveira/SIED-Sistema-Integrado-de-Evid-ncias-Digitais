@@ -74,6 +74,16 @@ falha sem a correção, conferido revertendo a mudança) e ficou com teste de re
 | B8 | Página da conversa de 100 mil mensagens 79–185 ms; localizar 0,5 s; busca por telefone 0,3 s com 200 mil. | Pendente (ver F1), documentado |
 | B9 | Trava do caso impede copiar a pasta **com o caso aberto** no Windows (arquivo travado); copiar com o caso aberto também perderia o `-wal`. | Documentado: copiar só com o caso fechado |
 
+### Problema encontrado na CI durante a auditoria
+
+Os testes Linux da CI falharam duas vezes **na ligação** dos binários de teste (`rust-lld`
+terminou com sinal 7, "Bus error"), não num teste: o disco do executor acabava. Cada binário de
+teste que liga o Typst tinha ~530 MB com depuração, e a auditoria acrescentou um. Correção:
+dependências sem informação de depuração nos perfis de desenvolvimento e teste
+(`Cargo.toml`, `[profile.dev.package."*"] debug = false`); os binários caíram para ~170 MB e a
+pasta `target/debug` local de 17 GB para 4,7 GB. Nenhum teste mudou; o código do workspace
+continua com depuração completa.
+
 ### Confirmados como corretos (com teste)
 
 - Injeção de sintaxe Typst no conteúdo (`#let`, `[`, `$`, `*`): vira texto literal.

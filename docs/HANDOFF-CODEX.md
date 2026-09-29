@@ -394,6 +394,10 @@ não capturado.
 - Mudanças só em `docs/**`, `*.md` ou `*.png` não disparam a CI (use `workflow_dispatch` se
   precisar).
 - O E2E **não** roda na CI (precisa de janela real); roda localmente (§29).
+- Builds de desenvolvimento e de teste compilam as **dependências sem informação de depuração**
+  (`[profile.dev.package."*"] debug = false` no `Cargo.toml`). Com depuração, cada binário de
+  teste que liga o Typst passava de 500 MB (hoje ~170 MB) e o disco do executor Linux acabava
+  no meio da ligação (`rust-lld` terminava com "Bus error").
 - Mudar gatilhos da CI ou o que os testes executam exige plano aprovado pelo usuário.
 
 ## 21. Testes
@@ -611,6 +615,9 @@ git fetch origin && git log --oneline -1 origin/main
 - **Não** faça merge na `main` sem CI Linux e Windows verde e sem aval do usuário; não apague
   branches sem confirmação; não reescreva histórico da `main`.
 - **Não** crie outro repositório.
+- **Não** reative a depuração das dependências no perfil `dev` nem crie binários de teste que
+  liguem o Typst à toa: o disco do executor Linux da CI é o limite (§20). Medição nova com
+  Typst vai como teste `#[ignore]` num arquivo de teste que já exista, se possível.
 - **Não** mostre dado fictício na interface: o que não tem backend fica oculto, desativado ou
   marcado como indisponível.
 - **Não** use `lower()` do SQLite para comparar texto do usuário (só ASCII); use `sied_normal`.

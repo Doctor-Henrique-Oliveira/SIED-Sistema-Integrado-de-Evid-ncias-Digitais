@@ -39,6 +39,13 @@ sied-ingestao = { path = "crates/sied-ingestao" }
 sied-midia = { path = "crates/sied-midia" }
 sied-relatorio = { path = "crates/sied-relatorio" }
 
+# Dependências (Typst, Tauri, image...) sem informação de depuração nos builds de
+# desenvolvimento e de teste: cada binário de teste que liga o Typst passava de 500 MB
+# e o disco do executor Linux da CI acabava no meio da ligação (rust-lld com "Bus
+# error"). O código do workspace continua com depuração completa.
+[profile.dev.package."*"]
+debug = false
+
 [profile.release]
 lto = true
 codegen-units = 1
