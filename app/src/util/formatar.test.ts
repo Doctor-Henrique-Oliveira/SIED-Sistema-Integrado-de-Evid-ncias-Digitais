@@ -78,6 +78,7 @@ describe("duração e caminhos", () => {
     expect(servicoDeNuvem("C:\\Users\\a\\Documents\\SIED\\Casos")).toBeNull();
     expect(servicoDeNuvem("C:\\SIED\\OneDriveAntigo\\Casos")).toBeNull();
     expect(servicoDeNuvem("/home/a/SIED/Casos")).toBeNull();
+    expect(servicoDeNuvem("\\\\servidor\\casos")).toBe("compartilhamento de rede");
   });
 
   it("data fora do intervalo do JavaScript não derruba a tela", () => {

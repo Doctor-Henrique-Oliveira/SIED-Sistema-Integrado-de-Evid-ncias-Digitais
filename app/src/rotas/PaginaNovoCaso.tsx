@@ -110,9 +110,9 @@ export function PaginaNovoCaso() {
           {nuvem && (
             <div className="mt-3">
               <Aviso tipo="atencao">
-                Esta pasta parece sincronizada com o {nuvem}. Os dados do caso seriam copiados para fora desta estação,
-                e a sincronização pode danificar o banco do caso enquanto ele está aberto. Prefira uma pasta local, como
-                C:\SIED\Casos.
+                Esta pasta parece estar em {nuvem === "compartilhamento de rede" ? "um" : "uma pasta do"} {nuvem}. Os
+                dados do caso sairiam desta estação, e a sincronização ou a rede podem danificar o banco do caso enquanto
+                ele está aberto. Prefira uma pasta local, como C:\SIED\Casos.
               </Aviso>
             </div>
           )}
