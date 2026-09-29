@@ -1,0 +1,258 @@
+//! Relatório PDF sobre uma extração **SINTÉTICA** (ver `testes/rust/caso_sintetico.rs`).
+
+#[path = "../../../testes/rust/caso_sintetico.rs"]
+mod comum;
+
+use chrono::{TimeZone, Utc};
+use comum::*;
+use rusqlite::Connection;
+use sied_armazenamento::caso::NOME_ARQUIVO_CASO;
+use sied_armazenamento::evidencias::NovaEvidencia;
+use sied_armazenamento::extracoes::Extracao;
+use sied_armazenamento::BancoCaso;
+use sied_relatorio::montagem;
+use sied_relatorio::{ErroRelatorio, PedidoRelatorio};
+use std::fs;
+use std::path::Path;
+
+/// Registro (foto sem imagem válida), trecho de 5 mensagens e a foto da câmera.
+fn marcar(banco: &mut BancoCaso, x: &Extracao) {
+    let msgs = mensagens_ana(banco);
+    let foto = mensagem(&msgs, "SINT0000000003").id;
+    banco
+        .adicionar_evidencia(NovaEvidencia {
+            artefato_id: Some(foto),
+            categoria: Some("Mensagens".into()),
+            observacao: Some("Observação sintética do analista.".into()),
+            ..Default::default()
+        })
+        .unwrap();
+    banco
+        .adicionar_evidencia(NovaEvidencia {
+            artefato_id: Some(msgs[0].id),
+            trecho_fim_id: Some(msgs[4].id),
+            descricao_contextual: Some("Trecho sintético usado no teste do relatório.".into()),
+            ..Default::default()
+        })
+        .unwrap();
+    banco
+        .adicionar_evidencia(NovaEvidencia {
+            arquivo_id: Some(id_arquivo(banco, x, CAMINHO_FOTO)),
+            titulo: Some("Foto sintética da câmera".into()),
+            ..Default::default()
+        })
+        .unwrap();
+}
+
+/// Para inspecionar o PDF à mão: `SIED_RELATORIO_SAIDA=/pasta cargo test -p sied-relatorio`.
+fn guardar(pdf: &Path, nome: &str) {
+    if let Ok(dir) = std::env::var("SIED_RELATORIO_SAIDA") {
+        fs::create_dir_all(&dir).unwrap();
+        fs::copy(pdf, Path::new(&dir).join(nome)).unwrap();
+    }
+}
+
+fn situacoes(banco: &BancoCaso) -> Vec<String> {
+    let auditoria = banco.verificar_auditoria().unwrap();
+    montagem::montar(banco, &PedidoRelatorio::default(), Utc::now(), &auditoria)
+        .unwrap()
+        .conferencias
+        .into_iter()
+        .map(|c| c.situacao)
+        .collect()
+}
+
+#[test]
+fn gera_pdf_com_sha256_registro_e_auditoria_sem_tocar_na_extracao() {
+    let (_raiz, origem, mut banco, x) = preparado();
+    marcar(&mut banco, &x);
+    let antes = retrato(&origem);
+    let seq_antes = banco.verificar_auditoria().unwrap();
+
+    let agora = Utc.with_ymd_and_hms(2026, 9, 29, 3, 4, 5).unwrap();
+    let r = sied_relatorio::gerar_em(
+        &mut banco,
+        PedidoRelatorio {
+            titulo: Some("Relatório sintético de teste".into()),
+            observacoes: Some("Observações gerais sintéticas.".into()),
+            conclusao: Some("Conclusão sintética.".into()),
+            ..Default::default()
+        },
+        agora,
+    )
+    .unwrap();
+
+    // Nome no fuso do caso (America/Sao_Paulo, UTC-3).
+    assert_eq!(r.caminho, "relatorios/2026-09-29_000405_relatorio.pdf");
+    let pdf = banco.pasta().join(&r.caminho);
+    let bytes = fs::read(&pdf).unwrap();
+    assert!(bytes.starts_with(b"%PDF-"));
+    assert_eq!(r.sha256, sha256(&pdf));
+    assert_eq!(r.tamanho, bytes.len() as i64);
+    assert_eq!(
+        fs::read_to_string(pdf.with_extension("pdf.sha256")).unwrap(),
+        format!("{}  2026-09-29_000405_relatorio.pdf\n", r.sha256)
+    );
+    assert_eq!(r.gerado_por, "analista.teste");
+    assert_eq!(r.auditoria_ate_seq, seq_antes.registros);
+    assert_eq!(r.auditoria_hash, seq_antes.hash_final);
+    let evs = r.evidencias.as_array().unwrap();
+    assert_eq!(evs.len(), 3);
+    assert!(evs.iter().all(|e| e["situacao"] == "conferida"), "{evs:?}");
+    guardar(&pdf, "relatorio-sintetico.pdf");
+
+    // Registrado e auditado; a trilha continua íntegra.
+    assert_eq!(banco.relatorios().unwrap().len(), 1);
+    let ultimo = &banco.auditoria(1).unwrap()[0];
+    assert_eq!(ultimo.acao, "relatorio_gerado");
+    assert_eq!(ultimo.detalhes["sha256"], r.sha256.as_str());
+    assert_eq!(ultimo.seq, seq_antes.registros + 1);
+    banco.verificar_auditoria().unwrap();
+
+    // Mesmo segundo: não sobrescreve o anterior.
+    let r2 = sied_relatorio::gerar_em(&mut banco, PedidoRelatorio::default(), agora).unwrap();
+    assert_eq!(r2.caminho, "relatorios/2026-09-29_000405_relatorio-2.pdf");
+    assert!(pdf.exists());
+    assert_eq!(banco.relatorios().unwrap().len(), 2);
+
+    // Nada gravado na extração; sem arquivos temporários na pasta de relatórios.
+    assert_eq!(retrato(&origem), antes, "a extração não pode mudar");
+    let nomes: Vec<String> = fs::read_dir(banco.pasta().join("relatorios"))
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(nomes.len(), 4, "{nomes:?}");
+    assert!(nomes
+        .iter()
+        .all(|n| n.ends_with(".pdf") || n.ends_with(".pdf.sha256")));
+
+    // O registro do relatório não muda nem some.
+    let c = Connection::open(banco.pasta().join(NOME_ARQUIVO_CASO)).unwrap();
+    assert!(c.execute("UPDATE relatorio SET sha256 = 'x'", []).is_err());
+    assert!(c.execute("DELETE FROM relatorio", []).is_err());
+}
+
+#[test]
+fn documento_traz_origem_custodia_e_figura_conferida() {
+    let (_raiz, _origem, mut banco, x) = preparado();
+    marcar(&mut banco, &x);
+    let auditoria = banco.verificar_auditoria().unwrap();
+    let m = montagem::montar(&banco, &PedidoRelatorio::default(), Utc::now(), &auditoria).unwrap();
+    let d = &m.documento;
+    assert_eq!(d.titulo, montagem::TITULO_PADRAO);
+    assert_eq!(d.identificacao, "IP 7/2026 (sintético)");
+    assert!(
+        d.fuso.starts_with("America/Sao_Paulo, UTC-03:00"),
+        "{}",
+        d.fuso
+    );
+    assert_eq!(d.dispositivos.len(), 1);
+    assert_eq!(d.extracoes.len(), 1);
+    assert!(d.extracoes[0]
+        .campos
+        .iter()
+        .any(|c| c.rotulo == "Hash do manifesto (SHA-256)"));
+    assert_eq!(d.evidencias.len(), 3);
+
+    let json = serde_json::to_value(d).unwrap();
+    let e = &json["evidencias"];
+    assert_eq!(e[0]["referencia"], "E-1");
+    assert_eq!(e[0]["conteudo"]["tipo"], "conversa");
+    // A foto da mensagem tem 64 bytes que não formam imagem: fica o motivo, sem figura.
+    let msg = &e[0]["conteudo"]["mensagens"][0];
+    assert!(msg["figura"].is_null());
+    let detalhes = msg["detalhes"].to_string();
+    assert!(detalhes.contains("não pôde ser decodificada"), "{detalhes}");
+    // Trecho: 5 mensagens, apêndice com uma linha por mensagem e o hash do trecho.
+    assert_eq!(e[1]["conteudo"]["mensagens"].as_array().unwrap().len(), 5);
+    assert_eq!(e[1]["origem"][0]["linhas"].as_array().unwrap().len(), 5);
+    assert!(e[1]["origem"][0]["campos"]
+        .to_string()
+        .contains("Hash do trecho"));
+    // Origem do registro: arquivo, tabela, parser e valores brutos.
+    let ref0 = &e[0]["origem"][0]["referencias"][0];
+    assert!(ref0["campos"].to_string().contains("msgstore.db"), "{ref0}");
+    assert!(ref0["valores_brutos"]
+        .as_str()
+        .unwrap()
+        .contains("key_id = \"SINT0000000003\""));
+    // Arquivo: figura conferida.
+    assert_eq!(e[2]["conteudo"]["tipo"], "arquivo");
+    assert!(e[2]["conteudo"]["figura"]["arquivo"].is_string());
+    assert_eq!(m.imagens.len(), 1);
+    assert!(m
+        .imagens
+        .values()
+        .next()
+        .unwrap()
+        .starts_with(&[0xFF, 0xD8]));
+    assert!(m.conferencias.iter().all(|c| c.situacao == "conferida"));
+}
+
+#[test]
+fn arquivo_alterado_diverge_e_pasta_ausente_fica_sem_conferencia() {
+    let (_raiz, origem, mut banco, x) = preparado();
+    marcar(&mut banco, &x);
+
+    // Alguém troca a foto na pasta da extração depois da importação.
+    let foto = origem.join(CAMINHO_FOTO);
+    let mut bytes = fs::read(&foto).unwrap();
+    let n = bytes.len();
+    bytes[n - 20] ^= 0xFF;
+    fs::write(&foto, &bytes).unwrap();
+    assert_eq!(situacoes(&banco), ["conferida", "conferida", "divergente"]);
+
+    let r = sied_relatorio::gerar(&mut banco, PedidoRelatorio::default()).unwrap();
+    assert_eq!(r.evidencias[2]["situacao"], "divergente");
+    guardar(&banco.pasta().join(&r.caminho), "relatorio-divergente.pdf");
+
+    // Disco da extração desconectado: registros conferem pelo banco do caso, o
+    // arquivo fica sem conferência (vale o SHA-256 do inventário).
+    fs::rename(&origem, origem.with_file_name("desconectada")).unwrap();
+    assert_eq!(
+        situacoes(&banco),
+        ["conferida", "conferida", "indisponivel"]
+    );
+}
+
+#[test]
+fn trilha_de_auditoria_adulterada_impede_o_relatorio() {
+    let (_raiz, _origem, mut banco, x) = preparado();
+    marcar(&mut banco, &x);
+    let pasta = banco.pasta().to_path_buf();
+    let c = Connection::open(pasta.join(NOME_ARQUIVO_CASO)).unwrap();
+    c.execute_batch(
+        "DROP TRIGGER auditoria_sem_update;
+         UPDATE auditoria SET detalhes = '{\"adulterado\":true}' WHERE seq = 2;",
+    )
+    .unwrap();
+    drop(c);
+    match sied_relatorio::gerar(&mut banco, PedidoRelatorio::default()) {
+        Err(ErroRelatorio::Auditoria(m)) => assert!(m.contains("registro 2"), "{m}"),
+        outro => panic!("esperava recusa pela auditoria, veio {outro:?}"),
+    }
+    assert!(!pasta.join("relatorios").exists());
+    assert!(banco.relatorios().unwrap().is_empty());
+}
+
+#[test]
+fn caso_sem_evidencias_gera_relatorio_so_com_as_secoes_escolhidas() {
+    let (_raiz, _origem, mut banco, _x) = preparado();
+    let r = sied_relatorio::gerar(
+        &mut banco,
+        PedidoRelatorio {
+            secoes: Some(sied_relatorio::SecoesRelatorio {
+                capa: false,
+                apendice_tecnico: false,
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(r.secoes["capa"], false);
+    assert!(r.evidencias.as_array().unwrap().is_empty());
+    assert!(fs::read(banco.pasta().join(&r.caminho))
+        .unwrap()
+        .starts_with(b"%PDF-"));
+}

@@ -14,10 +14,12 @@ pub mod caso;
 mod conexao;
 pub mod conversas;
 pub mod erro;
+pub mod evidencias;
 pub mod extracoes;
 pub mod global;
 pub mod importacao;
 pub mod migracoes;
+pub mod relatorios;
 pub mod resumo;
 pub mod sessao;
 

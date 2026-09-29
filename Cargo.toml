@@ -33,6 +33,7 @@ sied-dominio = { path = "crates/sied-dominio" }
 sied-armazenamento = { path = "crates/sied-armazenamento" }
 sied-ingestao = { path = "crates/sied-ingestao" }
 sied-midia = { path = "crates/sied-midia" }
+sied-relatorio = { path = "crates/sied-relatorio" }
 
 [profile.release]
 lto = true

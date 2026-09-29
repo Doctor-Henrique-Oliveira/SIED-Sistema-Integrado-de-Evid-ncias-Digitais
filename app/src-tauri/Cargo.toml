@@ -21,6 +21,7 @@ sied-armazenamento.workspace = true
 sied-dominio.workspace = true
 sied-ingestao.workspace = true
 sied-midia.workspace = true
+sied-relatorio.workspace = true
 tauri = { version = "2.12", features = [] }
 tauri-plugin-dialog = "2.8"
 thiserror.workspace = true

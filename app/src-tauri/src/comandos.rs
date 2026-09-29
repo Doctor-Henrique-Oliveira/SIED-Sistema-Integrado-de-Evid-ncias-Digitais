@@ -4,15 +4,18 @@
 use sied_armazenamento::auditoria::{RegistroAuditoria, VerificacaoAuditoria};
 use sied_armazenamento::busca::{FiltroBusca, ResultadoBusca};
 use sied_armazenamento::conversas::{AppConversas, Conversa, FiltroConversas, PosicaoMensagem};
+use sied_armazenamento::evidencias::{Evidencia, Marcacoes, NovaEvidencia, TextosEvidencia};
 use sied_armazenamento::extracoes::{
     ArquivoExtracao, ArtefatoDetalhe, ArtefatoResumo, ExecucaoParser, Extracao, Pagina,
     TotalCategoria,
 };
+use sied_armazenamento::relatorios::RelatorioRegistrado;
 use sied_armazenamento::resumo::{Identificador, ResumoCaso};
 use sied_armazenamento::CasoCatalogado;
 use sied_dominio::{CasoId, Dispositivo, DispositivoId, ExtracaoId, NovoCaso, NovoDispositivo};
 use sied_ingestao::importador::Deteccao;
 use sied_midia::Miniatura;
+use sied_relatorio::PedidoRelatorio;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::State;
@@ -299,4 +302,64 @@ pub fn listar_identificadores(
     limite: i64,
 ) -> ResultadoApp<Pagina<Identificador>> {
     estado.com(|s| s.listar_identificadores(texto, deslocamento, limite))
+}
+
+#[tauri::command]
+pub fn listar_evidencias(estado: State<'_, Estado>) -> ResultadoApp<Vec<Evidencia>> {
+    estado.com(|s| s.listar_evidencias())
+}
+
+#[tauri::command]
+pub fn marcacoes_evidencias(estado: State<'_, Estado>) -> ResultadoApp<Marcacoes> {
+    estado.com(|s| s.marcacoes())
+}
+
+#[tauri::command]
+pub fn adicionar_evidencia(
+    estado: State<'_, Estado>,
+    nova: NovaEvidencia,
+) -> ResultadoApp<Evidencia> {
+    estado.com(|s| s.adicionar_evidencia(nova))
+}
+
+#[tauri::command]
+pub fn alterar_evidencia(
+    estado: State<'_, Estado>,
+    id: i64,
+    textos: TextosEvidencia,
+) -> ResultadoApp<Evidencia> {
+    estado.com(|s| s.alterar_evidencia(id, textos))
+}
+
+#[tauri::command]
+pub fn mover_evidencia(
+    estado: State<'_, Estado>,
+    id: i64,
+    numero: i64,
+) -> ResultadoApp<Vec<Evidencia>> {
+    estado.com(|s| s.mover_evidencia(id, numero))
+}
+
+#[tauri::command]
+pub fn remover_evidencia(
+    estado: State<'_, Estado>,
+    id: i64,
+    motivo: Option<String>,
+) -> ResultadoApp<()> {
+    estado.com(|s| s.remover_evidencia(id, motivo))
+}
+
+#[tauri::command]
+pub fn listar_relatorios(estado: State<'_, Estado>) -> ResultadoApp<Vec<RelatorioRegistrado>> {
+    estado.com(|s| s.listar_relatorios())
+}
+
+/// Fora da thread principal (`async`): conferir os hashes, reler os arquivos e
+/// diagramar o PDF pode levar alguns segundos.
+#[tauri::command(async)]
+pub fn gerar_relatorio(
+    estado: State<'_, Estado>,
+    pedido: PedidoRelatorio,
+) -> ResultadoApp<RelatorioRegistrado> {
+    estado.com(|s| s.gerar_relatorio(pedido))
 }

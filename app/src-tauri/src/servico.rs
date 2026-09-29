@@ -6,10 +6,12 @@ use sied_armazenamento::auditoria::{RegistroAuditoria, VerificacaoAuditoria};
 use sied_armazenamento::busca::{FiltroBusca, ResultadoBusca};
 use sied_armazenamento::caso::{nome_pasta_sugerido, NOME_ARQUIVO_CASO};
 use sied_armazenamento::conversas::{AppConversas, Conversa, FiltroConversas, PosicaoMensagem};
+use sied_armazenamento::evidencias::{Evidencia, Marcacoes, NovaEvidencia, TextosEvidencia};
 use sied_armazenamento::extracoes::{
     ArquivoExtracao, ArtefatoDetalhe, ArtefatoResumo, ExecucaoParser, Extracao, Pagina,
     TotalCategoria,
 };
+use sied_armazenamento::relatorios::RelatorioRegistrado;
 use sied_armazenamento::resumo::{Identificador, ResumoCaso};
 use sied_armazenamento::{BancoCaso, CasoCatalogado, CatalogoGlobal, Sessao};
 use sied_dominio::{
@@ -20,6 +22,7 @@ use sied_ingestao::importador::{Deteccao, Suporte};
 use sied_ingestao::pipeline::{self, Controle, Progresso};
 use sied_ingestao::Registro;
 use sied_midia::Pedido as PedidoMiniatura;
+use sied_relatorio::PedidoRelatorio;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
@@ -528,6 +531,59 @@ impl Servico {
             deslocamento.max(0),
             limite.clamp(1, 500),
         )?)
+    }
+
+    // ------------------------------------------------------------ evidências
+
+    pub fn listar_evidencias(&mut self) -> ResultadoApp<Vec<Evidencia>> {
+        Ok(self.banco()?.evidencias()?)
+    }
+
+    pub fn marcacoes(&mut self) -> ResultadoApp<Marcacoes> {
+        Ok(self.banco()?.marcacoes()?)
+    }
+
+    pub fn adicionar_evidencia(&mut self, nova: NovaEvidencia) -> ResultadoApp<Evidencia> {
+        Ok(self.banco()?.adicionar_evidencia(nova)?)
+    }
+
+    pub fn alterar_evidencia(
+        &mut self,
+        id: i64,
+        textos: TextosEvidencia,
+    ) -> ResultadoApp<Evidencia> {
+        Ok(self.banco()?.alterar_evidencia(id, textos)?)
+    }
+
+    pub fn mover_evidencia(&mut self, id: i64, numero: i64) -> ResultadoApp<Vec<Evidencia>> {
+        Ok(self.banco()?.mover_evidencia(id, numero)?)
+    }
+
+    pub fn remover_evidencia(&mut self, id: i64, motivo: Option<String>) -> ResultadoApp<()> {
+        Ok(self.banco()?.remover_evidencia(id, motivo)?)
+    }
+
+    // ------------------------------------------------------------ relatórios
+
+    pub fn listar_relatorios(&mut self) -> ResultadoApp<Vec<RelatorioRegistrado>> {
+        Ok(self.banco()?.relatorios()?)
+    }
+
+    /// Gera o PDF em `<pasta do caso>/relatorios/` e o registra (com auditoria).
+    pub fn gerar_relatorio(
+        &mut self,
+        pedido: PedidoRelatorio,
+    ) -> ResultadoApp<RelatorioRegistrado> {
+        let banco = self.banco()?;
+        let inicio = std::time::Instant::now();
+        let r = sied_relatorio::gerar(banco, pedido)?;
+        tracing::info!(
+            relatorio = r.id,
+            caminho = %r.caminho,
+            ms = inicio.elapsed().as_millis() as u64,
+            "relatório gerado"
+        );
+        Ok(r)
     }
 
     /// Chamado ao encerrar o aplicativo.

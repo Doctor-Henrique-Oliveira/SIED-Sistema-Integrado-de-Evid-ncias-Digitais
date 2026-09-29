@@ -1,5 +1,5 @@
-// Módulos com a estrutura pronta e a funcionalidade ainda por vir: Localizações,
-// Consultas e Relatórios. Nenhum dado fictício: só o que o banco do caso já tem.
+// Módulos com a estrutura pronta e a funcionalidade ainda por vir: Localizações e
+// Consultas. Nenhum dado fictício: só o que o banco do caso já tem.
 // Configurações mostra, somente leitura, como esta estação está configurada.
 
 import type { ReactNode } from "react";
@@ -67,61 +67,6 @@ export function PaginaConsultas() {
         </>
       )}
     </ComCasoAberto>
-  );
-}
-
-export function PaginaRelatorios() {
-  return <ComCasoAberto>{(caso) => <Relatorios caso={caso} />}</ComCasoAberto>;
-}
-
-function Relatorios({ caso }: { caso: Caso }) {
-  const resumo = useResumoCaso(caso.id);
-  const r = resumo.data;
-  return (
-    <>
-      <Cabecalho
-        icone="relatorios"
-        sobre={identificacaoCaso(caso)}
-        titulo="Relatórios"
-        subtitulo="Relatório pericial em PDF, com hashes, metadados e cadeia de custódia."
-      />
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
-        <Indisponivel
-          titulo="Geração de relatório em PDF"
-          icone="relatorios"
-          previsto={[
-            "Identificação do caso e do procedimento",
-            "Dispositivos, extrações e SHA-256 dos manifestos",
-            "Registros escolhidos com a origem técnica completa",
-            "Trilha de auditoria (cadeia de custódia)",
-            "Versões do SIED, importadores e parsers",
-            "Geração local com Typst, sem internet",
-          ]}
-        >
-          A geração do PDF ainda não foi implementada. Os dados que o relatório vai usar já estão gravados com origem e hash no banco do
-          caso.
-        </Indisponivel>
-        <Cartao titulo="O que o caso já tem para o relatório" icone="lista">
-          {resumo.isPending ? (
-            <Carregando />
-          ) : r ? (
-            <Definicoes
-              colunas={2}
-              itens={[
-                ["Dispositivos", numero(r.dispositivos)],
-                ["Extrações", `${numero(r.extracoes)} (${numero(r.extracoes_concluidas)} concluídas)`],
-                ["Arquivos", numero(r.arquivos)],
-                ["Registros", numero(r.registros)],
-                ["Conversas", numero(r.conversas)],
-                ["Avisos", numero(r.avisos_parser)],
-              ]}
-            />
-          ) : (
-            <p className="text-[13px] text-texto-2">Números indisponíveis.</p>
-          )}
-        </Cartao>
-      </div>
-    </>
   );
 }
 

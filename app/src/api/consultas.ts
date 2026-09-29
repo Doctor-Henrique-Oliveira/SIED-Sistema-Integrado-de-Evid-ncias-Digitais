@@ -12,6 +12,9 @@ import {
   type FiltroConversas,
   type NovoCaso,
   type NovoDispositivo,
+  type NovaEvidencia,
+  type PedidoRelatorio,
+  type TextosEvidencia,
 } from "./cliente";
 
 export const chaves = {
@@ -28,6 +31,9 @@ export const chaves = {
   busca: (casoId: CasoId) => ["busca", casoId] as const,
   // Números do painel: mudam com dispositivos e importações.
   resumo: (casoId: CasoId) => ["resumo", casoId] as const,
+  // Lista de evidências e marcações (números "E-n" nas telas).
+  evidencias: (casoId: CasoId) => ["evidencias", casoId] as const,
+  relatorios: (casoId: CasoId) => ["relatorios", casoId] as const,
 };
 
 export function useInfoApp() {
@@ -288,5 +294,65 @@ export function useIdentificadores(casoId: CasoId, texto: string | null, desloca
     queryKey: [...chaves.conversas(casoId), "identificadores", texto, deslocamento, limite],
     queryFn: () => api.listarIdentificadores(texto, deslocamento, limite),
     placeholderData: keepPreviousData,
+  });
+}
+
+// ---------- Evidências e relatórios ----------
+
+export function useEvidencias(casoId: CasoId) {
+  return useQuery({ queryKey: [...chaves.evidencias(casoId), "lista"], queryFn: api.listarEvidencias });
+}
+
+export function useMarcacoes(casoId: CasoId) {
+  return useQuery({ queryKey: [...chaves.evidencias(casoId), "marcacoes"], queryFn: api.marcacoesEvidencias });
+}
+
+/** Após qualquer alteração: lista, marcações e trilha de auditoria. */
+function useAposEvidencia(casoId: CasoId) {
+  const qc = useQueryClient();
+  return () => {
+    void qc.invalidateQueries({ queryKey: chaves.evidencias(casoId) });
+    void qc.invalidateQueries({ queryKey: chaves.auditoria(casoId) });
+  };
+}
+
+export function useAdicionarEvidencia(casoId: CasoId) {
+  const apos = useAposEvidencia(casoId);
+  return useMutation({ mutationFn: (nova: NovaEvidencia) => api.adicionarEvidencia(nova), onSuccess: apos });
+}
+
+export function useAlterarEvidencia(casoId: CasoId) {
+  const apos = useAposEvidencia(casoId);
+  return useMutation({
+    mutationFn: (p: { id: number; textos: TextosEvidencia }) => api.alterarEvidencia(p.id, p.textos),
+    onSuccess: apos,
+  });
+}
+
+export function useMoverEvidencia(casoId: CasoId) {
+  const apos = useAposEvidencia(casoId);
+  return useMutation({ mutationFn: (p: { id: number; numero: number }) => api.moverEvidencia(p.id, p.numero), onSuccess: apos });
+}
+
+export function useRemoverEvidencia(casoId: CasoId) {
+  const apos = useAposEvidencia(casoId);
+  return useMutation({
+    mutationFn: (p: { id: number; motivo: string | null }) => api.removerEvidencia(p.id, p.motivo),
+    onSuccess: apos,
+  });
+}
+
+export function useRelatorios(casoId: CasoId) {
+  return useQuery({ queryKey: chaves.relatorios(casoId), queryFn: api.listarRelatorios });
+}
+
+export function useGerarRelatorio(casoId: CasoId) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (pedido: PedidoRelatorio) => api.gerarRelatorio(pedido),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: chaves.relatorios(casoId) });
+      void qc.invalidateQueries({ queryKey: chaves.auditoria(casoId) });
+    },
   });
 }

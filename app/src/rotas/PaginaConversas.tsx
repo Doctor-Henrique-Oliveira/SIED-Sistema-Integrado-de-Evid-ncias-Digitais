@@ -20,6 +20,7 @@ import {
 import { Aviso, Cabecalho, Carregando, entrada, Filtros, LinkBotao, SecaoRecolhivel, Selo, Vazio } from "../componentes/Estrutura";
 import { Icone } from "../componentes/Icone";
 import { MiniaturaArquivo } from "../componentes/Miniatura";
+import { BarraEvidencia, MarcasContexto, SeloEvidencia, useMarcas, useMarcasContexto } from "../componentes/Evidencias";
 import { PainelTecnico } from "../componentes/PainelTecnico";
 import { useListaPaginada } from "../util/listaPaginada";
 import { dataHoraMs, dia, hora, numero, tamanho } from "../util/formatar";
@@ -416,6 +417,8 @@ function Chat({
   const [localizar, setLocalizar] = useState("");
   const [achado, setAchado] = useState(0);
   const [carregados, setCarregados] = useState<ArtefatoResumo[]>([]);
+  const [inicioTrecho, setInicioTrecho] = useState<ArtefatoResumo | null>(null);
+  const marcas = useMarcas(caso.id);
   const navegar = useNavigate();
 
   // Conversa longa: as mensagens vêm por página conforme a rolagem, e localizar e
@@ -467,8 +470,10 @@ function Chat({
     if (destaque != null) navegar(`/casos/${caso.id}/conversas/${conversaId}`, { replace: true });
   };
 
+  const mensagemSelecionada = lista.find((m) => m.id === selecionado) ?? null;
+
   return (
-    <>
+    <MarcasContexto.Provider value={marcas}>
       <section aria-label="Chat" className="flex min-h-0 min-w-0 flex-col rounded-xl border border-borda bg-sup">
         <div className="flex flex-wrap items-center gap-3 border-b border-borda px-3.5 py-2.5">
           <Avatar c={c} grande />
@@ -522,6 +527,13 @@ function Chat({
             </span>
           )}
         </div>
+        <BarraEvidencia
+          key={selecionado ?? 0}
+          caso={caso}
+          selecionada={mensagemSelecionada}
+          inicio={inicioTrecho}
+          setInicio={setInicioTrecho}
+        />
         {mensagens.isPending ? (
           <div className="px-4">
             <Carregando />
@@ -566,7 +578,7 @@ function Chat({
           <PainelContexto
             caso={caso}
             c={c}
-            selecionada={lista.find((m) => m.id === selecionado) ?? null}
+            selecionada={mensagemSelecionada}
             abrirOrigem={() => setTecnica(true)}
             abrirRegistro={(id) => {
               setSelecionado(id);
@@ -575,7 +587,7 @@ function Chat({
           />
         )
       )}
-    </>
+    </MarcasContexto.Provider>
   );
 }
 
@@ -645,6 +657,7 @@ function Bolha({
   selecionar: (id: number) => void;
 }) {
   const enviada = m.de_mim === true;
+  const evidencias = useMarcasContexto().registros.get(m.id);
   const achado = termo !== "" && (m.conteudo ?? "").toLowerCase().includes(termo);
   const lazy = preguicoso ? "render-preguicoso " : "";
   if (m.subtipo === "sistema")
@@ -661,6 +674,11 @@ function Bolha({
         >
           {m.conteudo != null ? <ComDestaque texto={m.conteudo} termo={termo} /> : rotuloSubtipo("sistema")}
           <span className="tabular ml-2 text-[11px] text-texto-3">{m.data_hora_ms == null ? "—" : hora(m.data_hora_ms, caso.fuso_horario)}</span>
+          {evidencias && (
+            <span className="ml-2">
+              <SeloEvidencia numeros={evidencias} />
+            </span>
+          )}
         </button>
       </div>
     );
@@ -707,6 +725,7 @@ function Bolha({
         )}
         <p className="mt-1 flex items-center justify-end gap-2 text-[11px] text-texto-3">
           {daBusca && <span className="text-ouro-claro">resultado da busca</span>}
+          <SeloEvidencia numeros={evidencias} />
           {m.estado_registro !== "ativo" && <Selo tom="atencao">{nomeEstadoRegistro[m.estado_registro] ?? m.estado_registro}</Selo>}
           <span className="tabular">{m.data_hora_ms == null ? "—" : hora(m.data_hora_ms, caso.fuso_horario)}</span>
         </p>

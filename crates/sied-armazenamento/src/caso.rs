@@ -23,13 +23,15 @@ use std::path::{Path, PathBuf};
 
 use crate::auditoria::{self, RegistroAuditoria, VerificacaoAuditoria};
 use crate::busca::{self, FiltroBusca, ResultadoBusca};
-use crate::conversas::{self, AppConversas, Conversa, FiltroConversas, PosicaoMensagem};
+use crate::conversas::{self, AppConversas, Conversa, FiltroConversas, PosicaoMensagem, Trecho};
+use crate::evidencias::{self, Evidencia, Marcacoes, NovaEvidencia, TextosEvidencia};
 use crate::extracoes::{
     self, ArquivoComOrigem, ArquivoExtracao, ArtefatoDetalhe, ArtefatoResumo, ExecucaoParser,
     Extracao, Pagina, TotalCategoria,
 };
 use crate::importacao::Importacao;
 use crate::migracoes::{self, BANCO_CASO};
+use crate::relatorios::{self, NovoRelatorio, RelatorioRegistrado};
 use crate::resumo::{self, Identificador, ResumoCaso};
 use crate::{conexao, ErroArmazenamento, Resultado, Sessao};
 
@@ -341,6 +343,80 @@ impl BancoCaso {
         limite: i64,
     ) -> Resultado<ResultadoBusca> {
         busca::buscar(&self.conn, filtro, deslocamento, limite)
+    }
+
+    /// Mensagens de um trecho de conversa (do início ao fim, inclusive).
+    pub fn trecho(&self, inicio_id: i64, fim_id: i64) -> Resultado<Trecho> {
+        conversas::trecho(&self.conn, inicio_id, fim_id)
+    }
+
+    // ------------------------------------------------------------ evidências
+
+    pub fn evidencias(&self) -> Resultado<Vec<Evidencia>> {
+        evidencias::listar(&self.conn)
+    }
+
+    pub fn marcacoes(&self) -> Resultado<Marcacoes> {
+        evidencias::marcacoes(&self.conn)
+    }
+
+    pub fn adicionar_evidencia(&mut self, nova: NovaEvidencia) -> Resultado<Evidencia> {
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let ev = evidencias::adicionar(&tx, &self.sessao, nova)?;
+        tx.commit()?;
+        tracing::info!(caso = %self.caso.id, evidencia = ev.id, numero = ev.numero, "evidência adicionada");
+        Ok(ev)
+    }
+
+    pub fn alterar_evidencia(&mut self, id: i64, textos: TextosEvidencia) -> Resultado<Evidencia> {
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let ev = evidencias::alterar_textos(&tx, &self.sessao, id, textos)?;
+        tx.commit()?;
+        Ok(ev)
+    }
+
+    pub fn mover_evidencia(&mut self, id: i64, numero: i64) -> Resultado<Vec<Evidencia>> {
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let lista = evidencias::mover(&tx, &self.sessao, id, numero)?;
+        tx.commit()?;
+        Ok(lista)
+    }
+
+    pub fn remover_evidencia(&mut self, id: i64, motivo: Option<String>) -> Resultado<()> {
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        evidencias::remover(&tx, &self.sessao, id, motivo)?;
+        tx.commit()?;
+        tracing::info!(caso = %self.caso.id, evidencia = id, "evidência removida");
+        Ok(())
+    }
+
+    // ------------------------------------------------------------ relatórios
+
+    pub fn sessao(&self) -> &Sessao {
+        &self.sessao
+    }
+
+    pub fn relatorios(&self) -> Resultado<Vec<RelatorioRegistrado>> {
+        relatorios::listar(&self.conn)
+    }
+
+    /// Registra um PDF já gravado em `relatorios/` (com auditoria).
+    pub fn registrar_relatorio(&mut self, novo: NovoRelatorio) -> Resultado<RelatorioRegistrado> {
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let r = relatorios::registrar(&tx, &self.sessao, novo)?;
+        tx.commit()?;
+        tracing::info!(caso = %self.caso.id, relatorio = r.id, sha256 = %r.sha256, "relatório gerado");
+        Ok(r)
     }
 
     pub fn resumo(&self) -> Resultado<ResumoCaso> {

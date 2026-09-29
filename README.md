@@ -4,10 +4,12 @@ Plataforma forense local (offline) para importar, analisar, organizar e relatar 
 extraídas de dispositivos móveis. Visão do produto em [`docs/VISAO.md`](docs/VISAO.md);
 arquitetura aprovada em [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md).
 
-> **Estado atual: Fase 1 — fundação + primeira importação.** O app cria casos, cadastra
+> **Estado atual: Fase 1 — importar, analisar, selecionar e relatar.** O app cria casos, cadastra
 > dispositivos e importa uma pasta de extração: inventário com SHA-256 de todos os arquivos,
-> manifesto `sha256sum`, SMS do Android interpretados com a origem de cada registro, tudo
-> com trilha de auditoria. Conversas reconstruídas e busca global sobre o que foi importado.
+> manifesto `sha256sum`, SMS e WhatsApp do Android interpretados com a origem de cada registro,
+> tudo com trilha de auditoria. Conversas reconstruídas e busca global sobre o que foi importado.
+> O analista marca evidências (mensagem, trecho de conversa ou arquivo) e gera um relatório PDF
+> com hashes conferidos, origem completa e cadeia de custódia.
 > Interface em tema escuro com barra lateral de 12 módulos (Dashboard, Casos, Dispositivos,
 > Extrações, Conversas, Mídias, Arquivos, Contatos, Localizações, Consultas, Relatórios,
 > Configurações); os módulos sem dados ainda dizem "ainda não disponível", nunca mostram números
@@ -26,6 +28,7 @@ crates/
                        importadores (por ferramenta: Pasta genérica; Avilla só contrato),
                        parsers (por app: SMS e WhatsApp Android), protocolo JSON para parsers externos
   sied-midia/          miniaturas das imagens do inventário (lidas somente leitura, SHA-256 conferido)
+  sied-relatorio/      relatório PDF: Typst embutido, modelo `modelo.typ`, conferência das evidências
 app/
   src-tauri/           camada Tauri: comandos, estado, logs
   src/                 interface React + TypeScript
@@ -35,6 +38,7 @@ app/
     rotas/             uma página por módulo (rotas em main.tsx)
 testes/e2e/            teste ponta a ponta do app real (WebDriver)
 testes/gerador/        gera extrações SINTÉTICAS para teste (nenhum dado real)
+testes/rust/           caso sintético compartilhado pelos testes Rust
 docs/                  visão e arquitetura
 ```
 
@@ -59,6 +63,9 @@ a registra em outra estação. Nível de log: `SIED_LOG=debug`.
                                      cópias de trabalho conferidas por hash (o parser lê só estas)
   miniaturas\<2 primeiros do SHA-256>\<SHA-256>-v1.jpg
                                      miniaturas das imagens (dado derivado; pode ser apagado)
+  relatorios\AAAA-MM-DD_HHMMSS_relatorio.pdf
+  relatorios\AAAA-MM-DD_HHMMSS_relatorio.pdf.sha256
+                                     relatórios gerados (hora no fuso do caso) e o SHA-256 de cada um
 ```
 
 ## Importação de extrações
@@ -131,6 +138,25 @@ Parsers disponíveis:
 - As duas coisas são **derivadas** (migração 3 do banco do caso): mantidas por gatilhos a cada registro
   gravado e reconstruíveis a partir dos artefatos. Casos antigos ganham conversas e índice ao abrir.
 
+## Evidências e relatório
+
+- **Marcar**: em Conversas, clique numa mensagem e use a barra "Evidência" para adicionar a
+  mensagem ou marcar o início e o fim de um trecho; em Mídias e Arquivos, "Adicionar às
+  evidências" no detalhe do arquivo. O SIED grava o hash do alvo nesse momento (do registro, do
+  arquivo ou das mensagens do trecho, na ordem) e ele não muda mais. Itens marcados ganham o selo
+  **E-n** no chat e no detalhe.
+- **Organizar** (módulo Relatórios): reordenar, editar título, categoria, descrição e observação,
+  abrir na origem e remover com motivo. A remoção é lógica e tudo vai para a auditoria.
+- **Gerar PDF**: escolha as seções e escreva observações e conclusão. Antes de gerar, o SIED confere
+  a trilha de auditoria (se estiver quebrada, não gera) e cada evidência de novo: registros no
+  banco do caso, trechos recalculados e arquivos relidos da extração em somente leitura. O PDF
+  mostra, por evidência, o conteúdo, o hash da seleção, o hash conferido e a origem completa
+  (arquivo, SHA-256, tabela, registro, consulta, valores brutos, parser e versão), e termina com o
+  quadro de integridade e a posição da trilha de auditoria. Cada PDF é registrado no caso (somente
+  inclusão) com o seu SHA-256. Para conferir fora do SIED: `sha256sum -c <nome>.pdf.sha256` dentro
+  da pasta `relatorios`.
+- O Typst e as fontes vão dentro do programa: o relatório é gerado offline.
+
 Fechar o caso ou o programa durante uma importação a cancela e registra o cancelamento. Uma importação
 interrompida por queda de energia aparece como "interrompida" ao reabrir o caso; basta importar de novo.
 
@@ -157,7 +183,7 @@ No Linux, instale também `libwebkit2gtk-4.1-dev` e `librsvg2-dev`.
 ## Como testar
 
 ```bash
-cargo test --workspace          # domínio, bancos, migrações, auditoria, contratos, serviço do app
+cargo test --workspace          # domínio, bancos, migrações, auditoria, contratos, relatório, serviço do app
 cargo clippy --workspace --all-targets -- -D warnings
 cd app && npm run typecheck && npm test   # tipos e testes da interface
 ```

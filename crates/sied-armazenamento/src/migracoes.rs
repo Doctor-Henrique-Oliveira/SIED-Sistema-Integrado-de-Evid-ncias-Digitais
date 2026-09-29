@@ -68,6 +68,11 @@ pub const BANCO_CASO: TipoBanco = TipoBanco {
             nome: "whatsapp",
             sql: include_str!("../migracoes/caso/0004_whatsapp.sql"),
         },
+        Migracao {
+            versao: 5,
+            nome: "evidencias_relatorio",
+            sql: include_str!("../migracoes/caso/0005_evidencias_relatorio.sql"),
+        },
     ],
 };
 

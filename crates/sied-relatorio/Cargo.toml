@@ -10,3 +10,22 @@ publish.workspace = true
 typst = "0.15.1"
 typst-pdf = "0.15.1"
 typst-kit = { version = "0.15.1", default-features = false, features = ["embedded-fonts"] }
+typst-layout = "0.15.1"
+chrono.workspace = true
+chrono-tz = "0.10"
+hex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+ts-rs.workspace = true
+sied-armazenamento.workspace = true
+sied-dominio.workspace = true
+sied-midia.workspace = true
+
+[dev-dependencies]
+rusqlite.workspace = true
+sied-ingestao.workspace = true
+tempfile.workspace = true
+walkdir.workspace = true
