@@ -294,3 +294,50 @@ fn nome_de_pasta_seguro() {
     c.numero_bo = Some("  BO: 45/2026 \\ <x> ".into());
     assert_eq!(nome_pasta_sugerido(&c), "BO-45-2026-x");
 }
+
+/// Duas janelas do SIED (ou duas estações na mesma pasta de rede) não abrem o mesmo
+/// caso: a segunda abertura marcaria como "interrompida" a importação que a primeira
+/// ainda está fazendo.
+#[test]
+fn caso_aberto_nao_abre_em_outra_janela() {
+    let raiz = tempfile::tempdir().unwrap();
+    let pasta = raiz.path().join("Casos/IP-trava");
+    let origem = raiz.path().join("Extracao-SINTETICA");
+    std::fs::create_dir_all(&origem).unwrap();
+    std::fs::write(origem.join("SINTETICO.txt"), "sintético").unwrap();
+
+    let mut banco = BancoCaso::criar(&pasta, novo_caso(), sessao()).unwrap();
+    let d = banco.cadastrar_dispositivo(novo_dispositivo()).unwrap();
+    let info = sied_ingestao::InfoComponente {
+        id: "generico".into(),
+        nome: "Pasta genérica".into(),
+        versao: "0".into(),
+    };
+    let imp = banco.iniciar_importacao(d.id, &info, &origem).unwrap();
+
+    match BancoCaso::abrir(&pasta, sessao()) {
+        Err(ErroArmazenamento::CasoEmUso(p)) => assert_eq!(p, pasta.canonicalize().unwrap()),
+        Err(e) => panic!("esperava caso em uso, veio {e}"),
+        Ok(_) => panic!("o mesmo caso abriu duas vezes"),
+    }
+    // A importação da primeira janela continua em andamento, sem registro de interrupção.
+    assert_eq!(banco.extracoes().unwrap()[0].status, "em_andamento");
+    assert!(banco
+        .auditoria(100)
+        .unwrap()
+        .iter()
+        .all(|r| r.acao != "importacao_interrompida"));
+    let x = imp
+        .finalizar(&Err(sied_ingestao::ErroIngestao::Cancelado))
+        .unwrap();
+    assert_eq!(x.status, "cancelada");
+
+    // Fechado na primeira, abre na segunda.
+    banco.fechar().unwrap();
+    let banco = BancoCaso::abrir(&pasta, sessao()).unwrap();
+    assert_eq!(banco.extracoes().unwrap()[0].status, "cancelada");
+    banco.verificar_auditoria().unwrap();
+    // Sem fechar (queda do programa): a trava some com o processo/arquivo.
+    drop(banco);
+    BancoCaso::abrir(&pasta, sessao()).unwrap();
+}

@@ -40,6 +40,11 @@ pub enum ErroArmazenamento {
     #[error("nenhum caso do SIED encontrado em {0}")]
     CasoNaoEncontrado(PathBuf),
 
+    #[error(
+        "o caso em {0} já está aberto em outra janela do SIED (nesta ou em outra estação); feche-o lá antes de abri-lo aqui"
+    )]
+    CasoEmUso(PathBuf),
+
     #[error("banco do caso inconsistente: {0}")]
     Inconsistente(String),
 

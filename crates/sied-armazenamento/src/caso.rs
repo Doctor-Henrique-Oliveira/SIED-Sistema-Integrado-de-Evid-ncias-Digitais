@@ -37,11 +37,38 @@ use crate::{conexao, ErroArmazenamento, Resultado, Sessao};
 
 pub const NOME_ARQUIVO_CASO: &str = "caso.sied.db";
 
+/// Enquanto o caso está aberto, o SIED segura uma trava exclusiva do sistema
+/// operacional neste arquivo: outra janela (ou outra estação, na mesma pasta de rede)
+/// não abre o mesmo caso ao mesmo tempo. A trava é liberada pelo sistema mesmo se o
+/// SIED fechar de forma abrupta; o arquivo vazio pode ficar na pasta, sem efeito.
+pub const NOME_ARQUIVO_TRAVA: &str = "caso.sied.lock";
+
+/// Trava exclusiva do caso. `None` quando o sistema de arquivos não oferece travas
+/// (registrado no log; o caso abre assim mesmo, como antes).
+fn travar(pasta: &Path) -> Resultado<Option<std::fs::File>> {
+    let f = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(pasta.join(NOME_ARQUIVO_TRAVA))?;
+    match f.try_lock() {
+        Ok(()) => Ok(Some(f)),
+        Err(std::fs::TryLockError::WouldBlock) => Err(ErroArmazenamento::CasoEmUso(pasta.into())),
+        Err(std::fs::TryLockError::Error(e)) => {
+            tracing::warn!(erro = %e, pasta = %pasta.display(), "sistema de arquivos sem trava; o caso abre sem proteção contra uso simultâneo");
+            Ok(None)
+        }
+    }
+}
+
 pub struct BancoCaso {
     conn: Connection,
     pasta: PathBuf,
     sessao: Sessao,
     caso: Caso,
+    /// Mantida aberta enquanto o caso estiver aberto (ver [`NOME_ARQUIVO_TRAVA`]).
+    _trava: Option<std::fs::File>,
 }
 
 impl BancoCaso {
@@ -57,6 +84,7 @@ impl BancoCaso {
         }
         std::fs::create_dir_all(pasta)?;
         let pasta = pasta.canonicalize()?;
+        let trava = travar(&pasta)?;
         let caminho = pasta.join(NOME_ARQUIVO_CASO);
         let mut conn = conexao::abrir(&caminho)?;
         migracoes::preparar(&mut conn, &caminho, &BANCO_CASO)?;
@@ -103,6 +131,7 @@ impl BancoCaso {
             pasta,
             sessao,
             caso,
+            _trava: trava,
         })
     }
 
@@ -113,6 +142,9 @@ impl BancoCaso {
             return Err(ErroArmazenamento::CasoNaoEncontrado(pasta.into()));
         }
         let pasta = pasta.canonicalize()?;
+        // Antes de tocar no banco: outra janela com o caso aberto pode estar importando,
+        // e marcar_interrompidas trataria a importação dela como interrompida.
+        let trava = travar(&pasta)?;
         let mut conn = conexao::abrir(&caminho)?;
         migracoes::preparar(&mut conn, &caminho, &BANCO_CASO)?;
         let caso = ler_caso(&conn)?;
@@ -126,6 +158,7 @@ impl BancoCaso {
             pasta,
             sessao,
             caso,
+            _trava: trava,
         })
     }
 

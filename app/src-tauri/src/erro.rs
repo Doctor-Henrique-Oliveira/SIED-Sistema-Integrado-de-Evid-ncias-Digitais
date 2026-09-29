@@ -57,7 +57,9 @@ impl From<ErroArmazenamento> for ErroApp {
             }
             E::CasoNaoEncontrado(_) | E::NaoEncontrado(_) => CodigoErro::NaoEncontrado,
             E::OrigemInvalida(_) => CodigoErro::Validacao,
-            E::CasoJaExiste(_) | E::PastaNaoVazia(_) | E::Recusado(_) => CodigoErro::Conflito,
+            E::CasoJaExiste(_) | E::PastaNaoVazia(_) | E::CasoEmUso(_) | E::Recusado(_) => {
+                CodigoErro::Conflito
+            }
             E::VersaoMaisNova { .. }
             | E::MigracaoDivergente { .. }
             | E::TipoBancoIncorreto { .. } => CodigoErro::VersaoIncompativel,
