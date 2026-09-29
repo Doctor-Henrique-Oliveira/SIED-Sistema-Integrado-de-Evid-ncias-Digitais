@@ -835,7 +835,8 @@ function MensagensLongas({
 
   const porIdExterno = new Map(carregados.flatMap((m) => (m.id_externo ? [[m.id_externo, m] as const] : [])));
   const primeiraVisivel = visiveis.find((v) => v.start + v.size > virtual.scrollOffset!) ?? visiveis[0];
-  const diaTopo = primeiraVisivel ? item(primeiraVisivel.index) : undefined;
+  // No topo da conversa o próprio separador do primeiro dia já aparece.
+  const diaTopo = primeiraVisivel && (virtual.scrollOffset ?? 0) > 8 ? item(primeiraVisivel.index) : undefined;
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">

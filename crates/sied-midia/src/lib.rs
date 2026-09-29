@@ -206,12 +206,17 @@ fn reduzir(bytes: &[u8]) -> Result<Vec<u8>, Miniatura> {
     limites.max_image_height = Some(20_000);
     limites.max_alloc = Some(1 << 30);
     leitor.limits(limites);
-    let mut decodificador = leitor
-        .into_decoder()
-        .map_err(|e| Miniatura::sem(Falhou, format!("Imagem não pôde ser decodificada: {e}")))?;
+    // O texto do decodificador vai só como detalhe técnico, numa linha só.
+    let ilegivel = |e: image::ImageError| {
+        let detalhe = e.to_string().replace("\\n", " ").replace('\n', " ");
+        Miniatura::sem(
+            Falhou,
+            format!("Imagem não pôde ser decodificada ({}).", detalhe.trim()),
+        )
+    };
+    let mut decodificador = leitor.into_decoder().map_err(ilegivel)?;
     let orientacao = decodificador.orientation().ok();
-    let mut img = DynamicImage::from_decoder(decodificador)
-        .map_err(|e| Miniatura::sem(Falhou, format!("Imagem não pôde ser decodificada: {e}")))?;
+    let mut img = DynamicImage::from_decoder(decodificador).map_err(ilegivel)?;
     if let Some(o) = orientacao {
         img.apply_orientation(o);
     }

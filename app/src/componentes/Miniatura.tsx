@@ -37,7 +37,7 @@ export function MiniaturaArquivo({ caso, arquivoId, icone, categoria, ajuste = "
           src={m.data!.dados!}
           alt=""
           draggable={false}
-          className={`size-full ${ajuste === "cobrir" ? "object-cover" : "object-contain"}`}
+          className={`absolute inset-0 size-full ${ajuste === "cobrir" ? "object-cover" : "object-contain"}`}
         />
       ) : (
         <>
