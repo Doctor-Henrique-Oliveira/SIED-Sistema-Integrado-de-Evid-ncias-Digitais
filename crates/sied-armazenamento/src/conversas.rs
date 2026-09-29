@@ -17,7 +17,7 @@ use sied_dominio::ExtracaoId;
 use ts_rs::TS;
 
 use crate::busca::digitos_telefone;
-use crate::extracoes::{ler_resumo, uuid, ArtefatoResumo, Pagina, COLUNAS_RESUMO};
+use crate::extracoes::{ler_resumo, uuid, ArtefatoResumo, Pagina, COLUNAS_RESUMO, N_RESUMO};
 use crate::{ErroArmazenamento, Resultado};
 
 /// Participantes exibidos na lista de conversas (os mais frequentes).
@@ -417,4 +417,80 @@ pub fn conversa_do_artefato(conn: &Connection, artefato_id: i64) -> Resultado<Op
             |r| r.get(0),
         )
         .optional()?)
+}
+
+/// Maior trecho de conversa aceito como uma evidência só.
+pub const TRECHO_MAXIMO: i64 = 2000;
+
+/// Mensagens de um trecho de conversa, da primeira à última (inclusive), na ordem da
+/// conversa. Os dois registros precisam ser da mesma conversa; a ordem em que foram
+/// informados não importa. Junto de cada mensagem vem o `hash_registro`.
+pub struct Trecho {
+    /// Conversa derivada, quando existe (para "ver na conversa").
+    pub conversa_id: Option<i64>,
+    pub mensagens: Vec<(ArtefatoResumo, String)>,
+}
+
+pub fn trecho(conn: &Connection, inicio_id: i64, fim_id: i64) -> Resultado<Trecho> {
+    let chave_de = |id: i64| -> Resultado<(String, String, Option<String>)> {
+        conn.query_row(
+            "SELECT extracao_id, coalesce(app, ''), conversa_id_externo FROM artefato WHERE id = ?1",
+            [id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .optional()?
+        .ok_or_else(|| ErroArmazenamento::NaoEncontrado("registro".into()))
+    };
+    let (x, app, id) = chave_de(inicio_id)?;
+    let Some(id) = id else {
+        return Err(ErroArmazenamento::Recusado(
+            "o registro não pertence a uma conversa".into(),
+        ));
+    };
+    if chave_de(fim_id)? != (x.clone(), app.clone(), Some(id.clone())) {
+        return Err(ErroArmazenamento::Recusado(
+            "o início e o fim do trecho precisam ser da mesma conversa".into(),
+        ));
+    }
+    let base = format!(
+        "SELECT {COLUNAS_RESUMO}, a.hash_registro,
+                ROW_NUMBER() OVER (ORDER BY {ORDEM_MENSAGENS}) AS posicao
+         FROM artefato a WHERE {DA_CONVERSA}"
+    );
+    let posicao = |alvo: i64| -> Resultado<i64> {
+        Ok(conn.query_row(
+            &format!("SELECT posicao FROM ({base}) WHERE id = ?4"),
+            params![x, app, id, alvo],
+            |r| r.get(0),
+        )?)
+    };
+    let (mut p1, mut p2) = (posicao(inicio_id)?, posicao(fim_id)?);
+    if p1 > p2 {
+        std::mem::swap(&mut p1, &mut p2);
+    }
+    if p2 - p1 + 1 > TRECHO_MAXIMO {
+        return Err(ErroArmazenamento::Recusado(format!(
+            "o trecho tem {} mensagens; o limite de um trecho é {TRECHO_MAXIMO}",
+            p2 - p1 + 1
+        )));
+    }
+    let mut stmt = conn.prepare(&format!(
+        "SELECT * FROM ({base}) WHERE posicao BETWEEN ?4 AND ?5 ORDER BY posicao"
+    ))?;
+    let mensagens = stmt
+        .query_map(params![x, app, id, p1, p2], |r| {
+            Ok((ler_resumo(r)?, r.get::<_, String>(N_RESUMO)?))
+        })?
+        .collect::<Result<_, _>>()?;
+    let conversa_id = conn
+        .query_row(
+            "SELECT id FROM conversa WHERE extracao_id = ?1 AND app = ?2 AND id_externo = ?3",
+            params![x, app, id],
+            |r| r.get(0),
+        )
+        .optional()?;
+    Ok(Trecho {
+        conversa_id,
+        mensagens,
+    })
 }

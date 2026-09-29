@@ -11,6 +11,7 @@ import { useListaPaginada } from "../util/listaPaginada";
 import { dataHora, extensao, nomeArquivo, numero, tamanho } from "../util/formatar";
 import { nomeCategoria } from "../util/rotulos";
 import { Aviso, Cartao, Carregando, entrada, Filtros, Hash, Paginacao, Selo, tabela, Vazio } from "./Estrutura";
+import { EvidenciaArquivo } from "./Evidencias";
 import { Icone, type NomeIcone } from "./Icone";
 import { MiniaturaArquivo, SobreMiniatura } from "./Miniatura";
 
@@ -110,6 +111,7 @@ function DetalheArquivo({ caso, f, parser, fechar }: {
         {linha("Interpretado por", parser ?? "nenhum parser")}
         {f.erro && linha("Erro de leitura", <span className="text-erro">{f.erro}</span>)}
       </dl>
+      <EvidenciaArquivo caso={caso} arquivoId={f.id} sha256={f.sha256} />
     </Cartao>
   );
 }

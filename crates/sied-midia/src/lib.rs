@@ -150,6 +150,46 @@ pub fn obter(p: &Pedido) -> Miniatura {
 
 /// Lê o arquivo inteiro da extração e confere o SHA-256 com o inventário.
 fn ler_conferido(p: &Pedido, sha: &str) -> Result<Vec<u8>, Miniatura> {
+    let mut bytes = Vec::with_capacity(p.tamanho.min(TAMANHO_MAXIMO) as usize);
+    conferir(p, sha, Some(&mut bytes)).map_err(|mut m| {
+        if m.estado == EstadoMiniatura::OrigemDivergente {
+            m.motivo = m
+                .motivo
+                .map(|t| format!("{t} Nenhuma miniatura foi gerada."));
+        }
+        m
+    })?;
+    Ok(bytes)
+}
+
+/// Relê o arquivo na pasta da extração (somente leitura) e devolve o SHA-256 lido
+/// agora, sem guardar os bytes nem limite de tamanho. O relatório compara com o hash
+/// registrado na seleção.
+pub fn sha256_original(p: &Pedido) -> Result<String, Miniatura> {
+    ler(p, None)
+}
+
+fn conferir(p: &Pedido, sha: &str, copia: Option<&mut Vec<u8>>) -> Result<(), Miniatura> {
+    let lido = ler(p, copia)?;
+    if lido != sha {
+        tracing::warn!(
+            caminho = %p.caminho,
+            esperado = sha,
+            lido = %lido,
+            "arquivo da extração difere do inventário"
+        );
+        return Err(Miniatura::sem(
+            EstadoMiniatura::OrigemDivergente,
+            format!(
+                "O arquivo na pasta da extração difere do inventário (SHA-256 lido {}…).",
+                &lido[..16]
+            ),
+        ));
+    }
+    Ok(())
+}
+
+fn ler(p: &Pedido, copia: Option<&mut Vec<u8>>) -> Result<String, Miniatura> {
     use EstadoMiniatura::*;
     let fonte = PastaSomenteLeitura::abrir(&p.pasta_extracao).map_err(|_| {
         Miniatura::sem(
@@ -168,29 +208,53 @@ fn ler_conferido(p: &Pedido, sha: &str) -> Result<Vec<u8>, Miniatura> {
             "O arquivo não foi encontrado na pasta da extração.",
         )
     })?;
-    let mut bytes = Vec::with_capacity(p.tamanho.min(TAMANHO_MAXIMO) as usize);
-    let lido = ler_com_hash(&mut leitor, Some(&mut bytes), |_| true)
-        .map_err(|e| Miniatura::sem(OrigemIndisponivel, format!("Falha ao ler o arquivo: {e}")))?;
-    if lido.sha256 != sha {
-        tracing::warn!(
-            caminho = %p.caminho,
-            esperado = sha,
-            lido = %lido.sha256,
-            "miniatura recusada: arquivo difere do inventário"
-        );
+    let lido = ler_com_hash(
+        &mut leitor,
+        copia.map(|c| c as &mut dyn std::io::Write),
+        |_| true,
+    )
+    .map_err(|e| Miniatura::sem(OrigemIndisponivel, format!("Falha ao ler o arquivo: {e}")))?;
+    Ok(lido.sha256)
+}
+
+/// Lado maior da imagem que vai para o relatório (boa leitura impressa sem inflar o PDF).
+pub const LADO_RELATORIO: u32 = 1600;
+
+/// Imagem para o relatório: lida da extração agora, com o SHA-256 conferido com o
+/// inventário, e reduzida para JPEG (lado maior [`LADO_RELATORIO`]). Não usa nem grava
+/// cache: o relatório sempre confere o original no momento em que é gerado.
+/// Em caso de falha, devolve o estado e o motivo (como na miniatura).
+pub fn imagem_para_relatorio(p: &Pedido) -> Result<Vec<u8>, Miniatura> {
+    use EstadoMiniatura::*;
+    if p.categoria != "imagem" {
         return Err(Miniatura::sem(
-            OrigemDivergente,
-            format!(
-                "O arquivo na pasta da extração difere do inventário (SHA-256 lido {}…). Nenhuma miniatura foi gerada.",
-                &lido.sha256[..16]
-            ),
+            SemSuporte,
+            "Só imagens entram como figura no relatório.",
         ));
     }
-    Ok(bytes)
+    let Some(sha) = p.sha256.as_deref() else {
+        return Err(Miniatura::sem(
+            Falhou,
+            "O arquivo não pôde ser lido na importação (sem SHA-256).",
+        ));
+    };
+    if p.tamanho > TAMANHO_MAXIMO {
+        return Err(Miniatura::sem(
+            SemSuporte,
+            "Imagem grande demais (mais de 256 MB).",
+        ));
+    }
+    let _vaga = vaga();
+    let bytes = ler_conferido(p, sha)?;
+    reduzir_para(&bytes, LADO_RELATORIO)
 }
 
 /// Decodifica, aplica a orientação gravada (EXIF) e reduz para JPEG.
 fn reduzir(bytes: &[u8]) -> Result<Vec<u8>, Miniatura> {
+    reduzir_para(bytes, LADO_MAXIMO)
+}
+
+fn reduzir_para(bytes: &[u8], lado: u32) -> Result<Vec<u8>, Miniatura> {
     use EstadoMiniatura::*;
     let mut leitor = ImageReader::new(Cursor::new(bytes))
         .with_guessed_format()
@@ -221,8 +285,8 @@ fn reduzir(bytes: &[u8]) -> Result<Vec<u8>, Miniatura> {
         img.apply_orientation(o);
     }
     // Só reduz: imagem menor que a miniatura fica no tamanho original.
-    if img.width() > LADO_MAXIMO || img.height() > LADO_MAXIMO {
-        img = img.thumbnail(LADO_MAXIMO, LADO_MAXIMO);
+    if img.width() > lado || img.height() > lado {
+        img = img.thumbnail(lado, lado);
     }
     let pequena = img.into_rgb8();
     let mut saida = Vec::new();

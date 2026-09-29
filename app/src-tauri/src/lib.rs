@@ -110,6 +110,14 @@ pub fn executar() {
             comandos::buscar,
             comandos::resumo_caso,
             comandos::listar_identificadores,
+            comandos::listar_evidencias,
+            comandos::marcacoes_evidencias,
+            comandos::adicionar_evidencia,
+            comandos::alterar_evidencia,
+            comandos::mover_evidencia,
+            comandos::remover_evidencia,
+            comandos::listar_relatorios,
+            comandos::gerar_relatorio,
         ])
         .build(tauri::generate_context!())
         .expect("falha ao montar o aplicativo");

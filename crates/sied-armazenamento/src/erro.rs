@@ -43,6 +43,10 @@ pub enum ErroArmazenamento {
     #[error("banco do caso inconsistente: {0}")]
     Inconsistente(String),
 
+    /// Pedido válido na forma, mas recusado por regra do caso (o texto vai para a tela).
+    #[error("{0}")]
+    Recusado(String),
+
     #[error("{0} não encontrado(a)")]
     NaoEncontrado(String),
 

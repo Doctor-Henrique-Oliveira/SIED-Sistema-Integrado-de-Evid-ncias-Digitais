@@ -57,7 +57,7 @@ impl From<ErroArmazenamento> for ErroApp {
             }
             E::CasoNaoEncontrado(_) | E::NaoEncontrado(_) => CodigoErro::NaoEncontrado,
             E::OrigemInvalida(_) => CodigoErro::Validacao,
-            E::CasoJaExiste(_) | E::PastaNaoVazia(_) => CodigoErro::Conflito,
+            E::CasoJaExiste(_) | E::PastaNaoVazia(_) | E::Recusado(_) => CodigoErro::Conflito,
             E::VersaoMaisNova { .. }
             | E::MigracaoDivergente { .. }
             | E::TipoBancoIncorreto { .. } => CodigoErro::VersaoIncompativel,
@@ -86,6 +86,23 @@ impl From<ErroIngestao> for ErroApp {
         };
         tracing::warn!(erro = %e, "falha de ingestão");
         ErroApp::novo(codigo, e.to_string())
+    }
+}
+
+impl From<sied_relatorio::ErroRelatorio> for ErroApp {
+    fn from(e: sied_relatorio::ErroRelatorio) -> Self {
+        use sied_relatorio::ErroRelatorio as E;
+        match e {
+            E::Armazenamento(e) => e.into(),
+            E::Auditoria(_) => {
+                tracing::error!(erro = %e, "relatório recusado");
+                ErroApp::novo(CodigoErro::Integridade, e.to_string())
+            }
+            E::Typst(_) | E::Io(_) => {
+                tracing::error!(erro = %e, "falha ao gerar o relatório");
+                ErroApp::novo(CodigoErro::Interno, e.to_string())
+            }
+        }
     }
 }
 

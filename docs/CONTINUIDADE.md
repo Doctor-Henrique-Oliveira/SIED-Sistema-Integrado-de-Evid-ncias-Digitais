@@ -1,9 +1,9 @@
 # SIED — Documento de continuidade
 
-Estado em 28/09/2026, com a **interface para volume real** pronta na branch `fase1-visual-volume`
-(PR #9, em rascunho, **aguardando aval para o merge**): miniaturas conferidas pelo SHA-256, listas
-virtualizadas, filtros de conversa no banco e progresso real da importação. A `main` está em
-`dc402cf` (merge do PR #8, leitor WhatsApp Android). O fechamento desta etapa está em
+Estado em 29/09/2026: a fase 1 fecha o ciclo **importar → analisar → selecionar → relatar**. Na
+`main` estão a interface para volume real (PR #9, merge `24791ff`) e as **evidências selecionadas
+com o relatório PDF** em Typst (PR #10, branch `fase1-evidencias-relatorio`). O fechamento desta
+etapa está em `docs/checkpoints/2026-09-29-fase1-evidencias-relatorio.md`; o do volume real, em
 `docs/checkpoints/2026-09-28-fase1-visual-volume.md`; o do WhatsApp, em
 `docs/checkpoints/2026-09-28-fase1-whatsapp.md`; a interface do redesign, no §15. Este documento permite retomar o projeto do
 zero: o que existe, onde está, por que foi feito assim e o que vem a seguir. Os detalhes de cada
@@ -19,8 +19,8 @@ Documentos de referência: `docs/VISAO.md` (visão integral do projeto, permanen
 
 SIED é uma plataforma de **análise** forense de extrações de celulares, local e 100% offline. Não
 faz aquisição: importa o resultado de ferramentas (Avilla, depois IPED, ADB, ALEAPP, iLEAPP, pasta
-genérica), normaliza para um modelo comum com origem completa de cada registro e, na etapa
-seguinte, gera relatórios PDF.
+genérica), normaliza para um modelo comum com origem completa de cada registro e gera relatórios
+PDF das evidências selecionadas.
 
 | Camada | Tecnologia | Onde |
 |---|---|---|
@@ -29,7 +29,8 @@ seguinte, gera relatórios PDF.
 | Domínio | Rust | `crates/sied-dominio` (caso, dispositivo, artefato, ids, validação) |
 | Armazenamento | Rust + SQLite (rusqlite, FTS5) | `crates/sied-armazenamento` |
 | Ingestão | Rust | `crates/sied-ingestao` (fontes, importadores, parsers, pipeline) |
-| Relatórios | Typst (previsto) | ainda não iniciado |
+| Mídia | Rust (`image`) | `crates/sied-midia` (miniaturas e imagens do relatório, SHA-256 conferido) |
+| Relatórios | Typst 0.15 embutido (`typst`, `typst-pdf`, fontes embutidas) | `crates/sied-relatorio` (montagem, conferência, modelo `modelo.typ`) |
 
 Plataforma alvo: Windows 11 (compatível com Windows 10). A CI gera instaladores NSIS e MSI em tag de
 release, execução manual ou PR que muda o build (opção "Só tags", PR #4).
@@ -71,8 +72,9 @@ release, execução manual ou PR que muda o build (opção "Só tags", PR #4).
 | `roadmap-console-importacao` | `df83890` | #5 | mesclado (`5258374`) |
 | `fase1-redesign` | `9bbad7a` | #6 | mesclado (`5e8e734`) |
 | `fase1-redesign-registro` | — | #7 | mesclado (`85273d1`) |
-| `fase1-whatsapp` | `baee700` | #8 | mesclado (`dc402cf`, último commit da `main`) |
-| `fase1-visual-volume` | ver §3 | #9 | **rascunho, sem merge**: interface para volume real (criada da `main` em `dc402cf`) |
+| `fase1-whatsapp` | `baee700` | #8 | mesclado (`dc402cf`) |
+| `fase1-visual-volume` | `181f2c5` | #9 | mesclado (`24791ff`) |
+| `fase1-evidencias-relatorio` | ver §3 | #10 | evidências e relatório PDF; mesclado por merge commit (ver `git log --merges`) |
 
 As branches mescladas **não foram apagadas**. Podem ser removidas depois que a `main` for
 confirmada íntegra e com CI verde, com aval do usuário.
@@ -109,6 +111,10 @@ explícito** e CI completa verde (Linux e Windows).
 | `dc402cf` | Merge do PR #8 na `main`: leitor WhatsApp Android |
 | `65a7af2` | `fase1-visual-volume`: miniaturas (crate `sied-midia`), filtros de conversa no banco, posição e localizar, progresso detalhado |
 | `f440877` | `fase1-visual-volume`: interface para volume real e gerador `--volume` |
+| `181f2c5` | `fase1-visual-volume`: ajustes das telas e checkpoint |
+| `24791ff` | Merge do PR #9 na `main`: interface para volume real |
+| `64b3387` | `fase1-evidencias-relatorio`: crate `sied-relatorio` com Typst embutido |
+| (seguinte) | `fase1-evidencias-relatorio`: evidências (migração 5), relatório PDF, telas, testes e checkpoint |
 
 ---
 
@@ -158,7 +164,7 @@ explícito** e CI completa verde (Linux e Windows).
 - Dashboard do caso com cabeçalho do procedimento, atalhos, 8 indicadores reais, dispositivos,
   extrações, alertas e auditoria.
 - Conversas em três colunas; busca com resultados agrupados; Mídias, Arquivos e Contatos com dados
-  reais; Localizações, Consultas e Relatórios com a estrutura pronta e o aviso "ainda não disponível".
+  reais; Localizações e Consultas com a estrutura pronta e o aviso "ainda não disponível".
 
 **Volume real** (PR #9)
 - Miniaturas das imagens na galeria de Mídias, no detalhe do arquivo e nos anexos das conversas.
@@ -174,6 +180,23 @@ explícito** e CI completa verde (Linux e Windows).
 - Localizar em conversa longa pergunta ao banco (total de achados e posição de cada um) e rola até
   o achado; vindo da busca, a conversa rola até o registro mesmo fora da primeira página.
 
+**Evidências e relatório** (PR #10, migração 5)
+- Marcação nas telas de análise: mensagem ou trecho (início e fim, na ordem da conversa, até 2.000
+  mensagens) pela barra "Evidência" do chat; arquivo pelo detalhe em Mídias e Arquivos. Selo
+  "E-n" no chat e no detalhe.
+- Hash gravado na marcação: `hash_registro`, SHA-256 do inventário ou SHA-256 das linhas
+  `id:hash_registro` do trecho. Alvo e hash imutáveis por gatilho; repetição recusada.
+- Módulo Relatórios: lista com reordenar, editar textos (título, categoria, descrição contextual,
+  observação), ver na origem e remover com motivo (remoção lógica). Tudo auditado.
+- Relatório PDF (Typst embutido, modelo `padrao-v1`): 10 seções escolhidas na tela; capa,
+  procedimento, dispositivos, aquisição e importação, metodologia, evidências (chat, trecho,
+  arquivo com a imagem conferida), observações, conclusão, apêndice técnico com a origem completa e
+  os valores brutos, integridade e cadeia de custódia.
+- Na geração, cada evidência é conferida de novo ("conferida", "divergente" com quadro de ATENÇÃO,
+  "indisponível" sem a pasta da extração). Trilha de auditoria quebrada impede a geração.
+- Saída `<caso>/relatorios/AAAA-MM-DD_HHMMSS_relatorio.pdf` + `.pdf.sha256`, nunca sobrescrita,
+  registrada na tabela `relatorio` (somente inclusão) com o SHA-256 e a posição da trilha.
+
 **Busca global** (migração 3)
 - FTS5 em registros e nomes de arquivo, sem diferenciar acentos e maiúsculas, com prefixo.
 - Texto digitado protegido contra sintaxe do FTS (cada palavra vira frase com prefixo).
@@ -185,9 +208,9 @@ explícito** e CI completa verde (Linux e Windows).
 
 | Conjunto | Quantidade | Resultado |
 |---|---|---|
-| Rust (`cargo test --workspace`, soma de todos os `test result`) | 155 (140 na `main`) | todos passam |
+| Rust (`cargo test --workspace`, soma de todos os `test result`) | 172 (155 com o PR #9) | todos passam |
 | `cargo clippy -D warnings` e `cargo fmt --check` | — | limpos |
-| Interface (`vitest`) | 35 (26 na `main`) | todos passam |
+| Interface (`vitest`) | 41 (35 com o PR #9) | todos passam |
 | Build da interface (`npm run build`) e do app (`tauri build --debug --no-bundle`) | — | ok |
 | Typecheck TypeScript | — | limpo |
 | Tipos gerados (ts-rs) atualizados | — | conferido pela CI |
@@ -202,7 +225,9 @@ WhatsApp (dois esquemas, `wa.db`, WAL, avisos, anexos, títulos e nomes, migraç
 miniaturas (redução, cache, hash divergente, origem ausente, formatos, pedidos simultâneos),
 filtros de conversa, posição e localizar sobre 1.200 mensagens sintéticas, progresso final, e
 a interface: listas virtualizadas, filtros enviados ao banco, localizar em conversa longa,
-miniaturas na galeria e nos anexos, etapas do progresso, chat, busca, importação, formulário de dispositivo, barra lateral (12 módulos, módulos
+miniaturas na galeria e nos anexos, etapas do progresso, evidências (hash por tipo, recusas,
+gatilhos, marcação no chat e no arquivo, lista, geração) e o relatório (PDF, `.sha256`, registro,
+auditoria, conteúdo, divergente, indisponível, trilha adulterada), chat, busca, importação, formulário de dispositivo, barra lateral (12 módulos, módulos
 desativados sem caso), indicador sem dado, seção recolhível, Contatos e Mídias. O ponta a ponta
 continua o mesmo roteiro, sem nenhuma verificação removida.
 
@@ -231,12 +256,13 @@ continua o mesmo roteiro, sem nenhuma verificação removida.
 - A lista de Arquivos (tabela) continua paginada de 100 em 100; a de Contatos também.
 - A taxa e o tempo restante aparecem só no inventário (etapa medida em bytes). Na leitura dos
   bancos, a barra avança por banco concluído; o tempo de cada parser não é estimado.
-- Localizações, Consultas e Relatórios só com estrutura; Configurações somente leitura; tema único
+- Localizações e Consultas só com estrutura; Configurações somente leitura; tema único
   (escuro). O ícone do instalador continua o anterior.
 - A imagem de referência citada no pedido do redesign não chegou ao projeto; o redesign seguiu a
   especificação escrita.
-- Sem evidências selecionadas nem relatório PDF (fecham o critério de pronto da fase 1; próxima
-  etapa, §13).
+- Relatório: no máximo 60 figuras; a geração segura a trava do caso (outros comandos esperam); sem
+  botão "Abrir PDF" (a tela mostra o caminho); usuário é o do sistema operacional; um único modelo;
+  sem assinatura digital do PDF; erro de imagem ilegível vem do decodificador em inglês.
 
 ## 7. Decisões técnicas
 
@@ -270,6 +296,12 @@ continua o mesmo roteiro, sem nenhuma verificação removida.
     Filtros, posição e localizar são consultas SQL sobre o caso inteiro.
 16. Progresso: o backend informa início da importação e da etapa, fase da tarefa e bytes da cópia
     conferida; a tela só calcula frações e taxas a partir desses números, sem simulação.
+17. Evidência guarda o hash do alvo no momento da seleção; o relatório mostra esse hash e o
+    conferido na geração. Trecho identificado pelas pontas e pelo hash das linhas
+    `id:hash_registro` na ordem da conversa. Remoção lógica com motivo.
+18. Relatório somente inclusão, com SHA-256 e posição da trilha de auditoria; trilha quebrada
+    impede a geração. Typst e fontes embutidos; textos entram como dados JSON, nunca como
+    marcação. Datas no fuso do caso com nome e deslocamento.
 
 ## 8. Estrutura do banco e migrações
 
@@ -287,6 +319,7 @@ Arquivos em `crates/sied-armazenamento/migracoes/`, registrados em `src/migracoe
 | 2 | importacao | `extracao`, `arquivo` (inventário), `execucao_parser`, `aviso_parser`, `artefato`, `referencia_origem`; gatilhos de somente inclusão em arquivo, artefato e origem |
 | 3 | conversas_busca | `conversa`, `conversa_participante`, FTS5 `busca_artefato` e `busca_arquivo`; gatilhos `artefato_indexa_busca`, `artefato_agrega_conversa`, `arquivo_indexa_busca`; preenchimento dos dados já importados |
 | 4 | whatsapp | coluna `artefato.anexo_vinculo`; índices `idx_arquivo_nome` e `idx_artefato_id_externo` |
+| 5 | evidencias_relatorio | `evidencia` (alvo e hash imutáveis, sem `DELETE`, removida não muda), `relatorio` (somente inclusão) |
 
 Um caso criado em versão anterior é migrado ao abrir, depois da cópia de segurança.
 
@@ -298,6 +331,8 @@ Um caso criado em versão anterior é migrado ao abrir, depois da cópia de segu
   e nomes aparecem quando o app grava registros `conversa` e `contato` (hoje, o WhatsApp); sem
   eles, os participantes aparecem como identificadores brutos (SMS).
 - **Busca**: funciona em tudo que for importado, sem trabalho extra por parser.
+- **Evidências e relatório**: valem para qualquer registro, trecho de conversa ou arquivo do
+  inventário, de qualquer parser.
 
 ## 10. O que ainda depende do Avilla
 
@@ -314,7 +349,7 @@ Com isso: fixture sintética com os mesmos nomes, `detectar` e `planejar`, teste
 plano e pasta intacta, e importação completa no app real. O roteiro está em
 `docs/PREPARACAO-AVILLA-WHATSAPP.md` §2.
 
-Não dependem do Avilla: agenda de contatos, chamadas, evidências e relatório. O parser do
+Não dependem do Avilla: agenda de contatos e chamadas (evidências e relatório já estão prontos). O parser do
 WhatsApp já está pronto (PR #8) e vale para qualquer importador.
 
 ## 11. Proteção do repositório
@@ -344,14 +379,11 @@ Detalhes no `README.md`.
 
 ## 13. Próximo passo recomendado
 
-**Interface para volume real: concluída na branch `fase1-visual-volume` (PR #9, rascunho).**
-Miniaturas, listas virtualizadas, filtros no banco e progresso real estão descritos no §4 e em
-`docs/checkpoints/2026-09-28-fase1-visual-volume.md`. Falta o **aval do usuário para o merge**.
+**Fase 1: ciclo completo na `main`.** Volume real (PR #9) e evidências com relatório PDF (PR #10)
+estão descritos no §4 e nos checkpoints `2026-09-28-fase1-visual-volume.md` e
+`2026-09-29-fase1-evidencias-relatorio.md`.
 
-Em andamento, na ordem pedida pelo usuário: **evidências selecionadas e relatório PDF** (Typst),
-com hashes, origem e cadeia de custódia.
-
-Depois:
+A seguir:
 1. importador Avilla (quando a árvore chegar, §10);
 2. conferência do WhatsApp com um banco de aparelho de teste;
 3. agenda de contatos e chamadas do Android;
@@ -453,7 +485,7 @@ indicador de importação em curso com percentual real, selo "Local" e usuário 
 | Contatos | `/casos/:id/contatos` | identificadores das conversas (`listar_identificadores`), sem deduzir identidade |
 | Localizações | `/casos/:id/localizacoes` | estrutura + contagem real de registros com coordenadas |
 | Consultas | `/casos/:id/consultas` | estrutura |
-| Relatórios | `/casos/:id/relatorios` | estrutura + o que o caso já tem |
+| Relatórios | `/casos/:id/relatorios` | lista de evidências (ordem, textos, origem, remoção), gerar PDF e relatórios gerados (PR #10) |
 | Configurações | `/configuracoes` | somente leitura (versão, usuário, estação, pastas) |
 
 **Backend novo desta etapa** (somente leitura, sem migração): `resumo_caso`,

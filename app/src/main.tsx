@@ -17,8 +17,8 @@ import {
   PaginaConfiguracoes,
   PaginaConsultas,
   PaginaLocalizacoes,
-  PaginaRelatorios,
 } from "./rotas/PaginasEstruturais";
+import { PaginaRelatorios } from "./rotas/PaginaRelatorios";
 
 const clienteConsultas = new QueryClient({
   defaultOptions: {
