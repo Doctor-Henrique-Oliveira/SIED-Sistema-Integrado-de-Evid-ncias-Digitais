@@ -171,6 +171,31 @@ impl NovoArtefato {
             origens_adicionais: Vec::new(),
         }
     }
+
+    /// `hash_registro`: SHA-256 (hex) do JSON do artefato como o parser o emitiu
+    /// (serde_json compacto, campos na ordem da declaração, chaves dos mapas em ordem
+    /// alfabética). É gravado na importação e **recalculado a partir do banco do caso**
+    /// na geração do relatório, para provar que o conteúdo não mudou. Mudar esta regra
+    /// (ou os campos de [`NovoArtefato`]) faz todo registro já importado divergir.
+    pub fn hash_registro(&self) -> String {
+        use sha2::{Digest, Sha256};
+        let json = serde_json::to_vec(self).expect("artefato sempre serializável em JSON");
+        hex::encode(Sha256::digest(json))
+    }
+
+    /// Ajusta o que o banco do caso não preservaria, para que o artefato gravado seja
+    /// idêntico ao artefato do hash: uma coluna REAL do SQLite guarda -0.0 como 0.
+    /// Chamado pelo pipeline antes de calcular o hash.
+    pub fn normalizar(&mut self) {
+        for v in [&mut self.latitude, &mut self.longitude]
+            .into_iter()
+            .flatten()
+        {
+            if *v == 0.0 {
+                *v = 0.0;
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -197,5 +222,74 @@ mod testes {
         let txt = serde_json::to_string(&a).unwrap();
         let volta: NovoArtefato = serde_json::from_str(&txt).unwrap();
         assert_eq!(a, volta);
+    }
+
+    #[test]
+    fn hash_registro_estavel_e_sensivel_ao_conteudo() {
+        let origem = ReferenciaRegistro {
+            papel_arquivo: "msgstore".into(),
+            tabela: Some("message".into()),
+            id_registro: Some("_id=1".into()),
+            consulta: None,
+            deslocamento: None,
+            valores_brutos: Map::new(),
+        };
+        let mut a = NovoArtefato::novo(TipoArtefato::Mensagem, origem);
+        a.conteudo = Some("texto sintético".into());
+        // Regra fixa: JSON e hash conhecidos (conferível com `sha256sum`). Se este teste
+        // falhar, todos os registros já importados passariam a divergir no relatório.
+        assert_eq!(
+            serde_json::to_string(&a).unwrap(),
+            r#"{"tipo":"mensagem","subtipo":null,"app":null,"conta":null,"remetente":null,"destinatarios":[],"de_mim":null,"data_hora":null,"conteudo":"texto sintético","id_externo":null,"resposta_a_id_externo":null,"conversa_id_externo":null,"anexo_caminho":null,"mime":null,"nome_arquivo":null,"tamanho":null,"latitude":null,"longitude":null,"estado":"ativo","confianca":"alta","metadados":{},"origem":{"papel_arquivo":"msgstore","tabela":"message","id_registro":"_id=1","consulta":null,"deslocamento":null,"valores_brutos":{}},"origens_adicionais":[]}"#
+        );
+        assert_eq!(
+            a.hash_registro(),
+            "ff919c01ed7f39482603b371537b7455fc106031e3495732fa4aadef7a83a5f7"
+        );
+        let mut b = a.clone();
+        b.conteudo = Some("texto sintético!".into());
+        assert_ne!(a.hash_registro(), b.hash_registro());
+    }
+
+    /// Metadados e valores brutos ficam no banco do caso como JSON e são relidos para
+    /// recalcular o hash: todo número real precisa voltar idêntico, bit a bit
+    /// (recurso `float_roundtrip` do serde_json, ativado no Cargo.toml da raiz).
+    #[test]
+    fn numeros_reais_voltam_identicos_do_json() {
+        let mut x: u64 = 0x9E37_79B9_7F4A_7C15;
+        let mut valores = vec![0.1 + 0.2, 5e-324, f64::MAX, f64::MIN_POSITIVE, -1.5e-300];
+        for _ in 0..200_000 {
+            // xorshift64*: sequência fixa, sem dependência de aleatoriedade externa.
+            x ^= x >> 12;
+            x ^= x << 25;
+            x ^= x >> 27;
+            let f = f64::from_bits(x.wrapping_mul(0x2545_F491_4F6C_DD1D));
+            if f.is_finite() {
+                valores.push(f);
+            }
+        }
+        for f in valores {
+            let txt = serde_json::to_string(&f).unwrap();
+            let volta: f64 = serde_json::from_str(&txt).unwrap();
+            assert_eq!(f.to_bits(), volta.to_bits(), "{txt}");
+        }
+    }
+
+    #[test]
+    fn normalizar_troca_zero_negativo() {
+        let origem = ReferenciaRegistro {
+            papel_arquivo: "x".into(),
+            tabela: None,
+            id_registro: None,
+            consulta: None,
+            deslocamento: None,
+            valores_brutos: Map::new(),
+        };
+        let mut a = NovoArtefato::novo(TipoArtefato::Localizacao, origem);
+        a.latitude = Some(-0.0);
+        a.longitude = Some(-23.5);
+        a.normalizar();
+        assert!(a.latitude.unwrap().is_sign_positive());
+        assert_eq!(a.longitude, Some(-23.5));
     }
 }

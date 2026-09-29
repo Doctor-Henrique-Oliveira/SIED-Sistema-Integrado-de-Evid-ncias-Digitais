@@ -15,7 +15,6 @@
 use chrono::{SecondsFormat, Utc};
 use serde::Serialize;
 use serde_json::json;
-use sha2::{Digest, Sha256};
 use sied_dominio::artefato::{NovoArtefato, ReferenciaRegistro};
 use std::collections::HashMap;
 use std::fs::{self, File};
@@ -908,10 +907,10 @@ impl Coletor<'_> {
 }
 
 impl SaidaParser for Coletor<'_> {
-    fn emitir(&mut self, artefato: NovoArtefato) -> Resultado<()> {
-        let json =
-            serde_json::to_vec(&artefato).map_err(|e| ErroIngestao::Gravacao(e.to_string()))?;
-        let hash_registro = hex::encode(Sha256::digest(&json));
+    fn emitir(&mut self, mut artefato: NovoArtefato) -> Resultado<()> {
+        // O que é gravado é exatamente o que entra no hash (recalculável depois).
+        artefato.normalizar();
+        let hash_registro = artefato.hash_registro();
         let mut origens = Vec::with_capacity(1 + artefato.origens_adicionais.len());
         let refs = std::iter::once((artefato.origem.clone(), true)).chain(
             artefato

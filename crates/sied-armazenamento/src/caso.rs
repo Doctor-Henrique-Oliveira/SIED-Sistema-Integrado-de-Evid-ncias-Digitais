@@ -280,6 +280,20 @@ impl BancoCaso {
         extracoes::detalhe_artefato(&self.conn, artefato_id)
     }
 
+    /// Recalcula o `hash_registro` a partir do conteúdo gravado (ver
+    /// [`extracoes::conferir_registro`]).
+    pub fn conferir_registro(&self, artefato_id: i64) -> Resultado<extracoes::ConferenciaRegistro> {
+        extracoes::conferir_registro(&self.conn, artefato_id)
+    }
+
+    /// Registros do caso (ou da extração) cujo conteúdo não confere com o hash gravado.
+    pub fn registros_que_nao_conferem(
+        &self,
+        extracao: Option<ExtracaoId>,
+    ) -> Resultado<Vec<extracoes::ConferenciaRegistro>> {
+        extracoes::registros_que_nao_conferem(&self.conn, extracao)
+    }
+
     pub fn conversas(
         &self,
         extracao: Option<ExtracaoId>,

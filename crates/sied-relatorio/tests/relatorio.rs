@@ -256,3 +256,50 @@ fn caso_sem_evidencias_gera_relatorio_so_com_as_secoes_escolhidas() {
         .unwrap()
         .starts_with(b"%PDF-"));
 }
+
+/// O banco do caso é alterado com outra ferramenta (gatilhos desligados): o conteúdo da
+/// mensagem muda, mas a coluna hash_registro e o hash da evidência continuam os mesmos.
+/// A conferência recalcula o hash do conteúdo e acusa a divergência.
+#[test]
+fn conteudo_do_registro_alterado_no_banco_do_caso_diverge() {
+    let (_raiz, _origem, mut banco, x) = preparado();
+    marcar(&mut banco, &x);
+    assert_eq!(situacoes(&banco), ["conferida", "conferida", "conferida"]);
+    let msgs = mensagens_ana(&banco);
+    // A mensagem 2 da conversa está no trecho (E-2), mas não é o registro de E-1.
+    let alvo = msgs[1].id;
+    let c = Connection::open(banco.pasta().join(NOME_ARQUIVO_CASO)).unwrap();
+    c.execute_batch("DROP TRIGGER artefato_sem_update;")
+        .unwrap();
+    c.execute(
+        "UPDATE artefato SET conteudo = 'texto trocado depois' WHERE id = ?1",
+        [alvo],
+    )
+    .unwrap();
+    drop(c);
+    assert_eq!(situacoes(&banco), ["conferida", "divergente", "conferida"]);
+
+    let auditoria = banco.verificar_auditoria().unwrap();
+    let m = montagem::montar(&banco, &PedidoRelatorio::default(), Utc::now(), &auditoria).unwrap();
+    let e2 = &m.documento.evidencias[1];
+    assert_eq!(e2.situacao, "divergente");
+    assert!(
+        e2.situacao_texto.contains(&format!("registro {alvo}")),
+        "{}",
+        e2.situacao_texto
+    );
+
+    // O registro de E-1 também é adulterado: diverge mesmo com hash e coluna intactos.
+    let foto = mensagem(&msgs, "SINT0000000003").id;
+    let c = Connection::open(banco.pasta().join(NOME_ARQUIVO_CASO)).unwrap();
+    c.execute(
+        "UPDATE artefato SET remetente = 'outra pessoa' WHERE id = ?1",
+        [foto],
+    )
+    .unwrap();
+    drop(c);
+    assert_eq!(situacoes(&banco), ["divergente", "divergente", "conferida"]);
+    let r = sied_relatorio::gerar(&mut banco, PedidoRelatorio::default()).unwrap();
+    assert_eq!(r.evidencias[0]["situacao"], "divergente");
+    assert_eq!(r.evidencias[1]["situacao"], "divergente");
+}
