@@ -163,6 +163,12 @@ Casos/
 extracoes/
 Extracoes/
 relatorios/
+# Arquivos de trabalho do SIED dentro da pasta de um caso
+*.bak
+*.parcial
+*.sied.lock
+log-importacao.jsonl
+manifesto.sha256
 *.ab
 *.tar
 *.avilla
