@@ -235,6 +235,85 @@ fn trilha_de_auditoria_adulterada_impede_o_relatorio() {
     assert!(banco.relatorios().unwrap().is_empty());
 }
 
+/// Recalcula a cadeia inteira como faria quem a reescrevesse fora do SIED.
+fn reescrever_trilha(c: &Connection) {
+    use sha2::{Digest, Sha256};
+    let linhas: Vec<(i64, String, String, String, String, String)> = c
+        .prepare("SELECT seq, ts, usuario, maquina, acao, detalhes FROM auditoria ORDER BY seq")
+        .unwrap()
+        .query_map([], |r| {
+            Ok((
+                r.get(0)?,
+                r.get(1)?,
+                r.get(2)?,
+                r.get(3)?,
+                r.get(4)?,
+                r.get(5)?,
+            ))
+        })
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+    let mut anterior = sied_armazenamento::auditoria::HASH_GENESE.to_string();
+    for (seq, ts, usuario, maquina, acao, detalhes) in linhas {
+        let hash = hex::encode(Sha256::digest(
+            format!(
+                "{seq}\x1f{ts}\x1f{usuario}\x1f{maquina}\x1f{acao}\x1f{detalhes}\x1f{anterior}"
+            )
+            .as_bytes(),
+        ));
+        c.execute(
+            "UPDATE auditoria SET hash_anterior = ?1, hash = ?2 WHERE seq = ?3",
+            rusqlite::params![anterior, hash, seq],
+        )
+        .unwrap();
+        anterior = hash;
+    }
+}
+
+/// Apagar os registros finais da trilha, ou reescrevê-la inteira, deixa uma cadeia que
+/// sozinha parece íntegra; a âncora gravada pelo relatório denuncia.
+#[test]
+fn ancora_do_relatorio_denuncia_trilha_truncada_ou_reescrita() {
+    let agora = Utc.with_ymd_and_hms(2026, 3, 4, 15, 16, 17).unwrap();
+    for truncar in [true, false] {
+        let (_raiz, _origem, mut banco, x) = preparado();
+        marcar(&mut banco, &x);
+        let r = sied_relatorio::gerar_em(&mut banco, PedidoRelatorio::default(), agora).unwrap();
+        banco.verificar_auditoria().unwrap();
+        let c = Connection::open(banco.pasta().join(NOME_ARQUIVO_CASO)).unwrap();
+        if truncar {
+            c.execute_batch("DROP TRIGGER auditoria_sem_delete;")
+                .unwrap();
+            c.execute(
+                "DELETE FROM auditoria WHERE seq >= ?1",
+                [r.auditoria_ate_seq],
+            )
+            .unwrap();
+        } else {
+            c.execute_batch(
+                "DROP TRIGGER auditoria_sem_update;
+                 UPDATE auditoria SET detalhes = '{\"adulterado\":true}' WHERE seq = 2;",
+            )
+            .unwrap();
+            reescrever_trilha(&c);
+        }
+        drop(c);
+        match banco.verificar_auditoria() {
+            Err(sied_armazenamento::ErroArmazenamento::AuditoriaCorrompida { seq, motivo }) => {
+                assert_eq!(seq, r.auditoria_ate_seq);
+                let esperado = if truncar {
+                    "não existe mais"
+                } else {
+                    "reescrita"
+                };
+                assert!(motivo.contains(esperado), "{motivo}");
+            }
+            outro => panic!("esperava trilha corrompida (truncar={truncar}), veio {outro:?}"),
+        }
+    }
+}
+
 #[test]
 fn caso_sem_evidencias_gera_relatorio_so_com_as_secoes_escolhidas() {
     let (_raiz, _origem, mut banco, _x) = preparado();
@@ -255,4 +334,184 @@ fn caso_sem_evidencias_gera_relatorio_so_com_as_secoes_escolhidas() {
     assert!(fs::read(banco.pasta().join(&r.caminho))
         .unwrap()
         .starts_with(b"%PDF-"));
+}
+
+/// O banco do caso é alterado com outra ferramenta (gatilhos desligados): o conteúdo da
+/// mensagem muda, mas a coluna hash_registro e o hash da evidência continuam os mesmos.
+/// A conferência recalcula o hash do conteúdo e acusa a divergência.
+#[test]
+fn conteudo_do_registro_alterado_no_banco_do_caso_diverge() {
+    let (_raiz, _origem, mut banco, x) = preparado();
+    marcar(&mut banco, &x);
+    assert_eq!(situacoes(&banco), ["conferida", "conferida", "conferida"]);
+    let msgs = mensagens_ana(&banco);
+    // A mensagem 2 da conversa está no trecho (E-2), mas não é o registro de E-1.
+    let alvo = msgs[1].id;
+    let c = Connection::open(banco.pasta().join(NOME_ARQUIVO_CASO)).unwrap();
+    c.execute_batch("DROP TRIGGER artefato_sem_update;")
+        .unwrap();
+    c.execute(
+        "UPDATE artefato SET conteudo = 'texto trocado depois' WHERE id = ?1",
+        [alvo],
+    )
+    .unwrap();
+    drop(c);
+    assert_eq!(situacoes(&banco), ["conferida", "divergente", "conferida"]);
+
+    let auditoria = banco.verificar_auditoria().unwrap();
+    let m = montagem::montar(&banco, &PedidoRelatorio::default(), Utc::now(), &auditoria).unwrap();
+    let e2 = &m.documento.evidencias[1];
+    assert_eq!(e2.situacao, "divergente");
+    assert!(
+        e2.situacao_texto.contains(&format!("registro {alvo}")),
+        "{}",
+        e2.situacao_texto
+    );
+
+    // O registro de E-1 também é adulterado: diverge mesmo com hash e coluna intactos.
+    let foto = mensagem(&msgs, "SINT0000000003").id;
+    let c = Connection::open(banco.pasta().join(NOME_ARQUIVO_CASO)).unwrap();
+    c.execute(
+        "UPDATE artefato SET remetente = 'outra pessoa' WHERE id = ?1",
+        [foto],
+    )
+    .unwrap();
+    drop(c);
+    assert_eq!(situacoes(&banco), ["divergente", "divergente", "conferida"]);
+    let r = sied_relatorio::gerar(&mut banco, PedidoRelatorio::default()).unwrap();
+    assert_eq!(r.evidencias[0]["situacao"], "divergente");
+    assert_eq!(r.evidencias[1]["situacao"], "divergente");
+}
+
+/// Todo texto do documento diagramado, com a borda direita de cada trecho (em pt).
+fn textos_diagramados(doc: &typst_layout::PagedDocument) -> Vec<(usize, String, f64, f64)> {
+    use typst::layout::{Frame, FrameItem, Point};
+    fn visitar(
+        f: &Frame,
+        origem: Point,
+        pagina: usize,
+        largura: f64,
+        saida: &mut Vec<(usize, String, f64, f64)>,
+    ) {
+        for (pos, item) in f.items() {
+            let p = origem + *pos;
+            match item {
+                FrameItem::Group(g) => {
+                    let t = Point::new(g.transform.tx, g.transform.ty);
+                    visitar(&g.frame, p + t, pagina, largura, saida)
+                }
+                FrameItem::Text(t) => saida.push((
+                    pagina,
+                    // Glifo 0 (".notdef") é o quadrado vazio de caractere sem desenho.
+                    if t.glyphs.iter().any(|g| g.id == 0) {
+                        format!("<SEM DESENHO>{}", t.text)
+                    } else {
+                        t.text.to_string()
+                    },
+                    (p.x + t.width()).to_pt(),
+                    largura,
+                )),
+                _ => {}
+            }
+        }
+    }
+    let mut v = Vec::new();
+    for (i, pg) in doc.pages().iter().enumerate() {
+        let largura = pg.frame.width().to_pt();
+        visitar(&pg.frame, Point::zero(), i + 1, largura, &mut v);
+    }
+    v
+}
+
+/// Textos digitados pelo analista (e conteúdo vindo da extração) com sintaxe do Typst,
+/// caracteres de controle, emojis, direção invertida e palavras enormes: tudo sai como
+/// texto literal, dentro da página, sem derrubar a geração.
+#[test]
+fn textos_hostis_viram_texto_literal_dentro_da_pagina() {
+    use sied_armazenamento::evidencias::TextosEvidencia;
+    let (_raiz, _origem, mut banco, x) = preparado();
+    marcar(&mut banco, &x);
+    let sintaxe = r#"#panic("injetado") #import "/etc/passwd" $x^2$ <rotulo> @rotulo ] [ *negrito* _it_ `raw` \ // comentário /* bloco"#;
+    let controles = "NUL\u{0}BEL\u{7}ESC\u{1b}[31m DEL\u{7f} TAB\t CR\r fim";
+    let palavra = "A".repeat(3000);
+    let url = format!("https://exemplo.invalid/{}", "caminho/".repeat(300));
+    let emojis = "👩‍👩‍👧‍👦 🇧🇷 ✅ 🔒 \u{202E}texto invertido\u{202C} zero\u{200B}width ﷽";
+    let evs = banco.evidencias().unwrap();
+    banco
+        .alterar_evidencia(
+            evs[0].id,
+            TextosEvidencia {
+                titulo: Some(sintaxe.into()),
+                observacao: Some(format!("{controles} {palavra}")),
+                descricao_contextual: Some(emojis.into()),
+                categoria: Some(url.clone()),
+            },
+        )
+        .unwrap();
+    banco
+        .alterar_evidencia(
+            evs[1].id,
+            TextosEvidencia {
+                observacao: Some("linha\n".repeat(3000)),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    let pedido = PedidoRelatorio {
+        titulo: Some(format!("Relatório {sintaxe}")),
+        observacoes: Some(format!("{emojis}\n\n{palavra}")),
+        conclusao: Some(controles.into()),
+        ..Default::default()
+    };
+    let auditoria = banco.verificar_auditoria().unwrap();
+    let agora = Utc::now();
+    let m = montagem::montar(&banco, &pedido, agora, &auditoria).unwrap();
+    let dados = serde_json::to_string(&m.documento).unwrap();
+    let doc = sied_relatorio::motor::paginar(&dados, &m.imagens, agora).expect("diagrama");
+
+    let textos = textos_diagramados(&doc);
+    let tudo: String = textos.iter().map(|t| t.1.as_str()).collect();
+    assert!(
+        tudo.contains("#panic(\"injetado\")"),
+        "sintaxe do Typst virou texto"
+    );
+    assert!(tudo.contains("#import"));
+    // Emojis e controles aparecem pelo código; nenhum quadrado vazio no documento.
+    assert!(tudo.contains("[U+1F469 U+200D U+1F469 U+200D U+1F467 U+200D U+1F466]"));
+    assert!(tudo.contains("NUL[U+0000]BEL[U+0007]"));
+    assert!(tudo.contains("[U+202E]texto invertido[U+202C]"));
+    let sem_desenho: Vec<_> = textos
+        .iter()
+        .filter(|t| t.1.starts_with("<SEM DESENHO>"))
+        .map(|t| t.1.clone())
+        .collect();
+    assert!(sem_desenho.is_empty(), "{sem_desenho:?}");
+    // Nada passa da margem direita (2,1 cm) além de uma pequena tolerância.
+    let fora: Vec<_> = textos
+        .iter()
+        .filter(|(_, _, direita, largura)| *direita > largura - 50.0)
+        .map(|(p, t, d, l)| {
+            format!(
+                "pág. {p}: {:.0} > {:.0}: {}",
+                d,
+                l - 59.5,
+                &t[..t.len().min(40)]
+            )
+        })
+        .collect();
+    assert!(
+        fora.is_empty(),
+        "texto fora da página:\n{}",
+        fora.join("\n")
+    );
+
+    // E o PDF é gerado e registrado.
+    let r = sied_relatorio::gerar(&mut banco, pedido).unwrap();
+    assert!(fs::read(banco.pasta().join(&r.caminho))
+        .unwrap()
+        .starts_with(b"%PDF-"));
+    guardar(
+        &banco.pasta().join(&r.caminho),
+        "relatorio-textos-hostis.pdf",
+    );
 }

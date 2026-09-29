@@ -23,6 +23,7 @@ use std::path::{Path, PathBuf};
 
 use crate::auditoria::{self, RegistroAuditoria, VerificacaoAuditoria};
 use crate::busca::{self, FiltroBusca, ResultadoBusca};
+use crate::conexao::{self, Abertura};
 use crate::conversas::{self, AppConversas, Conversa, FiltroConversas, PosicaoMensagem, Trecho};
 use crate::evidencias::{self, Evidencia, Marcacoes, NovaEvidencia, TextosEvidencia};
 use crate::extracoes::{
@@ -33,15 +34,42 @@ use crate::importacao::Importacao;
 use crate::migracoes::{self, BANCO_CASO};
 use crate::relatorios::{self, NovoRelatorio, RelatorioRegistrado};
 use crate::resumo::{self, Identificador, ResumoCaso};
-use crate::{conexao, ErroArmazenamento, Resultado, Sessao};
+use crate::{ErroArmazenamento, Resultado, Sessao};
 
 pub const NOME_ARQUIVO_CASO: &str = "caso.sied.db";
+
+/// Enquanto o caso está aberto, o SIED segura uma trava exclusiva do sistema
+/// operacional neste arquivo: outra janela (ou outra estação, na mesma pasta de rede)
+/// não abre o mesmo caso ao mesmo tempo. A trava é liberada pelo sistema mesmo se o
+/// SIED fechar de forma abrupta; o arquivo vazio pode ficar na pasta, sem efeito.
+pub const NOME_ARQUIVO_TRAVA: &str = "caso.sied.lock";
+
+/// Trava exclusiva do caso. `None` quando o sistema de arquivos não oferece travas
+/// (registrado no log; o caso abre assim mesmo, como antes).
+fn travar(pasta: &Path) -> Resultado<Option<std::fs::File>> {
+    let f = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(pasta.join(NOME_ARQUIVO_TRAVA))?;
+    match f.try_lock() {
+        Ok(()) => Ok(Some(f)),
+        Err(std::fs::TryLockError::WouldBlock) => Err(ErroArmazenamento::CasoEmUso(pasta.into())),
+        Err(std::fs::TryLockError::Error(e)) => {
+            tracing::warn!(erro = %e, pasta = %pasta.display(), "sistema de arquivos sem trava; o caso abre sem proteção contra uso simultâneo");
+            Ok(None)
+        }
+    }
+}
 
 pub struct BancoCaso {
     conn: Connection,
     pasta: PathBuf,
     sessao: Sessao,
     caso: Caso,
+    /// Mantida aberta enquanto o caso estiver aberto (ver [`NOME_ARQUIVO_TRAVA`]).
+    _trava: Option<std::fs::File>,
 }
 
 impl BancoCaso {
@@ -57,8 +85,9 @@ impl BancoCaso {
         }
         std::fs::create_dir_all(pasta)?;
         let pasta = pasta.canonicalize()?;
+        let trava = travar(&pasta)?;
         let caminho = pasta.join(NOME_ARQUIVO_CASO);
-        let mut conn = conexao::abrir(&caminho)?;
+        let mut conn = conexao::abrir(&caminho, &BANCO_CASO, Abertura::Criar)?;
         migracoes::preparar(&mut conn, &caminho, &BANCO_CASO)?;
 
         let agora = Utc::now();
@@ -103,6 +132,7 @@ impl BancoCaso {
             pasta,
             sessao,
             caso,
+            _trava: trava,
         })
     }
 
@@ -113,9 +143,13 @@ impl BancoCaso {
             return Err(ErroArmazenamento::CasoNaoEncontrado(pasta.into()));
         }
         let pasta = pasta.canonicalize()?;
-        let mut conn = conexao::abrir(&caminho)?;
-        migracoes::preparar(&mut conn, &caminho, &BANCO_CASO)?;
-        let caso = ler_caso(&conn)?;
+        // Antes de tocar no banco: outra janela com o caso aberto pode estar importando,
+        // e marcar_interrompidas trataria a importação dela como interrompida.
+        let trava = travar(&pasta)?;
+        let mut conn = conexao::abrir(&caminho, &BANCO_CASO, Abertura::Existente)?;
+        migracoes::preparar(&mut conn, &caminho, &BANCO_CASO)
+            .map_err(|e| conexao::corrompido_em(e, &caminho))?;
+        let caso = ler_caso(&conn).map_err(|e| conexao::corrompido_em(e, &caminho))?;
         let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
         auditoria::registrar(&tx, &sessao, "caso_aberto", json!({ "pasta": pasta }))?;
         marcar_interrompidas(&tx, &sessao)?;
@@ -126,6 +160,7 @@ impl BancoCaso {
             pasta,
             sessao,
             caso,
+            _trava: trava,
         })
     }
 
@@ -278,6 +313,20 @@ impl BancoCaso {
 
     pub fn artefato(&self, artefato_id: i64) -> Resultado<ArtefatoDetalhe> {
         extracoes::detalhe_artefato(&self.conn, artefato_id)
+    }
+
+    /// Recalcula o `hash_registro` a partir do conteúdo gravado (ver
+    /// [`extracoes::conferir_registro`]).
+    pub fn conferir_registro(&self, artefato_id: i64) -> Resultado<extracoes::ConferenciaRegistro> {
+        extracoes::conferir_registro(&self.conn, artefato_id)
+    }
+
+    /// Registros do caso (ou da extração) cujo conteúdo não confere com o hash gravado.
+    pub fn registros_que_nao_conferem(
+        &self,
+        extracao: Option<ExtracaoId>,
+    ) -> Resultado<Vec<extracoes::ConferenciaRegistro>> {
+        extracoes::registros_que_nao_conferem(&self.conn, extracao)
     }
 
     pub fn conversas(
@@ -565,7 +614,23 @@ pub fn nome_pasta_sugerido(novo: &NovoCaso) -> String {
     let nome: String = nome.chars().take(60).collect();
     if nome.is_empty() {
         "caso".into()
+    } else if reservado_no_windows(&nome) {
+        format!("caso-{nome}")
     } else {
         nome
     }
+}
+
+/// Nomes que o Windows reserva para dispositivos (a pasta não poderia ser criada).
+fn reservado_no_windows(nome: &str) -> bool {
+    let n = nome.to_uppercase();
+    matches!(n.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        || ["COM", "LPT"].iter().any(|p| {
+            n.strip_prefix(p).is_some_and(|resto| {
+                matches!(
+                    resto,
+                    "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "¹" | "²" | "³"
+                )
+            })
+        })
 }

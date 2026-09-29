@@ -51,11 +51,16 @@ docs/                  visão e arquitetura
 | Casos | `Documentos\SIED\Casos\<número do procedimento>\caso.sied.db` | `SIED_PASTA_CASOS` |
 
 Cada pasta de caso é autocontida: copiá-la leva o caso inteiro, e "Abrir pasta de caso…"
-a registra em outra estação. Nível de log: `SIED_LOG=debug`.
+a registra em outra estação. Copie o caso **fechado**: enquanto está aberto, a trava
+`caso.sied.lock` impede que ele seja aberto em outra janela ou estação, e o `-wal` ainda pode ter
+dados que não foram para o `caso.sied.db`. Prefira uma pasta local (não OneDrive, Dropbox ou
+rede); a tela de novo caso avisa quando a pasta parece sincronizada ou remota. Nível de log:
+`SIED_LOG=debug`.
 
 ```
 <pasta do caso>\
   caso.sied.db                       caso, dispositivos, extrações, inventário, registros, auditoria
+  caso.sied.lock                     trava enquanto o caso está aberto
   importacoes\<id da extração>\
     manifesto.sha256                 SHA-256 de cada arquivo da extração (formato sha256sum)
     log-importacao.jsonl             log detalhado da importação (um evento JSON por linha)

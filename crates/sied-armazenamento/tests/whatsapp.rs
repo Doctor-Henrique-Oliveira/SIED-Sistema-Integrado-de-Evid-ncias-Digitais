@@ -300,6 +300,72 @@ fn whatsapp_importado_com_conversas_nomes_e_anexos() {
     banco.verificar_auditoria().unwrap();
 }
 
+/// Os filtros de texto (conversas, localizar na conversa, arquivos e identificadores)
+/// não diferenciam maiúsculas nem acentos: antes, `lower()` do SQLite só convertia
+/// ASCII e "SINTÉTICA" não achava "Sintética".
+#[test]
+fn filtros_de_texto_ignoram_maiusculas_e_acentos() {
+    let raiz = tempfile::tempdir().unwrap();
+    let origem = raiz.path().join("Extracao-SINTETICA-WhatsApp");
+    extracao_whatsapp(&origem);
+    let (banco, d) = caso(raiz.path());
+    let x = importar(&banco, &d, &origem);
+    assert_eq!(x.status, "concluida", "{:?}", x.erro);
+
+    let filtrar = |texto: &str| -> Vec<String> {
+        let f = sied_armazenamento::conversas::FiltroConversas {
+            extracao_id: Some(x.id),
+            texto: Some(texto.into()),
+            ..Default::default()
+        };
+        let mut v: Vec<String> = banco
+            .conversas_filtradas(&f, 0, 50)
+            .unwrap()
+            .itens
+            .into_iter()
+            .map(|c| c.id_externo)
+            .collect();
+        v.sort();
+        v
+    };
+    for termo in [
+        "ANA SINTÉTICA",
+        "ana sintetica",
+        "Ana Sintetica",
+        "ÁNA SÍNTÉTICA",
+    ] {
+        assert_eq!(filtrar(termo), vec![ANA.to_string()], "{termo}");
+    }
+    // "sintético" casa com os nomes de Bruno, Carla e do grupo, com ou sem acento.
+    assert_eq!(filtrar("SINTETICO"), filtrar("sintético"));
+    assert_eq!(filtrar("SINTETICO").len(), 2, "{:?}", filtrar("SINTETICO"));
+
+    let ana = banco
+        .conversas(Some(x.id), 0, 50)
+        .unwrap()
+        .itens
+        .into_iter()
+        .find(|c| c.id_externo == ANA)
+        .unwrap();
+    let achadas = banco
+        .localizar_na_conversa(ana.id, "MENSAGEM SINTETICA", 10)
+        .unwrap();
+    assert_eq!(achadas.total, 1);
+    let msgs = banco.mensagens_conversa(ana.id, 0, 50).unwrap().itens;
+    assert_eq!(achadas.itens[0].id, mensagem(&msgs, "SINT0000000001").id);
+
+    let arquivos = banco
+        .arquivos(x.id, None, Some("whatsapp images/img-20260102"), 0, 50)
+        .unwrap();
+    assert_eq!(arquivos.total, 1);
+
+    let ids = banco
+        .identificadores(Some("CARLA (PERFIL SINTETICO)"), 0, 50)
+        .unwrap();
+    assert_eq!(ids.total, 1);
+    assert_eq!(ids.itens[0].identificador, CARLA);
+}
+
 #[test]
 fn esquema_antigo_e_caminho_exato_na_raiz_da_extracao() {
     // Extração que já começa na pasta do WhatsApp: o caminho gravado pelo app é o

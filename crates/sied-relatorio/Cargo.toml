@@ -25,6 +25,8 @@ sied-dominio.workspace = true
 sied-midia.workspace = true
 
 [dev-dependencies]
+# Só para desenhar imagens sintéticas na medição de relatório com 60 figuras.
+image = { version = "0.25", default-features = false, features = ["png"] }
 rusqlite.workspace = true
 sied-ingestao.workspace = true
 tempfile.workspace = true

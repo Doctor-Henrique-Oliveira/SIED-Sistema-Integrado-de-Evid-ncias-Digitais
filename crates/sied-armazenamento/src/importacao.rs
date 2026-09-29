@@ -19,8 +19,10 @@ use sied_ingestao::pipeline::{
 use sied_ingestao::{ErroIngestao, InfoComponente};
 use std::path::{Path, PathBuf};
 
+use crate::conexao::{self, Abertura};
 use crate::extracoes::{self, Extracao};
-use crate::{auditoria, conexao, ErroArmazenamento, Resultado, Sessao};
+use crate::migracoes::BANCO_CASO;
+use crate::{auditoria, ErroArmazenamento, Resultado, Sessao};
 
 pub const PASTA_IMPORTACOES: &str = "importacoes";
 pub const PASTA_COPIAS: &str = "cache/bancos";
@@ -83,7 +85,7 @@ impl Importacao {
         origem: &Path,
     ) -> Resultado<Self> {
         let origem = validar_origem(origem, pasta_caso)?;
-        let mut conn = conexao::abrir(caminho_banco)?;
+        let mut conn = conexao::abrir(caminho_banco, &BANCO_CASO, Abertura::Existente)?;
         let existe: bool = conn.query_row(
             "SELECT EXISTS(SELECT 1 FROM dispositivo WHERE id = ?1)",
             [dispositivo_id.to_string()],

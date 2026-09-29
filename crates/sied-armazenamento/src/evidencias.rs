@@ -308,6 +308,24 @@ pub fn adicionar(tx: &Transaction, sessao: &Sessao, nova: NovaEvidencia) -> Resu
             (TipoEvidencia::Registro, hash, 1, None)
         }
         (Some(a), Some(b), None) => {
+            // As conversas aparecem enquanto a importação grava em lotes: um trecho
+            // marcado agora poderia ganhar mensagens depois e divergir no relatório
+            // sem que nada tivesse sido adulterado.
+            let status: Option<String> = tx
+                .query_row(
+                    "SELECT e.status FROM artefato a JOIN extracao e ON e.id = a.extracao_id
+                     WHERE a.id = ?1",
+                    [a],
+                    |r| r.get(0),
+                )
+                .optional()?;
+            if status.as_deref() == Some("em_andamento") {
+                return Err(ErroArmazenamento::Recusado(
+                    "a importação desta extração ainda está em andamento e a conversa pode \
+                     ganhar mensagens; marque o trecho quando ela terminar"
+                        .into(),
+                ));
+            }
             let t = conversas::trecho(tx, a, b)?;
             let hash = hash_do_trecho(t.mensagens.iter().map(|(m, h)| (m.id, h.as_str())));
             let primeira = t.mensagens.first().map(|(m, _)| m.id).unwrap_or(a);

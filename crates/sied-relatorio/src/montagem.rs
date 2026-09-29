@@ -13,7 +13,9 @@ use serde_json::Value;
 use sied_armazenamento::auditoria::VerificacaoAuditoria;
 use sied_armazenamento::conversas::Conversa;
 use sied_armazenamento::evidencias::{hash_do_trecho, Evidencia, TipoEvidencia};
-use sied_armazenamento::extracoes::{ArtefatoDetalhe, ArtefatoResumo, Extracao};
+use sied_armazenamento::extracoes::{
+    ArtefatoDetalhe, ArtefatoResumo, ConferenciaRegistro, Extracao,
+};
 use sied_armazenamento::{BancoCaso, Resultado};
 use sied_dominio::{Dispositivo, SistemaOperacional};
 use sied_midia::Pedido;
@@ -823,9 +825,11 @@ pub fn montar(
         Campo::novo("Hash do último registro conferido", auditoria.hash_final.clone()),
         Campo::novo(
             "Registro desta geração",
+            // Sem número exato: uma importação que termine durante a geração também
+            // grava na trilha, e o registro deste relatório pode não ser o seguinte.
             format!(
-                "A geração deste relatório é gravada na trilha como o registro nº {} (relatorio_gerado), com o SHA-256 deste PDF.",
-                auditoria.registros + 1
+                "A geração deste relatório é gravada na trilha em um registro posterior ao nº {} (ação relatorio_gerado), com o SHA-256 deste PDF.",
+                milhar(auditoria.registros)
             ),
         ),
         Campo::novo(
@@ -923,14 +927,44 @@ fn metodologia() -> Vec<String> {
     vec![
         "As extrações foram importadas pelo SIED em modo somente leitura: nenhum arquivo da pasta de origem foi aberto para escrita. Na importação, cada arquivo teve o SHA-256 calculado e registrado no inventário, e o conjunto foi resumido num manifesto cujo hash consta na seção de extrações.".into(),
         "Os bancos de dados reconhecidos foram copiados para a pasta do caso; a cópia foi conferida pelo SHA-256 e somente ela foi lida pelos parsers. Cada registro interpretado guarda o arquivo, a tabela e o identificador de origem, o parser e a versão que o leram, os valores brutos da linha e um hash próprio (hash_registro). Os registros não são alterados depois de gravados.".into(),
-        "As evidências deste relatório foram selecionadas pelo analista no SIED. No momento da seleção foi gravado o hash do alvo: o hash_registro de um registro, o SHA-256 de um arquivo do inventário ou, para um trecho de conversa, o SHA-256 da lista de identificadores e hashes das mensagens, na ordem da conversa. Na geração deste relatório esses hashes foram conferidos de novo; os arquivos e as imagens anexas foram relidos na pasta da extração e o SHA-256 foi recalculado. O resultado aparece em cada evidência e na seção de integridade.".into(),
+        "As evidências deste relatório foram selecionadas pelo analista no SIED. No momento da seleção foi gravado o hash do alvo: o hash_registro de um registro, o SHA-256 de um arquivo do inventário ou, para um trecho de conversa, o SHA-256 da lista de identificadores e hashes das mensagens, na ordem da conversa. Na geração deste relatório esses hashes foram conferidos de novo: o hash_registro de cada registro foi recalculado a partir do conteúdo gravado no banco do caso (e não apenas lido), e os arquivos e as imagens anexas foram relidos na pasta da extração, com o SHA-256 recalculado. O resultado aparece em cada evidência e na seção de integridade.".into(),
         "Datas e horas são exibidas no fuso horário do caso. O valor exatamente como gravado pelo aplicativo aparece no apêndice técnico.".into(),
+        "Caracteres que as fontes deste relatório não desenham (emojis e alguns alfabetos) e caracteres invisíveis ou de controle aparecem pelo código Unicode entre colchetes, na ordem original (ex.: [U+1F600]); o seletor de estilo de emoji (U+FE0F) depois de um caractere desenhado é omitido. O valor exato está nos valores brutos do apêndice técnico e no banco do caso.".into(),
         "Toda ação no caso (criação, cadastro de dispositivos, importações, seleção de evidências e geração de relatórios) é gravada numa trilha de auditoria encadeada por hashes. A trilha foi verificada integralmente antes desta geração.".into(),
     ]
 }
 
+/// Por que o conteúdo gravado de um registro não confere com o `hash_registro`.
+fn motivo_alterado(c: &ConferenciaRegistro) -> String {
+    match &c.recalculado {
+        Ok(h) => format!(
+            "registro {}: hash recalculado {h}, gravado na importação {}",
+            c.artefato_id, c.gravado
+        ),
+        Err(m) => format!("registro {}: {m}", c.artefato_id),
+    }
+}
+
+fn texto_alterados(alterados: &[String]) -> String {
+    const MAX: usize = 10;
+    let mut t = alterados
+        .iter()
+        .take(MAX)
+        .cloned()
+        .collect::<Vec<_>>()
+        .join("; ");
+    if alterados.len() > MAX {
+        t.push_str(&format!("; e mais {}", alterados.len() - MAX));
+    }
+    format!(
+        "ATENÇÃO: o conteúdo gravado no banco do caso não corresponde ao hash_registro calculado na importação ({t}). O banco do caso foi alterado fora do SIED; a evidência não deve ser usada sem nova verificação."
+    )
+}
+
 fn evidencia(ctx: &mut Contexto, e: &Evidencia) -> Resultado<(EvidenciaDoc, Conferencia)> {
     let mut origem = Vec::new();
+    // Registros cujo conteúdo gravado não confere com o próprio hash_registro.
+    let mut alterados: Vec<String> = Vec::new();
     let (tipo, titulo_padrao, conteudo, conferido, falha, ok) = match e.tipo {
         TipoEvidencia::Registro => {
             let r = e
@@ -938,6 +972,11 @@ fn evidencia(ctx: &mut Contexto, e: &Evidencia) -> Resultado<(EvidenciaDoc, Conf
                 .as_ref()
                 .expect("evidência de registro com registro");
             let det = ctx.banco.artefato(r.id)?;
+            // Recalculado do conteúdo gravado, não lido da coluna hash_registro.
+            let conf_registro = ctx.banco.conferir_registro(r.id)?;
+            if !conf_registro.confere() {
+                alterados.push(motivo_alterado(&conf_registro));
+            }
             let conversa = match e.conversa_id {
                 Some(id) => Some(ctx.banco.conversa(id)?),
                 None => None,
@@ -967,16 +1006,25 @@ fn evidencia(ctx: &mut Contexto, e: &Evidencia) -> Resultado<(EvidenciaDoc, Conf
                 "Registro".to_string(),
                 titulo,
                 conteudo,
-                Some(det.hash_registro.clone()),
+                conf_registro.recalculado.ok(),
                 None,
-                "O registro no banco do caso tem o mesmo hash_registro gravado na seleção.",
+                "O hash_registro foi recalculado a partir do conteúdo gravado no banco do caso e confere com o registrado na seleção.",
             )
         }
         TipoEvidencia::Trecho => {
             let a = e.registro.as_ref().expect("trecho com início");
             let b = e.registro_fim.as_ref().expect("trecho com fim");
             let t = ctx.banco.trecho(a.id, b.id)?;
-            let hash = hash_do_trecho(t.mensagens.iter().map(|(m, h)| (m.id, h.as_str())));
+            // O hash de cada mensagem é recalculado do conteúdo gravado.
+            let mut recalculados = Vec::with_capacity(t.mensagens.len());
+            for (m, _) in &t.mensagens {
+                let c = ctx.banco.conferir_registro(m.id)?;
+                if !c.confere() {
+                    alterados.push(motivo_alterado(&c));
+                }
+                recalculados.push((m.id, c.recalculado.unwrap_or_default()));
+            }
+            let hash = hash_do_trecho(recalculados.iter().map(|(id, h)| (*id, h.as_str())));
             let conversa = match t.conversa_id {
                 Some(id) => Some(ctx.banco.conversa(id)?),
                 None => None,
@@ -1075,7 +1123,7 @@ fn evidencia(ctx: &mut Contexto, e: &Evidencia) -> Resultado<(EvidenciaDoc, Conf
                 },
                 Some(hash),
                 None,
-                "As mensagens do trecho, na ordem da conversa, têm os mesmos identificadores e hashes gravados na seleção.",
+                "O hash de cada mensagem foi recalculado a partir do conteúdo gravado no banco do caso; na ordem da conversa, identificadores e hashes conferem com o registrado na seleção.",
             )
         }
         TipoEvidencia::Arquivo => {
@@ -1176,7 +1224,11 @@ fn evidencia(ctx: &mut Contexto, e: &Evidencia) -> Resultado<(EvidenciaDoc, Conf
         }
     };
 
-    let (sit, sit_texto) = situacao(conferido.as_deref(), &e.hash_no_momento, falha, ok);
+    let (sit, sit_texto) = if alterados.is_empty() {
+        situacao(conferido.as_deref(), &e.hash_no_momento, falha, ok)
+    } else {
+        ("divergente".to_string(), texto_alterados(&alterados))
+    };
 
     let mut custodia = vec![
         Campo::novo(

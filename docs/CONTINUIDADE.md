@@ -1,9 +1,12 @@
 # SIED — Documento de continuidade
 
 Estado em 29/09/2026: a fase 1 fecha o ciclo **importar → analisar → selecionar → relatar**. Na
-`main` estão a interface para volume real (PR #9, merge `24791ff`) e as **evidências selecionadas
-com o relatório PDF** em Typst (PR #10, branch `fase1-evidencias-relatorio`). O fechamento desta
-etapa está em `docs/checkpoints/2026-09-29-fase1-evidencias-relatorio.md`; o do volume real, em
+`main` estão a interface para volume real (PR #9, merge `24791ff`), as **evidências selecionadas
+com o relatório PDF** em Typst (PR #10, merge `5b68c8d`) e a **auditoria pré-produção com
+hardening** (PR #11, branch `claude/auditoria-hardening-7p20bx`). Quem for continuar o projeto
+deve começar por `docs/HANDOFF-CODEX.md`. O fechamento da auditoria está em
+`docs/checkpoints/2026-09-29-auditoria-hardening.md`; o das evidências e relatório, em
+`docs/checkpoints/2026-09-29-fase1-evidencias-relatorio.md`; o do volume real, em
 `docs/checkpoints/2026-09-28-fase1-visual-volume.md`; o do WhatsApp, em
 `docs/checkpoints/2026-09-28-fase1-whatsapp.md`; a interface do redesign, no §15. Este documento permite retomar o projeto do
 zero: o que existe, onde está, por que foi feito assim e o que vem a seguir. Os detalhes de cada
@@ -74,7 +77,8 @@ release, execução manual ou PR que muda o build (opção "Só tags", PR #4).
 | `fase1-redesign-registro` | — | #7 | mesclado (`85273d1`) |
 | `fase1-whatsapp` | `baee700` | #8 | mesclado (`dc402cf`) |
 | `fase1-visual-volume` | `181f2c5` | #9 | mesclado (`24791ff`) |
-| `fase1-evidencias-relatorio` | ver §3 | #10 | evidências e relatório PDF; mesclado por merge commit (ver `git log --merges`) |
+| `fase1-evidencias-relatorio` | — | #10 | mesclado (`5b68c8d`) |
+| `claude/auditoria-hardening-7p20bx` | ver §3 | #11 | auditoria pré-produção e hardening; mesclado por merge commit (ver `git log --merges -1`) |
 
 As branches mescladas **não foram apagadas**. Podem ser removidas depois que a `main` for
 confirmada íntegra e com CI verde, com aval do usuário.
@@ -115,6 +119,20 @@ explícito** e CI completa verde (Linux e Windows).
 | `24791ff` | Merge do PR #9 na `main`: interface para volume real |
 | `64b3387` | `fase1-evidencias-relatorio`: crate `sied-relatorio` com Typst embutido |
 | (seguinte) | `fase1-evidencias-relatorio`: evidências (migração 5), relatório PDF, telas, testes e checkpoint |
+| `5b68c8d` | Merge do PR #10 na `main`: evidências e relatório PDF |
+| `97f59f2` | Auditoria: relatório recalcula o `hash_registro` a partir do conteúdo gravado (crítico) |
+| `f24df36` | Auditoria: trava exclusiva do caso (`caso.sied.lock`) |
+| `ac63ae0` | Auditoria: tipo do banco conferido antes de escrever; cópia de migração sem colisão; erros SQLite em pt-BR |
+| `ec0d609` | Auditoria: pânico capturado nas fronteiras, imagem grande sem estourar memória, emojis e invisíveis legíveis no PDF |
+| `506af8a` | Auditoria: comandos Tauri fora da thread da janela |
+| `dac7b39` | Auditoria: filtros de texto sem diferença de maiúsculas e acentos (`sied_normal`) |
+| `dab6953` | Auditoria: caminhos da extração com unidade, `.` e nomes só de pontos recusados em qualquer posição |
+| `06d960e`, `5636248` | Auditoria: WAL ilegível gera aviso; trecho em importação recusado |
+| `cd1af15` | Auditoria: verificação da trilha confere as âncoras dos relatórios |
+| `37afac8`, `72685f1`, `5e9e196` | Auditoria: temporário do PDF, nomes reservados do Windows, texto da trilha no PDF |
+| `985e20c`, `6ca06ef` | Auditoria: aviso de pasta na nuvem ou em compartilhamento de rede |
+| `1a49ab0`, `004ac16` | Auditoria: índice certo nas consultas da conversa; medições com volume |
+| `eb89f48`, `72a4672`, `2e48156` | Auditoria: `.gitignore`, coordenadas e REAL infinito, datas absurdas |
 
 ---
 
@@ -208,9 +226,9 @@ explícito** e CI completa verde (Linux e Windows).
 
 | Conjunto | Quantidade | Resultado |
 |---|---|---|
-| Rust (`cargo test --workspace`, soma de todos os `test result`) | 172 (155 com o PR #9) | todos passam |
+| Rust (`cargo test --workspace`, soma de todos os `test result`) | 201 + 3 medições ignoradas (172 com o PR #10) | todos passam |
 | `cargo clippy -D warnings` e `cargo fmt --check` | — | limpos |
-| Interface (`vitest`) | 41 (35 com o PR #9) | todos passam |
+| Interface (`vitest`) | 43 (41 com o PR #10) | todos passam |
 | Build da interface (`npm run build`) e do app (`tauri build --debug --no-bundle`) | — | ok |
 | Typecheck TypeScript | — | limpo |
 | Tipos gerados (ts-rs) atualizados | — | conferido pela CI |
@@ -231,6 +249,13 @@ auditoria, conteúdo, divergente, indisponível, trilha adulterada), chat, busca
 desativados sem caso), indicador sem dado, seção recolhível, Contatos e Mídias. O ponta a ponta
 continua o mesmo roteiro, sem nenhuma verificação removida.
 
+A auditoria (PR #11) acrescentou: hash recalculado com dados hostis e cinco adulterações; trava
+do caso; banco vazio, truncado, de outro tipo e `.bak` já existente; parser em pânico;
+imagem-bomba; orientação EXIF; textos hostis no PDF (conferidos glifo a glifo); filtros sem
+acento; caminhos perigosos; WAL ilegível; trecho em importação; trilha truncada e reescrita;
+temporário do PDF; nomes reservados; pasta na nuvem ou na rede; datas e coordenadas absurdas;
+REAL infinito. Medições com volume em `tests/desempenho.rs` (ignoradas; ver o checkpoint).
+
 ## 6. Limitações conhecidas
 
 - **Avilla sem importador**: falta a árvore de uma extração real (ver §10).
@@ -247,8 +272,8 @@ continua o mesmo roteiro, sem nenhuma verificação removida.
   interrompida fica registrada).
 - Sem exclusão de extração (somente inclusão, de propósito).
 - Sem verificação do "hash declarado" do laudo de aquisição.
-- Localizar dentro da conversa longa compara minúsculas só em letras sem acento (ASCII); com
-  acento, o texto precisa ser digitado igual ao original. Traz as 1.000 primeiras ocorrências.
+- Localizar dentro da conversa longa conta todas as ocorrências, mas navega só pelas 5.000
+  primeiras (ignora maiúsculas e acentos desde a auditoria).
 - Busca ordenada só por relevância; a tela expõe filtros de extração, app e período (tipo só no
   backend).
 - Miniaturas só de imagens JPEG, PNG, GIF, WebP, BMP e TIFF até 256 MB. HEIC/HEIF, vídeos e
@@ -263,6 +288,13 @@ continua o mesmo roteiro, sem nenhuma verificação removida.
 - Relatório: no máximo 60 figuras; a geração segura a trava do caso (outros comandos esperam); sem
   botão "Abrir PDF" (a tela mostra o caminho); usuário é o do sistema operacional; um único modelo;
   sem assinatura digital do PDF; erro de imagem ilegível vem do decodificador em inglês.
+- Da auditoria (baixo risco): marcadores do trecho da busca podem vir do próprio conteúdo (B6);
+  queda do processo entre gravar e registrar o PDF deixa um PDF órfão (B7); conversa de 100 mil
+  mensagens com páginas de 79–185 ms (B8); copie o caso **fechado** (a trava impede copiar com ele
+  aberto no Windows, e o `-wal` ficaria para trás) (B9).
+- Caso em compartilhamento de rede ou pasta sincronizada (OneDrive e afins): WAL e trava não são
+  confiáveis fora do disco local. A tela avisa, sem bloquear; unidade mapeada (`Z:`) não é
+  detectada.
 
 ## 7. Decisões técnicas
 
@@ -302,6 +334,22 @@ continua o mesmo roteiro, sem nenhuma verificação removida.
 18. Relatório somente inclusão, com SHA-256 e posição da trilha de auditoria; trilha quebrada
     impede a geração. Typst e fontes embutidos; textos entram como dados JSON, nunca como
     marcação. Datas no fuso do caso com nome e deslocamento.
+19. (Auditoria) Na geração do relatório o `hash_registro` é **recalculado** a partir das colunas
+    e origens gravadas (`extracoes::conferir_registro`); a coluna sozinha não prova nada. Para o
+    recálculo ser exato: `serde_json` com `float_roundtrip` e `NovoArtefato::normalizar()` antes
+    do hash (−0.0 → 0.0; `app` vazio → ausente).
+20. (Auditoria) Trava exclusiva por arquivo `caso.sied.lock` enquanto o caso está aberto.
+21. (Auditoria) Datas só entre 1970 e 31/12/9999 (`DataHora::ms_plausivel`); coordenadas só
+    dentro de ±90/±180. Fora disso, o valor fica só no original.
+22. (Auditoria) Consultas da conversa com `a.app IS nullif(?, '')` e
+    `INDEXED BY idx_artefato_conversa`; comparação de texto do usuário com `sied_normal()`
+    (só em consultas).
+23. (Auditoria) A verificação da trilha confere as âncoras gravadas por cada relatório.
+24. (Auditoria) Comandos Tauri assíncronos (`spawn_blocking`); `catch_unwind` no parser, no
+    pipeline, na decodificação de imagem e no Typst.
+25. (Auditoria) Dependências sem informação de depuração nos builds de desenvolvimento e teste
+    (`[profile.dev.package."*"] debug = false`): os binários de teste com Typst caíram de ~530
+    para ~170 MB e a CI Linux deixou de ficar sem disco ao ligá-los.
 
 ## 8. Estrutura do banco e migrações
 
@@ -359,7 +407,9 @@ O `.gitignore` (seção SIED) impede o envio de:
 - pastas de casos, extrações e relatórios; `.ab`, `.tar`, `.avilla`, `.pdf`;
 - contêineres e imagens forenses (`.zip`, `.7z`, `.rar`, `.ufdr`, `.e01`, `.dd`, `.img` e afins);
 - backups cifrados do WhatsApp (`*.crypt*`);
-- credenciais (`.env*` exceto `.env.example`, `*.pem`, `*.key`, `*.pfx`, `*.p12`, `secrets.*`).
+- credenciais (`.env*` exceto `.env.example`, `*.pem`, `*.key`, `*.pfx`, `*.p12`, `secrets.*`);
+- arquivos de trabalho de um caso (`*.bak`, `*.parcial`, `*.sied.lock`, `log-importacao.jsonl`,
+  `manifesto.sha256`).
 
 Exceção explícita: `testes/fixtures/**` (fixtures sintéticas, identificadas como tais).
 
@@ -371,7 +421,7 @@ cargo test --workspace                           # testes Rust (também regenera
 cargo clippy --workspace --all-targets -- -D warnings
 cd app && npm run typecheck && npm test          # tipos e testes da interface
 cd app && npx tauri build --debug --no-bundle    # binário para o ponta a ponta
-testes/e2e/executar.sh target/debug/sied-desktop # ponta a ponta no app real
+testes/e2e/executar.sh target/debug/sied-desktop # ponta a ponta no app real (Linux: xvfb-run, openbox, wmctrl, tauri-driver, WebKitWebDriver)
 python3 testes/gerador/extracao_sintetica.py --whatsapp --volume <pasta>  # extração sintética com volume
 ```
 
@@ -379,9 +429,11 @@ Detalhes no `README.md`.
 
 ## 13. Próximo passo recomendado
 
-**Fase 1: ciclo completo na `main`.** Volume real (PR #9) e evidências com relatório PDF (PR #10)
-estão descritos no §4 e nos checkpoints `2026-09-28-fase1-visual-volume.md` e
-`2026-09-29-fase1-evidencias-relatorio.md`.
+**Fase 1: ciclo completo na `main`, auditado.** Volume real (PR #9) e evidências com relatório PDF
+(PR #10) estão descritos no §4 e nos checkpoints `2026-09-28-fase1-visual-volume.md` e
+`2026-09-29-fase1-evidencias-relatorio.md`. A auditoria pré-produção (PR #11) está em
+`2026-09-29-auditoria-hardening.md`; a passagem para outro agente, em `docs/HANDOFF-CODEX.md`.
+Nenhuma fase nova foi iniciada.
 
 A seguir:
 1. importador Avilla (quando a árvore chegar, §10);

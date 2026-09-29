@@ -178,7 +178,7 @@ pub fn listar_arquivos(
     let filtro = "extracao_id = ?1
          AND (?2 IS NULL OR categoria = ?2
               OR (?2 = 'midia' AND categoria IN ('imagem', 'video', 'audio', 'documento')))
-         AND (?3 IS NULL OR instr(lower(caminho), lower(?3)) > 0 OR sha256 = lower(?3))";
+         AND (?3 IS NULL OR instr(sied_normal(caminho), sied_normal(?3)) > 0 OR sha256 = lower(?3))";
     let texto = texto.map(str::trim).filter(|t| !t.is_empty());
     let total: i64 = conn.query_row(
         &format!("SELECT COUNT(*) FROM arquivo WHERE {filtro}"),
@@ -514,4 +514,287 @@ pub fn detalhe_artefato(conn: &Connection, artefato_id: i64) -> Resultado<Artefa
         })?
         .collect::<Result<_, _>>()?;
     Ok(d)
+}
+
+// ---------- Conferência do hash_registro ----------
+
+/// Resultado de recalcular o `hash_registro` de um artefato a partir do banco do caso.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConferenciaRegistro {
+    pub artefato_id: i64,
+    /// Gravado na importação (coluna `hash_registro`).
+    pub gravado: String,
+    /// Recalculado agora do conteúdo gravado; `Err` traz o motivo quando o conteúdo nem
+    /// pôde ser remontado (tipo de coluna inesperado, JSON inválido, valor desconhecido),
+    /// o que por si só indica alteração fora do SIED.
+    pub recalculado: Result<String, String>,
+}
+
+impl ConferenciaRegistro {
+    pub fn confere(&self) -> bool {
+        matches!(&self.recalculado, Ok(h) if *h == self.gravado)
+    }
+}
+
+type Remontado<T> = std::result::Result<T, String>;
+
+fn texto(v: &rusqlite::types::Value, coluna: &str) -> Remontado<Option<String>> {
+    use rusqlite::types::Value as V;
+    match v {
+        V::Null => Ok(None),
+        V::Text(t) => Ok(Some(t.clone())),
+        _ => Err(format!("coluna {coluna} com tipo inesperado")),
+    }
+}
+
+fn inteiro(v: &rusqlite::types::Value, coluna: &str) -> Remontado<Option<i64>> {
+    use rusqlite::types::Value as V;
+    match v {
+        V::Null => Ok(None),
+        V::Integer(i) => Ok(Some(*i)),
+        _ => Err(format!("coluna {coluna} com tipo inesperado")),
+    }
+}
+
+fn real(v: &rusqlite::types::Value, coluna: &str) -> Remontado<Option<f64>> {
+    use rusqlite::types::Value as V;
+    match v {
+        V::Null => Ok(None),
+        V::Real(f) => Ok(Some(*f)),
+        // Coluna REAL: o SQLite guarda valores inteiros (ex.: 10.0) como inteiros.
+        V::Integer(i) => Ok(Some(*i as f64)),
+        _ => Err(format!("coluna {coluna} com tipo inesperado")),
+    }
+}
+
+fn exigido<T>(v: Remontado<Option<T>>, coluna: &str) -> Remontado<T> {
+    v?.ok_or_else(|| format!("coluna {coluna} vazia"))
+}
+
+fn enumerado<T: serde::de::DeserializeOwned>(texto: String, coluna: &str) -> Remontado<T> {
+    serde_json::from_value(Value::String(texto))
+        .map_err(|_| format!("valor desconhecido na coluna {coluna}"))
+}
+
+fn json<T: serde::de::DeserializeOwned>(texto: String, coluna: &str) -> Remontado<T> {
+    serde_json::from_str(&texto).map_err(|e| format!("JSON inválido na coluna {coluna}: {e}"))
+}
+
+/// Remonta o [`NovoArtefato`](sied_dominio::artefato::NovoArtefato) exatamente como o
+/// parser o emitiu: colunas de `artefato` mais as referências de origem (a principal
+/// primeiro, depois as adicionais na ordem em que foram gravadas).
+fn remontar(
+    linha: &[rusqlite::types::Value],
+    refs: &[Vec<rusqlite::types::Value>],
+) -> Remontado<sied_dominio::artefato::NovoArtefato> {
+    use sied_dominio::artefato::{DataHora, NovoArtefato, ReferenciaRegistro};
+    let c = |i: usize| &linha[i];
+    let mut principal = None;
+    let mut adicionais = Vec::new();
+    for r in refs {
+        let e_principal = match exigido(inteiro(&r[0], "principal"), "principal")? {
+            0 => false,
+            1 => true,
+            _ => return Err("coluna principal com valor inesperado".into()),
+        };
+        let referencia = ReferenciaRegistro {
+            papel_arquivo: exigido(texto(&r[1], "papel_arquivo"), "papel_arquivo")?,
+            tabela: texto(&r[2], "tabela")?,
+            id_registro: texto(&r[3], "id_registro")?,
+            consulta: texto(&r[4], "consulta")?,
+            deslocamento: inteiro(&r[5], "deslocamento")?.map(|d| d as u64),
+            valores_brutos: json(
+                exigido(texto(&r[6], "valores_brutos"), "valores_brutos")?,
+                "valores_brutos",
+            )?,
+        };
+        if e_principal {
+            if principal.replace(referencia).is_some() {
+                return Err("mais de uma referência principal".into());
+            }
+        } else {
+            adicionais.push(referencia);
+        }
+    }
+    let origem = principal.ok_or("sem referência de origem principal")?;
+    let tipo = enumerado(exigido(texto(c(0), "tipo"), "tipo")?, "tipo")?;
+    let mut a = NovoArtefato::novo(tipo, origem);
+    a.origens_adicionais = adicionais;
+    a.subtipo = texto(c(1), "subtipo")?;
+    a.app = texto(c(2), "app")?;
+    a.conta = texto(c(3), "conta")?;
+    a.remetente = texto(c(4), "remetente")?;
+    a.destinatarios = json(
+        exigido(texto(c(5), "destinatarios"), "destinatarios")?,
+        "destinatarios",
+    )?;
+    a.de_mim = match inteiro(c(6), "de_mim")? {
+        None => None,
+        Some(0) => Some(false),
+        Some(1) => Some(true),
+        Some(_) => return Err("coluna de_mim com valor inesperado".into()),
+    };
+    // Sem data: as três colunas vazias. Com data: formato e valor original presentes.
+    a.data_hora = match texto(c(9), "formato_data")? {
+        None => {
+            if inteiro(c(7), "data_hora_ms")?.is_some()
+                || texto(c(8), "data_hora_original")?.is_some()
+            {
+                return Err("data sem formato".into());
+            }
+            None
+        }
+        Some(formato) => Some(DataHora {
+            utc_ms: inteiro(c(7), "data_hora_ms")?,
+            original: exigido(texto(c(8), "data_hora_original"), "data_hora_original")?,
+            formato: enumerado(formato, "formato_data")?,
+        }),
+    };
+    a.conteudo = texto(c(10), "conteudo")?;
+    a.id_externo = texto(c(11), "id_externo")?;
+    a.resposta_a_id_externo = texto(c(12), "resposta_a_id_externo")?;
+    a.conversa_id_externo = texto(c(13), "conversa_id_externo")?;
+    a.anexo_caminho = texto(c(14), "anexo_caminho")?;
+    a.mime = texto(c(15), "mime")?;
+    a.nome_arquivo = texto(c(16), "nome_arquivo")?;
+    a.tamanho = inteiro(c(17), "tamanho")?.map(|t| t as u64);
+    a.latitude = real(c(18), "latitude")?;
+    a.longitude = real(c(19), "longitude")?;
+    a.estado = enumerado(
+        exigido(texto(c(20), "estado_registro"), "estado_registro")?,
+        "estado_registro",
+    )?;
+    a.confianca = enumerado(
+        exigido(texto(c(21), "confianca"), "confianca")?,
+        "confianca",
+    )?;
+    a.metadados = json(
+        exigido(texto(c(22), "metadados"), "metadados")?,
+        "metadados",
+    )?;
+    Ok(a)
+}
+
+/// Hash do artefato remontado. Registros gravados antes do pipeline normalizar -0.0
+/// (coordenada exatamente zero) podem ter entrado no hash com o sinal negativo, que a
+/// coluna REAL não guarda: as variantes com sinal também são aceitas.
+fn hash_remontado(mut a: sied_dominio::artefato::NovoArtefato, gravado: &str) -> String {
+    let h = a.hash_registro();
+    if h == gravado {
+        return h;
+    }
+    let (lat, lon) = (a.latitude, a.longitude);
+    // Some(-0.0) == Some(0.0): os dois sinais do zero.
+    let sinais = |v: Option<f64>| -> Vec<Option<f64>> {
+        if v == Some(0.0) {
+            vec![Some(0.0), Some(-0.0)]
+        } else {
+            vec![v]
+        }
+    };
+    for la in sinais(lat) {
+        for lo in sinais(lon) {
+            a.latitude = la;
+            a.longitude = lo;
+            if a.hash_registro() == gravado {
+                return gravado.to_string();
+            }
+        }
+    }
+    h
+}
+
+/// Recalcula o `hash_registro` de um artefato a partir do que está gravado no banco do
+/// caso e o compara com o hash gravado na importação.
+pub fn conferir_registro(conn: &Connection, artefato_id: i64) -> Resultado<ConferenciaRegistro> {
+    let (linha, gravado): (Vec<rusqlite::types::Value>, String) = conn
+        .query_row(
+            "SELECT tipo, subtipo, app, conta, remetente, destinatarios, de_mim, data_hora_ms,
+                    data_hora_original, formato_data, conteudo, id_externo, resposta_a_id_externo,
+                    conversa_id_externo, anexo_caminho, mime, nome_arquivo, tamanho, latitude,
+                    longitude, estado_registro, confianca, metadados, hash_registro
+             FROM artefato WHERE id = ?1",
+            [artefato_id],
+            |r| {
+                let v = (0..23).map(|i| r.get(i)).collect::<Result<Vec<_>, _>>()?;
+                // O hash gravado é lido como valor bruto: adulterado para outro tipo, não confere.
+                let h: rusqlite::types::Value = r.get(23)?;
+                let h = match h {
+                    rusqlite::types::Value::Text(t) => t,
+                    _ => String::new(),
+                };
+                Ok((v, h))
+            },
+        )
+        .optional()?
+        .ok_or_else(|| ErroArmazenamento::NaoEncontrado("artefato".into()))?;
+    let mut stmt = conn.prepare_cached(
+        "SELECT principal, papel_arquivo, tabela, id_registro, consulta, deslocamento, valores_brutos
+         FROM referencia_origem WHERE artefato_id = ?1 ORDER BY principal DESC, id",
+    )?;
+    let refs = stmt
+        .query_map([artefato_id], |r| {
+            (0..7).map(|i| r.get(i)).collect::<Result<Vec<_>, _>>()
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    let recalculado = remontar(&linha, &refs).map(|a| hash_remontado(a, &gravado));
+    Ok(ConferenciaRegistro {
+        artefato_id,
+        gravado,
+        recalculado,
+    })
+}
+
+/// Confere todos os registros do caso (ou de uma extração) e devolve os que não
+/// conferem. Percorre registro a registro: use em verificações completas, não na tela.
+pub fn registros_que_nao_conferem(
+    conn: &Connection,
+    extracao: Option<ExtracaoId>,
+) -> Resultado<Vec<ConferenciaRegistro>> {
+    let ids: Vec<i64> = {
+        let mut stmt = conn
+            .prepare("SELECT id FROM artefato WHERE ?1 IS NULL OR extracao_id = ?1 ORDER BY id")?;
+        let v = stmt
+            .query_map([extracao.map(|x| x.to_string())], |r| r.get(0))?
+            .collect::<Result<_, _>>()?;
+        v
+    };
+    let mut ruins = Vec::new();
+    for id in ids {
+        let c = conferir_registro(conn, id)?;
+        if !c.confere() {
+            ruins.push(c);
+        }
+    }
+    Ok(ruins)
+}
+
+#[cfg(test)]
+mod testes {
+    use super::*;
+    use sied_dominio::artefato::{NovoArtefato, ReferenciaRegistro, TipoArtefato};
+
+    #[test]
+    fn aceita_zero_negativo_gravado_antes_da_normalizacao() {
+        let mut a = NovoArtefato::novo(
+            TipoArtefato::Localizacao,
+            ReferenciaRegistro {
+                papel_arquivo: "msgstore".into(),
+                tabela: Some("message_location".into()),
+                id_registro: Some("_id=1".into()),
+                consulta: None,
+                deslocamento: None,
+                valores_brutos: Default::default(),
+            },
+        );
+        a.latitude = Some(-0.0);
+        a.longitude = Some(-46.6);
+        let antigo = a.hash_registro();
+        // A coluna REAL devolve 0.0: o hash antigo (com -0.0) ainda é reconhecido.
+        a.latitude = Some(0.0);
+        assert_eq!(hash_remontado(a.clone(), &antigo), antigo);
+        // Qualquer outra diferença continua divergindo.
+        a.longitude = Some(-46.5);
+        assert_ne!(hash_remontado(a, &antigo), antigo);
+    }
 }

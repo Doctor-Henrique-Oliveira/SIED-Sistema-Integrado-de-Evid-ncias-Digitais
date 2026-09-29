@@ -37,12 +37,30 @@ pub fn real(l: &Linha, c: &str) -> Option<f64> {
     }
 }
 
+/// Latitude e longitude interpretadas só quando as duas são números no intervalo
+/// válido (±90 e ±180). Senão nenhuma é interpretada (os valores continuam nos valores
+/// brutos da origem) e o segundo item diz que havia algo descartado.
+pub fn coordenadas(l: &Linha) -> (Option<(f64, f64)>, bool) {
+    let (la, lo) = (real(l, "latitude"), real(l, "longitude"));
+    match (la, lo) {
+        (Some(la), Some(lo)) if la.abs() <= 90.0 && lo.abs() <= 180.0 => (Some((la, lo)), false),
+        (None, None) => (
+            None,
+            !matches!(
+                (l.get("latitude"), l.get("longitude")),
+                (None | Some(Value::Null), None | Some(Value::Null))
+            ),
+        ),
+        _ => (None, true),
+    }
+}
+
 /// Data em milissegundos UTC (como o WhatsApp grava). Zero ou vazio = sem data.
 pub fn data_ms(l: &Linha, c: &str) -> Option<DataHora> {
     let v = l.get(c)?;
     let ms = inteiro(l, c).filter(|&ms| ms > 0)?;
     Some(DataHora {
-        utc_ms: Some(ms),
+        utc_ms: DataHora::ms_plausivel(ms),
         original: match v {
             Value::String(s) => s.clone(),
             outro => outro.to_string(),

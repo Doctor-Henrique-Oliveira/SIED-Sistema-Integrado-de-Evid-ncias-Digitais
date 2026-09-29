@@ -3,5 +3,9 @@
 /**
  * Caminho relativo à raiz da extração, sempre com `/`, sem `..` e sem raiz absoluta.
  * É o endereço estável de um arquivo da evidência, independente do disco onde está.
+ *
+ * Recusa também, em qualquer posição, componentes que no Windows mudariam o destino:
+ * unidade (`C:`, `c:x`), `.`, e nomes só de pontos e espaços (`...`, `.. `), que o
+ * Windows reduz ao remover pontos e espaços finais.
  */
 export type CaminhoFonte = string;

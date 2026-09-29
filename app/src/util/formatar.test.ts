@@ -1,5 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { bytes, dataHora, duracao, extensao, hora, identificacaoCaso, lerCapacidade, limiteDia, nomeArquivo, ouNulo } from "./formatar";
+import {
+  bytes,
+  dataHora,
+  dataHoraMs,
+  dia,
+  duracao,
+  extensao,
+  hora,
+  identificacaoCaso,
+  lerCapacidade,
+  limiteDia,
+  nomeArquivo,
+  ouNulo,
+  servicoDeNuvem,
+} from "./formatar";
 
 describe("formatar", () => {
   it("data em pt-BR no fuso de Brasília", () => {
@@ -54,5 +68,25 @@ describe("duração e caminhos", () => {
     expect(extensao("pasta\\sem_extensao")).toBe("");
     expect(extensao(".oculto")).toBe("");
     expect(nomeArquivo("a/b/IMG_0001.dat")).toBe("IMG_0001.dat");
+  });
+
+  it("pasta sincronizada com a nuvem", () => {
+    expect(servicoDeNuvem("C:\\Users\\analista\\OneDrive\\Documentos\\SIED\\Casos")).toBe("OneDrive");
+    expect(servicoDeNuvem("C:\\Users\\a\\OneDrive - Polícia Civil\\Casos")).toBe("OneDrive");
+    expect(servicoDeNuvem("D:\\Dropbox\\Casos")).toBe("Dropbox");
+    expect(servicoDeNuvem("G:\\Meu Drive\\Casos")).toBe("Google Drive");
+    expect(servicoDeNuvem("C:\\Users\\a\\Documents\\SIED\\Casos")).toBeNull();
+    expect(servicoDeNuvem("C:\\SIED\\OneDriveAntigo\\Casos")).toBeNull();
+    expect(servicoDeNuvem("/home/a/SIED/Casos")).toBeNull();
+    expect(servicoDeNuvem("\\\\servidor\\casos")).toBe("compartilhamento de rede");
+  });
+
+  it("data fora do intervalo do JavaScript não derruba a tela", () => {
+    for (const ms of [9e15, 9223372036854775807, -9e15]) {
+      expect(dataHoraMs(ms)).toContain("fora do intervalo");
+      expect(hora(ms)).toContain("fora do intervalo");
+      expect(dia(ms)).toContain("fora do intervalo");
+    }
+    expect(dataHoraMs(1767225600000)).toBe("31/12/2025, 21:00:00");
   });
 });

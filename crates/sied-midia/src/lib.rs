@@ -280,13 +280,32 @@ fn reduzir_para(bytes: &[u8], lado: u32) -> Result<Vec<u8>, Miniatura> {
     };
     let mut decodificador = leitor.into_decoder().map_err(ilegivel)?;
     let orientacao = decodificador.orientation().ok();
-    let mut img = DynamicImage::from_decoder(decodificador).map_err(ilegivel)?;
+    // Imagens enormes (ex.: bomba de descompressão: poucos KB que viram 1 GB) são
+    // decodificadas uma de cada vez, para a soma não esgotar a memória da estação.
+    let grande = (decodificador.total_bytes() > DECODIFICADA_GRANDE).then(vaga_grande);
+    // Um decodificador com defeito diante de um arquivo hostil não derruba o SIED.
+    let img = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        DynamicImage::from_decoder(decodificador)
+    }))
+    .map_err(|_| {
+        Miniatura::sem(
+            Falhou,
+            "Imagem não pôde ser decodificada (o decodificador falhou com este arquivo).",
+        )
+    })?
+    .map_err(ilegivel)?;
+    // Só reduz: imagem menor que a miniatura fica no tamanho original. Reduz antes de
+    // girar: girar a imagem cheia duplicaria a memória usada.
+    let mut img = if img.width() > lado || img.height() > lado {
+        let reduzida = img.thumbnail(lado, lado);
+        drop(img);
+        reduzida
+    } else {
+        img
+    };
+    drop(grande);
     if let Some(o) = orientacao {
         img.apply_orientation(o);
-    }
-    // Só reduz: imagem menor que a miniatura fica no tamanho original.
-    if img.width() > lado || img.height() > lado {
-        img = img.thumbnail(lado, lado);
     }
     let pequena = img.into_rgb8();
     let mut saida = Vec::new();
@@ -296,14 +315,18 @@ fn reduzir_para(bytes: &[u8], lado: u32) -> Result<Vec<u8>, Miniatura> {
     Ok(saida)
 }
 
-/// Grava num temporário e renomeia, para nunca deixar miniatura pela metade.
+/// Grava num temporário e renomeia, para nunca deixar miniatura pela metade. O nome do
+/// temporário é único por processo e por chamada: dois pedidos simultâneos da mesma
+/// imagem não escrevem no mesmo arquivo.
 fn gravar_cache(destino: &Path, jpeg: &[u8]) -> std::io::Result<()> {
+    static SEQUENCIA: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let pasta = destino.parent().expect("caminho do cache tem pasta");
     fs::create_dir_all(pasta)?;
     let tmp = pasta.join(format!(
-        ".{}.{}.tmp",
+        ".{}.{}.{}.tmp",
         destino.file_name().and_then(|n| n.to_str()).unwrap_or("m"),
-        std::process::id()
+        std::process::id(),
+        SEQUENCIA.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
     fs::write(&tmp, jpeg)?;
     match fs::rename(&tmp, destino) {
@@ -337,6 +360,17 @@ fn vagas() -> &'static Vagas {
         ),
         aviso: Condvar::new(),
     })
+}
+
+/// Acima disto (bytes da imagem decodificada) a decodificação é exclusiva: uma foto
+/// de 200 MP ocupa ~600 MB; quatro delas juntas, mais de 2 GB.
+const DECODIFICADA_GRANDE: u64 = 256 << 20;
+
+/// Vaga exclusiva para imagens grandes; quem a segura já tem uma [`Vaga`] comum e não
+/// espera por outra, então não há espera circular.
+fn vaga_grande() -> std::sync::MutexGuard<'static, ()> {
+    static GRANDE: Mutex<()> = Mutex::new(());
+    GRANDE.lock().unwrap_or_else(|e| e.into_inner())
 }
 
 /// Ocupa uma vaga até sair de escopo: a grade pede dezenas de miniaturas de uma vez

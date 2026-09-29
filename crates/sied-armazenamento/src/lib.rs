@@ -12,6 +12,7 @@ pub mod auditoria;
 pub mod busca;
 pub mod caso;
 mod conexao;
+pub use conexao::normalizar_busca;
 pub mod conversas;
 pub mod erro;
 pub mod evidencias;

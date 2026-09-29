@@ -136,7 +136,7 @@ impl Parser for ParserSmsAndroid {
             }
             a.data_hora = match brutos.get("date") {
                 Some(Value::Number(n)) => Some(DataHora {
-                    utc_ms: n.as_i64().filter(|&ms| ms > 0),
+                    utc_ms: n.as_i64().and_then(DataHora::ms_plausivel),
                     original: n.to_string(),
                     formato: FormatoData::UnixMilissegundos,
                 }),
@@ -217,6 +217,34 @@ mod testes {
         let (_d, e) = entrada("CREATE TABLE sms(_id, address, date);");
         let r = ParserSmsAndroid.processar(&e, &mut Nada);
         assert!(matches!(r, Err(ErroIngestao::FormatoNaoReconhecido(m)) if m.contains("type")));
+    }
+
+    struct Guarda(Vec<NovoArtefato>);
+    impl SaidaParser for Guarda {
+        fn emitir(&mut self, a: NovoArtefato) -> Resultado<()> {
+            self.0.push(a);
+            Ok(())
+        }
+        fn avisar(&mut self, _: AvisoParser) {}
+    }
+
+    /// Data absurda (lixo ou valor hostil) não vira data: fica só o valor original.
+    #[test]
+    fn data_fora_do_intervalo_fica_so_no_original() {
+        let (_d, e) = entrada(
+            "CREATE TABLE sms(_id INTEGER PRIMARY KEY, address, date, type, body);
+             INSERT INTO sms VALUES (1, '1', 9000000000000000, 1, 'sintético');
+             INSERT INTO sms VALUES (2, '1', 9223372036854775807, 1, 'sintético');
+             INSERT INTO sms VALUES (3, '1', 1767225600000, 1, 'sintético');",
+        );
+        let mut g = Guarda(Vec::new());
+        ParserSmsAndroid.processar(&e, &mut g).unwrap();
+        let datas: Vec<_> = g.0.iter().map(|a| a.data_hora.clone().unwrap()).collect();
+        assert_eq!(datas[0].utc_ms, None);
+        assert_eq!(datas[0].original, "9000000000000000");
+        assert_eq!(datas[1].utc_ms, None);
+        assert_eq!(datas[1].original, "9223372036854775807");
+        assert_eq!(datas[2].utc_ms, Some(1_767_225_600_000));
     }
 
     #[test]

@@ -204,10 +204,91 @@ fn recusa_banco_de_outro_tipo() {
     c.execute_batch("CREATE TABLE message(_id INTEGER);")
         .unwrap();
     drop(c);
+    let antes = std::fs::read(outro.join(NOME_ARQUIVO_CASO)).unwrap();
     assert!(matches!(
         BancoCaso::abrir(&outro, sessao()),
         Err(ErroArmazenamento::TipoBancoIncorreto { .. })
     ));
+    // Recusado sem escrever nada: nem WAL, nem cabeçalho novo.
+    assert_eq!(std::fs::read(outro.join(NOME_ARQUIVO_CASO)).unwrap(), antes);
+    assert!(!outro.join(format!("{NOME_ARQUIVO_CASO}-wal")).exists());
+}
+
+/// Arquivo do caso vazio, truncado ou com lixo: erro claro, e o arquivo fica como está.
+#[test]
+fn banco_vazio_truncado_ou_invalido_e_recusado_sem_alteracao() {
+    let raiz = tempfile::tempdir().unwrap();
+    let pasta = raiz.path().join("c");
+    BancoCaso::criar(&pasta, novo_caso(), sessao())
+        .unwrap()
+        .fechar()
+        .unwrap();
+    let arquivo = pasta.join(NOME_ARQUIVO_CASO);
+    let inteiro = std::fs::read(&arquivo).unwrap();
+
+    let casos: [(&str, Vec<u8>); 4] = [
+        ("vazio", Vec::new()),
+        (
+            "lixo",
+            b"isto nao e um banco sqlite, e so texto".repeat(200),
+        ),
+        ("cabecalho truncado", inteiro[..50].to_vec()),
+        ("metade das paginas", inteiro[..inteiro.len() / 2].to_vec()),
+    ];
+    for (nome, bytes) in casos {
+        std::fs::write(&arquivo, &bytes).unwrap();
+        let _ = std::fs::remove_file(pasta.join(format!("{NOME_ARQUIVO_CASO}-wal")));
+        let _ = std::fs::remove_file(pasta.join(format!("{NOME_ARQUIVO_CASO}-shm")));
+        match BancoCaso::abrir(&pasta, sessao()) {
+            Err(ErroArmazenamento::Inconsistente(m)) => {
+                assert!(
+                    m.contains("vazio") || m.contains("corrompido"),
+                    "{nome}: {m}"
+                )
+            }
+            Err(ErroArmazenamento::Sqlite(e)) => panic!("{nome}: erro sem tradução: {e}"),
+            Err(e) => panic!("{nome}: erro inesperado: {e}"),
+            Ok(_) => panic!("{nome}: abriu um banco inválido"),
+        }
+        assert_eq!(
+            std::fs::read(&arquivo).unwrap(),
+            bytes,
+            "{nome}: arquivo alterado"
+        );
+    }
+}
+
+/// Uma cópia de segurança anterior com o mesmo nome (ex.: de uma migração que falhou)
+/// não impede o caso de abrir e não é sobrescrita.
+#[test]
+fn copia_de_seguranca_existente_nao_bloqueia_a_migracao() {
+    let raiz = tempfile::tempdir().unwrap();
+    let pasta = raiz.path().join("c");
+    BancoCaso::criar(&pasta, novo_caso(), sessao())
+        .unwrap()
+        .fechar()
+        .unwrap();
+    // Volta o caso para a versão 4 (sem as tabelas da migração 5).
+    let c = Connection::open(pasta.join(NOME_ARQUIVO_CASO)).unwrap();
+    c.execute_batch(
+        "DROP TABLE evidencia; DROP TABLE relatorio; DELETE FROM schema_migracao WHERE versao = 5;
+         PRAGMA user_version = 4;",
+    )
+    .unwrap();
+    drop(c);
+    let anterior = pasta.join(format!("{NOME_ARQUIVO_CASO}.antes-v5.bak"));
+    std::fs::write(&anterior, b"copia anterior").unwrap();
+
+    let banco = BancoCaso::abrir(&pasta, sessao()).unwrap();
+    assert!(banco.evidencias().unwrap().is_empty());
+    assert_eq!(std::fs::read(&anterior).unwrap(), b"copia anterior");
+    let nova = pasta.join(format!("{NOME_ARQUIVO_CASO}.antes-v5-2.bak"));
+    let v: i64 = Connection::open(&nova)
+        .unwrap()
+        .query_row("SELECT MAX(versao) FROM schema_migracao", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(v, 4);
+    banco.verificar_auditoria().unwrap();
 }
 
 #[test]
@@ -293,4 +374,63 @@ fn nome_de_pasta_seguro() {
     c.numero_procedimento = None;
     c.numero_bo = Some("  BO: 45/2026 \\ <x> ".into());
     assert_eq!(nome_pasta_sugerido(&c), "BO-45-2026-x");
+    // Nomes reservados pelo Windows não viram pasta.
+    for (numero, pasta) in [
+        ("con", "caso-con"),
+        ("NUL", "caso-NUL"),
+        ("Com1", "caso-Com1"),
+        ("LPT9", "caso-LPT9"),
+        ("COM10", "COM10"),
+        ("CONSULTA", "CONSULTA"),
+    ] {
+        c.numero_bo = Some(numero.into());
+        assert_eq!(nome_pasta_sugerido(&c), pasta, "{numero}");
+    }
+}
+
+/// Duas janelas do SIED (ou duas estações na mesma pasta de rede) não abrem o mesmo
+/// caso: a segunda abertura marcaria como "interrompida" a importação que a primeira
+/// ainda está fazendo.
+#[test]
+fn caso_aberto_nao_abre_em_outra_janela() {
+    let raiz = tempfile::tempdir().unwrap();
+    let pasta = raiz.path().join("Casos/IP-trava");
+    let origem = raiz.path().join("Extracao-SINTETICA");
+    std::fs::create_dir_all(&origem).unwrap();
+    std::fs::write(origem.join("SINTETICO.txt"), "sintético").unwrap();
+
+    let mut banco = BancoCaso::criar(&pasta, novo_caso(), sessao()).unwrap();
+    let d = banco.cadastrar_dispositivo(novo_dispositivo()).unwrap();
+    let info = sied_ingestao::InfoComponente {
+        id: "generico".into(),
+        nome: "Pasta genérica".into(),
+        versao: "0".into(),
+    };
+    let imp = banco.iniciar_importacao(d.id, &info, &origem).unwrap();
+
+    match BancoCaso::abrir(&pasta, sessao()) {
+        Err(ErroArmazenamento::CasoEmUso(p)) => assert_eq!(p, pasta.canonicalize().unwrap()),
+        Err(e) => panic!("esperava caso em uso, veio {e}"),
+        Ok(_) => panic!("o mesmo caso abriu duas vezes"),
+    }
+    // A importação da primeira janela continua em andamento, sem registro de interrupção.
+    assert_eq!(banco.extracoes().unwrap()[0].status, "em_andamento");
+    assert!(banco
+        .auditoria(100)
+        .unwrap()
+        .iter()
+        .all(|r| r.acao != "importacao_interrompida"));
+    let x = imp
+        .finalizar(&Err(sied_ingestao::ErroIngestao::Cancelado))
+        .unwrap();
+    assert_eq!(x.status, "cancelada");
+
+    // Fechado na primeira, abre na segunda.
+    banco.fechar().unwrap();
+    let banco = BancoCaso::abrir(&pasta, sessao()).unwrap();
+    assert_eq!(banco.extracoes().unwrap()[0].status, "cancelada");
+    banco.verificar_auditoria().unwrap();
+    // Sem fechar (queda do programa): a trava some com o processo/arquivo.
+    drop(banco);
+    BancoCaso::abrir(&pasta, sessao()).unwrap();
 }

@@ -35,6 +35,10 @@ pub enum ErroIngestao {
 
     #[error("falha ao gravar no caso: {0}")]
     Gravacao(String),
+
+    /// Defeito do próprio SIED (ex.: pânico capturado), registrado em vez de derrubar o programa.
+    #[error("falha inesperada: {0}")]
+    Interno(String),
 }
 
 pub type Resultado<T> = Result<T, ErroIngestao>;

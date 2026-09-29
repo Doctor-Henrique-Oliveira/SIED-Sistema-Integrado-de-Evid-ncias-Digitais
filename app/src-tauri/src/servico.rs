@@ -324,7 +324,17 @@ impl Servico {
                     .importador(&importador_id)
                     .expect("importador validado antes");
                 let ctx = gravador.contexto().clone();
-                let r = pipeline::executar(&fonte, importador, &registro, &mut gravador, &c, &ctx);
+                // Mesmo um pânico fora dos parsers termina com a extração finalizada
+                // (status "falhou") e o estado da tarefa preenchido.
+                let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    pipeline::executar(&fonte, importador, &registro, &mut gravador, &c, &ctx)
+                }))
+                .unwrap_or_else(|p| {
+                    Err(sied_ingestao::ErroIngestao::Interno(format!(
+                        "a importação parou por um defeito do SIED ({})",
+                        pipeline::texto_do_panico(p.as_ref())
+                    )))
+                });
                 match &r {
                     Ok(_) => {}
                     Err(sied_ingestao::ErroIngestao::Cancelado) => {
