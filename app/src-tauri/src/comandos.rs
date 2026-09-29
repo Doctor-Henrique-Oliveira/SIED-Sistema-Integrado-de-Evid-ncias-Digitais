@@ -1,5 +1,12 @@
 //! Comandos chamados pelo frontend (`invoke`). Camada fina: trava o estado,
 //! delega ao [`Servico`] e converte erros.
+//!
+//! Todo comando roda numa thread de trabalho ([`em_segundo_plano`]), nunca na thread
+//! da janela: um comando síncrono rodaria nela e, enquanto outro segura a trava do
+//! estado (ex.: um relatório que leva segundos), ficaria esperando ali e a janela
+//! congelaria ("Não respondendo" no Windows). As threads de trabalho são as de tarefas
+//! bloqueantes do runtime, para que a espera pela trava ou pela decodificação de
+//! imagens não ocupe as threads assíncronas do Tauri.
 
 use sied_armazenamento::auditoria::{RegistroAuditoria, VerificacaoAuditoria};
 use sied_armazenamento::busca::{FiltroBusca, ResultadoBusca};
@@ -18,7 +25,7 @@ use sied_midia::Miniatura;
 use sied_relatorio::PedidoRelatorio;
 use std::path::PathBuf;
 use std::sync::Mutex;
-use tauri::State;
+use tauri::{AppHandle, Manager};
 
 use crate::erro::{CodigoErro, ErroApp, ResultadoApp};
 use crate::servico::{CasoAberto, EstadoImportacao, InfoApp, Servico};
@@ -30,7 +37,10 @@ pub struct Estado {
 }
 
 impl Estado {
-    fn com<T>(&self, f: impl FnOnce(&mut Servico) -> ResultadoApp<T>) -> ResultadoApp<T> {
+    pub(crate) fn com<T>(
+        &self,
+        f: impl FnOnce(&mut Servico) -> ResultadoApp<T>,
+    ) -> ResultadoApp<T> {
         let mut guarda = self.servico.lock()?;
         match guarda.as_mut() {
             Some(s) => f(s),
@@ -44,165 +54,235 @@ impl Estado {
     }
 }
 
-#[tauri::command]
-pub fn info_app(estado: State<'_, Estado>) -> ResultadoApp<InfoApp> {
-    estado.com(|s| s.info())
+/// Executa `f` numa thread de tarefas bloqueantes com acesso ao estado.
+async fn em_segundo_plano<T: Send + 'static>(
+    app_handle: AppHandle,
+    f: impl FnOnce(&Estado) -> ResultadoApp<T> + Send + 'static,
+) -> ResultadoApp<T> {
+    tauri::async_runtime::spawn_blocking(move || f(&app_handle.state::<Estado>()))
+        .await
+        .map_err(|e| {
+            tracing::error!(erro = %e, "comando interrompido");
+            ErroApp::novo(
+                CodigoErro::Interno,
+                "a operação foi interrompida por uma falha interna; tente de novo",
+            )
+        })?
 }
 
 #[tauri::command]
-pub fn listar_casos(estado: State<'_, Estado>) -> ResultadoApp<Vec<CasoCatalogado>> {
-    estado.com(|s| s.listar_casos())
+pub async fn info_app(app_handle: AppHandle) -> ResultadoApp<InfoApp> {
+    em_segundo_plano(app_handle, move |estado| estado.com(|s| s.info())).await
 }
 
 #[tauri::command]
-pub fn criar_caso(
-    estado: State<'_, Estado>,
+pub async fn listar_casos(app_handle: AppHandle) -> ResultadoApp<Vec<CasoCatalogado>> {
+    em_segundo_plano(app_handle, move |estado| estado.com(|s| s.listar_casos())).await
+}
+
+#[tauri::command]
+pub async fn criar_caso(
+    app_handle: AppHandle,
     dados: NovoCaso,
     pasta_base: Option<String>,
 ) -> ResultadoApp<CasoAberto> {
-    estado.com(|s| s.criar_caso(dados, pasta_base))
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.criar_caso(dados, pasta_base))
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn abrir_caso(estado: State<'_, Estado>, caso_id: CasoId) -> ResultadoApp<CasoAberto> {
-    estado.com(|s| s.abrir_caso(caso_id))
+pub async fn abrir_caso(app_handle: AppHandle, caso_id: CasoId) -> ResultadoApp<CasoAberto> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.abrir_caso(caso_id))
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn abrir_pasta_caso(estado: State<'_, Estado>, pasta: String) -> ResultadoApp<CasoAberto> {
-    estado.com(|s| s.abrir_pasta(&PathBuf::from(pasta)))
+pub async fn abrir_pasta_caso(app_handle: AppHandle, pasta: String) -> ResultadoApp<CasoAberto> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.abrir_pasta(&PathBuf::from(pasta)))
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn fechar_caso(estado: State<'_, Estado>) -> ResultadoApp<()> {
-    estado.com(|s| s.fechar_caso())
+pub async fn fechar_caso(app_handle: AppHandle) -> ResultadoApp<()> {
+    em_segundo_plano(app_handle, move |estado| estado.com(|s| s.fechar_caso())).await
 }
 
 #[tauri::command]
-pub fn caso_atual(estado: State<'_, Estado>) -> ResultadoApp<Option<CasoAberto>> {
-    estado.com(|s| Ok(s.caso_atual()))
+pub async fn caso_atual(app_handle: AppHandle) -> ResultadoApp<Option<CasoAberto>> {
+    em_segundo_plano(app_handle, move |estado| estado.com(|s| Ok(s.caso_atual()))).await
 }
 
 #[tauri::command]
-pub fn cadastrar_dispositivo(
-    estado: State<'_, Estado>,
+pub async fn cadastrar_dispositivo(
+    app_handle: AppHandle,
     dados: NovoDispositivo,
 ) -> ResultadoApp<Dispositivo> {
-    estado.com(|s| s.cadastrar_dispositivo(dados))
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.cadastrar_dispositivo(dados))
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn listar_dispositivos(estado: State<'_, Estado>) -> ResultadoApp<Vec<Dispositivo>> {
-    estado.com(|s| s.listar_dispositivos())
+pub async fn listar_dispositivos(app_handle: AppHandle) -> ResultadoApp<Vec<Dispositivo>> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.listar_dispositivos())
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn listar_auditoria(
-    estado: State<'_, Estado>,
+pub async fn listar_auditoria(
+    app_handle: AppHandle,
     limite: i64,
 ) -> ResultadoApp<Vec<RegistroAuditoria>> {
-    estado.com(|s| s.listar_auditoria(limite))
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.listar_auditoria(limite))
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn verificar_auditoria(estado: State<'_, Estado>) -> ResultadoApp<VerificacaoAuditoria> {
-    estado.com(|s| s.verificar_auditoria())
+pub async fn verificar_auditoria(app_handle: AppHandle) -> ResultadoApp<VerificacaoAuditoria> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.verificar_auditoria())
+    })
+    .await
 }
 
 // ---------- Importação ----------
 
 #[tauri::command]
-pub fn detectar_fonte(estado: State<'_, Estado>, pasta: String) -> ResultadoApp<Vec<Deteccao>> {
-    estado.com(|s| s.detectar_fonte(&PathBuf::from(pasta)))
+pub async fn detectar_fonte(app_handle: AppHandle, pasta: String) -> ResultadoApp<Vec<Deteccao>> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.detectar_fonte(&PathBuf::from(pasta)))
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn iniciar_importacao(
-    estado: State<'_, Estado>,
+pub async fn iniciar_importacao(
+    app_handle: AppHandle,
     dispositivo_id: DispositivoId,
     pasta: String,
     importador: String,
 ) -> ResultadoApp<EstadoImportacao> {
-    estado.com(|s| s.iniciar_importacao(dispositivo_id, &PathBuf::from(pasta), &importador))
-}
-
-#[tauri::command]
-pub fn estado_importacao(estado: State<'_, Estado>) -> ResultadoApp<Option<EstadoImportacao>> {
-    estado.com(|s| Ok(s.estado_importacao()))
-}
-
-#[tauri::command]
-pub fn cancelar_importacao(estado: State<'_, Estado>) -> ResultadoApp<()> {
-    estado.com(|s| {
-        s.cancelar_importacao();
-        Ok(())
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.iniciar_importacao(dispositivo_id, &PathBuf::from(pasta), &importador))
     })
+    .await
 }
 
 #[tauri::command]
-pub fn listar_extracoes(estado: State<'_, Estado>) -> ResultadoApp<Vec<Extracao>> {
-    estado.com(|s| s.listar_extracoes())
+pub async fn estado_importacao(app_handle: AppHandle) -> ResultadoApp<Option<EstadoImportacao>> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| Ok(s.estado_importacao()))
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn obter_extracao(
-    estado: State<'_, Estado>,
+pub async fn cancelar_importacao(app_handle: AppHandle) -> ResultadoApp<()> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| {
+            s.cancelar_importacao();
+            Ok(())
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn listar_extracoes(app_handle: AppHandle) -> ResultadoApp<Vec<Extracao>> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.listar_extracoes())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn obter_extracao(
+    app_handle: AppHandle,
     extracao_id: ExtracaoId,
 ) -> ResultadoApp<Extracao> {
-    estado.com(|s| s.obter_extracao(extracao_id))
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.obter_extracao(extracao_id))
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn totais_por_categoria(
-    estado: State<'_, Estado>,
+pub async fn totais_por_categoria(
+    app_handle: AppHandle,
     extracao_id: ExtracaoId,
 ) -> ResultadoApp<Vec<TotalCategoria>> {
-    estado.com(|s| s.totais_por_categoria(extracao_id))
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.totais_por_categoria(extracao_id))
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn listar_arquivos(
-    estado: State<'_, Estado>,
+pub async fn listar_arquivos(
+    app_handle: AppHandle,
     extracao_id: ExtracaoId,
     categoria: Option<String>,
     texto: Option<String>,
     deslocamento: i64,
     limite: i64,
 ) -> ResultadoApp<Pagina<ArquivoExtracao>> {
-    estado.com(|s| s.listar_arquivos(extracao_id, categoria, texto, deslocamento, limite))
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.listar_arquivos(extracao_id, categoria, texto, deslocamento, limite))
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn listar_execucoes(
-    estado: State<'_, Estado>,
+pub async fn listar_execucoes(
+    app_handle: AppHandle,
     extracao_id: ExtracaoId,
 ) -> ResultadoApp<Vec<ExecucaoParser>> {
-    estado.com(|s| s.listar_execucoes(extracao_id))
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.listar_execucoes(extracao_id))
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn listar_artefatos(
-    estado: State<'_, Estado>,
+pub async fn listar_artefatos(
+    app_handle: AppHandle,
     extracao_id: ExtracaoId,
     deslocamento: i64,
     limite: i64,
 ) -> ResultadoApp<Pagina<ArtefatoResumo>> {
-    estado.com(|s| s.listar_artefatos(extracao_id, deslocamento, limite))
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.listar_artefatos(extracao_id, deslocamento, limite))
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn detalhe_artefato(
-    estado: State<'_, Estado>,
+pub async fn detalhe_artefato(
+    app_handle: AppHandle,
     artefato_id: i64,
 ) -> ResultadoApp<ArtefatoDetalhe> {
-    estado.com(|s| s.detalhe_artefato(artefato_id))
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.detalhe_artefato(artefato_id))
+    })
+    .await
 }
 
 /// Filtros opcionais (texto, app, tipo, com anexo) valem para o caso inteiro.
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
-pub fn listar_conversas(
-    estado: State<'_, Estado>,
+pub async fn listar_conversas(
+    app_handle: AppHandle,
     extracao_id: Option<ExtracaoId>,
     deslocamento: i64,
     limite: i64,
@@ -211,155 +291,206 @@ pub fn listar_conversas(
     tipo: Option<String>,
     com_anexo: Option<bool>,
 ) -> ResultadoApp<Pagina<Conversa>> {
-    let filtro = FiltroConversas {
-        extracao_id,
-        texto,
-        app,
-        tipo,
-        com_anexo,
-    };
-    estado.com(|s| s.listar_conversas_filtradas(&filtro, deslocamento, limite))
+    em_segundo_plano(app_handle, move |estado| {
+        let filtro = FiltroConversas {
+            extracao_id,
+            texto,
+            app,
+            tipo,
+            com_anexo,
+        };
+        estado.com(|s| s.listar_conversas_filtradas(&filtro, deslocamento, limite))
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn apps_das_conversas(
-    estado: State<'_, Estado>,
+pub async fn apps_das_conversas(
+    app_handle: AppHandle,
     extracao_id: Option<ExtracaoId>,
 ) -> ResultadoApp<Vec<AppConversas>> {
-    estado.com(|s| s.apps_das_conversas(extracao_id))
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.apps_das_conversas(extracao_id))
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn posicao_mensagem(
-    estado: State<'_, Estado>,
+pub async fn posicao_mensagem(
+    app_handle: AppHandle,
     conversa_id: i64,
     artefato_id: i64,
 ) -> ResultadoApp<Option<i64>> {
-    estado.com(|s| s.posicao_mensagem(conversa_id, artefato_id))
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.posicao_mensagem(conversa_id, artefato_id))
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn localizar_na_conversa(
-    estado: State<'_, Estado>,
+pub async fn localizar_na_conversa(
+    app_handle: AppHandle,
     conversa_id: i64,
     termo: String,
     limite: i64,
 ) -> ResultadoApp<Pagina<PosicaoMensagem>> {
-    estado.com(|s| s.localizar_na_conversa(conversa_id, &termo, limite))
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.localizar_na_conversa(conversa_id, &termo, limite))
+    })
+    .await
 }
 
-/// Fora da thread principal (`async`): a leitura da evidência e a decodificação
-/// acontecem depois de soltar a trava do estado.
-#[tauri::command(async)]
-pub fn miniatura(estado: State<'_, Estado>, arquivo_id: i64) -> ResultadoApp<Miniatura> {
-    let pedido = estado.com(|s| s.pedido_miniatura(arquivo_id))?;
-    Ok(sied_midia::obter(&pedido))
+/// A leitura da evidência e a decodificação acontecem depois de soltar a trava do
+/// estado: a grade de miniaturas não segura os outros comandos.
+#[tauri::command]
+pub async fn miniatura(app_handle: AppHandle, arquivo_id: i64) -> ResultadoApp<Miniatura> {
+    em_segundo_plano(app_handle, move |estado| {
+        let pedido = estado.com(|s| s.pedido_miniatura(arquivo_id))?;
+        Ok(sied_midia::obter(&pedido))
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn obter_conversa(estado: State<'_, Estado>, conversa_id: i64) -> ResultadoApp<Conversa> {
-    estado.com(|s| s.obter_conversa(conversa_id))
+pub async fn obter_conversa(app_handle: AppHandle, conversa_id: i64) -> ResultadoApp<Conversa> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.obter_conversa(conversa_id))
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn mensagens_conversa(
-    estado: State<'_, Estado>,
+pub async fn mensagens_conversa(
+    app_handle: AppHandle,
     conversa_id: i64,
     deslocamento: i64,
     limite: i64,
 ) -> ResultadoApp<Pagina<ArtefatoResumo>> {
-    estado.com(|s| s.mensagens_conversa(conversa_id, deslocamento, limite))
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.mensagens_conversa(conversa_id, deslocamento, limite))
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn conversa_do_artefato(
-    estado: State<'_, Estado>,
+pub async fn conversa_do_artefato(
+    app_handle: AppHandle,
     artefato_id: i64,
 ) -> ResultadoApp<Option<i64>> {
-    estado.com(|s| s.conversa_do_artefato(artefato_id))
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.conversa_do_artefato(artefato_id))
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn buscar(
-    estado: State<'_, Estado>,
+pub async fn buscar(
+    app_handle: AppHandle,
     filtro: FiltroBusca,
     deslocamento: i64,
     limite: i64,
 ) -> ResultadoApp<ResultadoBusca> {
-    estado.com(|s| s.buscar(&filtro, deslocamento, limite))
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.buscar(&filtro, deslocamento, limite))
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn resumo_caso(estado: State<'_, Estado>) -> ResultadoApp<ResumoCaso> {
-    estado.com(|s| s.resumo_caso())
+pub async fn resumo_caso(app_handle: AppHandle) -> ResultadoApp<ResumoCaso> {
+    em_segundo_plano(app_handle, move |estado| estado.com(|s| s.resumo_caso())).await
 }
 
 #[tauri::command]
-pub fn listar_identificadores(
-    estado: State<'_, Estado>,
+pub async fn listar_identificadores(
+    app_handle: AppHandle,
     texto: Option<String>,
     deslocamento: i64,
     limite: i64,
 ) -> ResultadoApp<Pagina<Identificador>> {
-    estado.com(|s| s.listar_identificadores(texto, deslocamento, limite))
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.listar_identificadores(texto, deslocamento, limite))
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn listar_evidencias(estado: State<'_, Estado>) -> ResultadoApp<Vec<Evidencia>> {
-    estado.com(|s| s.listar_evidencias())
+pub async fn listar_evidencias(app_handle: AppHandle) -> ResultadoApp<Vec<Evidencia>> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.listar_evidencias())
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn marcacoes_evidencias(estado: State<'_, Estado>) -> ResultadoApp<Marcacoes> {
-    estado.com(|s| s.marcacoes())
+pub async fn marcacoes_evidencias(app_handle: AppHandle) -> ResultadoApp<Marcacoes> {
+    em_segundo_plano(app_handle, move |estado| estado.com(|s| s.marcacoes())).await
 }
 
 #[tauri::command]
-pub fn adicionar_evidencia(
-    estado: State<'_, Estado>,
+pub async fn adicionar_evidencia(
+    app_handle: AppHandle,
     nova: NovaEvidencia,
 ) -> ResultadoApp<Evidencia> {
-    estado.com(|s| s.adicionar_evidencia(nova))
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.adicionar_evidencia(nova))
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn alterar_evidencia(
-    estado: State<'_, Estado>,
+pub async fn alterar_evidencia(
+    app_handle: AppHandle,
     id: i64,
     textos: TextosEvidencia,
 ) -> ResultadoApp<Evidencia> {
-    estado.com(|s| s.alterar_evidencia(id, textos))
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.alterar_evidencia(id, textos))
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn mover_evidencia(
-    estado: State<'_, Estado>,
+pub async fn mover_evidencia(
+    app_handle: AppHandle,
     id: i64,
     numero: i64,
 ) -> ResultadoApp<Vec<Evidencia>> {
-    estado.com(|s| s.mover_evidencia(id, numero))
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.mover_evidencia(id, numero))
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn remover_evidencia(
-    estado: State<'_, Estado>,
+pub async fn remover_evidencia(
+    app_handle: AppHandle,
     id: i64,
     motivo: Option<String>,
 ) -> ResultadoApp<()> {
-    estado.com(|s| s.remover_evidencia(id, motivo))
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.remover_evidencia(id, motivo))
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn listar_relatorios(estado: State<'_, Estado>) -> ResultadoApp<Vec<RelatorioRegistrado>> {
-    estado.com(|s| s.listar_relatorios())
+pub async fn listar_relatorios(app_handle: AppHandle) -> ResultadoApp<Vec<RelatorioRegistrado>> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.listar_relatorios())
+    })
+    .await
 }
 
-/// Fora da thread principal (`async`): conferir os hashes, reler os arquivos e
-/// diagramar o PDF pode levar alguns segundos.
-#[tauri::command(async)]
-pub fn gerar_relatorio(
-    estado: State<'_, Estado>,
+/// Conferir os hashes, reler os arquivos e diagramar o PDF pode levar alguns
+/// segundos; a janela continua respondendo (ver o início do módulo).
+#[tauri::command]
+pub async fn gerar_relatorio(
+    app_handle: AppHandle,
     pedido: PedidoRelatorio,
 ) -> ResultadoApp<RelatorioRegistrado> {
-    estado.com(|s| s.gerar_relatorio(pedido))
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.gerar_relatorio(pedido))
+    })
+    .await
 }
