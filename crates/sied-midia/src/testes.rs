@@ -201,3 +201,121 @@ fn pedidos_simultaneos_da_mesma_imagem() {
     let sobras: Vec<_> = fs::read_dir(pasta.parent().unwrap()).unwrap().collect();
     assert_eq!(sobras.len(), 1, "sem temporários esquecidos");
 }
+
+/// Insere um segmento EXIF mínimo (só a tag Orientation) logo após o SOI do JPEG.
+fn com_orientacao(jpeg: &[u8], orientacao: u8) -> Vec<u8> {
+    let mut app1 = vec![0xFF, 0xE1, 0x00, 0x22];
+    app1.extend_from_slice(b"Exif\0\0MM\0\x2A\0\0\0\x08");
+    app1.extend_from_slice(&[0x00, 0x01, 0x01, 0x12, 0x00, 0x03, 0x00, 0x00, 0x00, 0x01]);
+    app1.extend_from_slice(&[0x00, orientacao, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+    let mut v = jpeg[..2].to_vec();
+    v.extend_from_slice(&app1);
+    v.extend_from_slice(&jpeg[2..]);
+    v
+}
+
+#[test]
+fn orientacao_exif_e_aplicada_depois_de_reduzir() {
+    // Paisagem gravada com "girar 90°": a miniatura sai em retrato.
+    let foto = com_orientacao(&jpeg(800, 400), 6);
+    let c = cenario(&[("DCIM/girada.jpg", &foto)]);
+    let m = obter(&pedido(&c, "DCIM/girada.jpg", &foto, "imagem"));
+    assert_eq!(m.estado, EstadoMiniatura::Pronta, "{:?}", m.motivo);
+    let img = decodificar(&m);
+    assert_eq!((img.width(), img.height()), (160, LADO_MAXIMO));
+    // Pequena, sem redução: gira do mesmo jeito.
+    let pequena = com_orientacao(&jpeg(40, 20), 8);
+    let c = cenario(&[("p.jpg", &pequena)]);
+    let img = decodificar(&obter(&pedido(&c, "p.jpg", &pequena, "imagem")));
+    assert_eq!((img.width(), img.height()), (20, 40));
+}
+
+fn crc32(dados: &[u8]) -> u32 {
+    let mut crc = 0xFFFF_FFFFu32;
+    for &b in dados {
+        crc ^= b as u32;
+        for _ in 0..8 {
+            crc = if crc & 1 != 0 {
+                (crc >> 1) ^ 0xEDB8_8320
+            } else {
+                crc >> 1
+            };
+        }
+    }
+    !crc
+}
+
+/// PNG cujo cabeçalho declara `largura` x `altura` com poucos bytes de dados.
+fn png_declarando(largura: u32, altura: u32) -> Vec<u8> {
+    let mut v = b"\x89PNG\r\n\x1a\n".to_vec();
+    let mut pedaco = |tipo: &[u8], dados: &[u8]| {
+        v.extend_from_slice(&(dados.len() as u32).to_be_bytes());
+        let mut c = tipo.to_vec();
+        c.extend_from_slice(dados);
+        v.extend_from_slice(&c);
+        v.extend_from_slice(&crc32(&c).to_be_bytes());
+    };
+    let mut ihdr = largura.to_be_bytes().to_vec();
+    ihdr.extend_from_slice(&altura.to_be_bytes());
+    ihdr.extend_from_slice(&[8, 2, 0, 0, 0]);
+    pedaco(b"IHDR", &ihdr);
+    pedaco(b"IDAT", &[0x78, 0x9C, 0x03, 0x00, 0x00, 0x00, 0x00, 0x01]);
+    pedaco(b"IEND", &[]);
+    v
+}
+
+#[test]
+fn imagem_hostil_nao_derruba_nem_esgota_a_memoria() {
+    // 60.000 x 60.000 declarados em ~70 bytes (seriam 10 GB decodificados).
+    let bomba = png_declarando(60_000, 60_000);
+    // Dentro do limite de dimensões, mas sem dados: falha limpa.
+    let vazia = png_declarando(4_000, 4_000);
+    let c = cenario(&[("bomba.png", &bomba), ("vazia.png", &vazia)]);
+    let inicio = std::time::Instant::now();
+    for (nome, bytes) in [("bomba.png", &bomba), ("vazia.png", &vazia)] {
+        let m = obter(&pedido(&c, nome, bytes, "imagem"));
+        assert_eq!(m.estado, EstadoMiniatura::Falhou, "{nome}: {:?}", m.motivo);
+        assert!(m.motivo.unwrap().contains("não pôde ser decodificada"));
+        let r = imagem_para_relatorio(&pedido(&c, nome, bytes, "imagem"));
+        assert_eq!(r.unwrap_err().estado, EstadoMiniatura::Falhou);
+    }
+    assert!(inicio.elapsed() < std::time::Duration::from_secs(10));
+}
+
+/// Pico de memória (VmHWM) ao gerar a miniatura de uma foto enorme girada por EXIF.
+/// Medição manual: `cargo test --release -p sied-midia medir_memoria -- --ignored --nocapture`.
+#[test]
+#[ignore]
+fn medir_memoria_foto_enorme() {
+    fn pico_kb() -> u64 {
+        fs::read_to_string("/proc/self/status")
+            .ok()
+            .and_then(|s| {
+                s.lines()
+                    .find(|l| l.starts_with("VmHWM:"))
+                    .and_then(|l| l.split_whitespace().nth(1)?.parse().ok())
+            })
+            .unwrap_or(0)
+    }
+    // 16.000 x 12.000 (192 MP, ~576 MB decodificada), cor lisa: o JPEG fica pequeno.
+    let (l, a) = (16_000, 12_000);
+    let img = RgbImage::from_pixel(l, a, Rgb([120, 130, 140]));
+    let mut j = Vec::new();
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut j, 70)
+        .encode_image(&img)
+        .unwrap();
+    drop(img);
+    let foto = com_orientacao(&j, 6);
+    let c = cenario(&[("enorme.jpg", &foto)]);
+    let antes = pico_kb();
+    let inicio = std::time::Instant::now();
+    let m = obter(&pedido(&c, "enorme.jpg", &foto, "imagem"));
+    println!(
+        "JPEG {} KB; miniatura {:?} em {:?}; pico de memória antes {} MB, depois {} MB",
+        foto.len() / 1024,
+        m.estado,
+        inicio.elapsed(),
+        antes / 1024,
+        pico_kb() / 1024
+    );
+}

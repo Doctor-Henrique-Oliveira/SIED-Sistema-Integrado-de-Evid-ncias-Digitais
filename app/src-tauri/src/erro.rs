@@ -119,7 +119,9 @@ impl From<ErroIngestao> for ErroApp {
             }
             E::Cancelado => CodigoErro::Conflito,
             E::OrigemAlterada { .. } => CodigoErro::Integridade,
-            E::Io(_) | E::Sqlite(_) | E::Parser { .. } | E::Gravacao(_) => CodigoErro::Interno,
+            E::Io(_) | E::Sqlite(_) | E::Parser { .. } | E::Gravacao(_) | E::Interno(_) => {
+                CodigoErro::Interno
+            }
         };
         tracing::warn!(erro = %e, "falha de ingestão");
         ErroApp::novo(codigo, e.to_string())

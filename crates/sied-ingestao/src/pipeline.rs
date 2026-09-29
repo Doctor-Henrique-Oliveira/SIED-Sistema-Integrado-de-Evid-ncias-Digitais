@@ -789,7 +789,20 @@ fn processar_tarefa(
         emitidos: 0,
         avisos: 0,
     };
-    let r = parser.processar(&entrada, &mut coletor);
+    // Um parser que entra em pânico com dados hostis não derruba a importação: a
+    // execução fica registrada como falha e os demais parsers seguem.
+    let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        parser.processar(&entrada, &mut coletor)
+    }))
+    .unwrap_or_else(|p| {
+        Err(ErroIngestao::Parser {
+            parser: info.id.clone(),
+            mensagem: format!(
+                "falha inesperada ao interpretar os dados ({})",
+                texto_do_panico(p.as_ref())
+            ),
+        })
+    });
     // O que o parser emitiu antes de uma falha também é gravado.
     let descarga = coletor.descarregar();
     let r = match (coletor.falha_gravacao.take(), descarga) {
@@ -848,6 +861,14 @@ fn processar_tarefa(
             Ok(())
         }
     }
+}
+
+/// Mensagem de um `panic!` capturado (texto fixo quando não é uma string).
+pub fn texto_do_panico(p: &(dyn std::any::Any + Send)) -> String {
+    p.downcast_ref::<&str>()
+        .map(|s| s.to_string())
+        .or_else(|| p.downcast_ref::<String>().cloned())
+        .unwrap_or_else(|| "sem detalhe".into())
 }
 
 /// Recebe artefatos do parser, completa a origem e grava em lotes.
