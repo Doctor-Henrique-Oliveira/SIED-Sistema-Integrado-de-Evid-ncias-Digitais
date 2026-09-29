@@ -183,5 +183,15 @@ do Android, console de importação (§14.1 da continuidade).
 
 ## 8. Commit final da `main`
 
-Preenchido depois do merge do PR #11 (o hash do merge só existe depois dele). Conferir com
-`git fetch origin && git log --oneline -1 origin/main`.
+- PR #11 mesclado na `main` em 29/09/2026: merge commit **`9f87f89`** (branch
+  `claude/auditoria-hardening-7p20bx`, último commit `e1916af`, base `5b68c8d`).
+- CI do PR em `e1916af`: testes Linux, testes Windows e instaladores Windows (NSIS e MSI)
+  verdes.
+- CI da `main` em `9f87f89`: testes Linux e Windows verdes; instaladores pulados na `main`
+  ("Só tags").
+- E2E no app real repetido no commit final: verde, extração intacta.
+- `9f87f89` é o último commit com código. O PR #12 só registra este hash nos documentos (só
+  `.md`, sem CI por configuração).
+- Branches mescladas não foram apagadas.
+
+Para atualizar a pasta local: `git checkout main && git pull origin main`.
