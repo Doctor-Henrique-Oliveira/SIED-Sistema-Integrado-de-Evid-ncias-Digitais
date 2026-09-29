@@ -18,6 +18,10 @@ pub const SEPARADOR_CONTEINER: &str = "!/";
 
 /// Caminho relativo à raiz da extração, sempre com `/`, sem `..` e sem raiz absoluta.
 /// É o endereço estável de um arquivo da evidência, independente do disco onde está.
+///
+/// Recusa também, em qualquer posição, componentes que no Windows mudariam o destino:
+/// unidade (`C:`, `c:x`), `.`, e nomes só de pontos e espaços (`...`, `.. `), que o
+/// Windows reduz ao remover pontos e espaços finais.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, TS)]
 #[serde(try_from = "String", into = "String")]
 #[ts(export, type = "string")]
@@ -29,8 +33,7 @@ impl CaminhoFonte {
         let normal = normal.trim_start_matches("./");
         let invalido = normal.is_empty()
             || normal.starts_with('/')
-            || normal.as_bytes().get(1) == Some(&b':') // C:/...
-            || normal.split('/').any(|p| p == ".." || p.is_empty());
+            || normal.split('/').any(componente_invalido);
         if invalido {
             return Err(ErroIngestao::CaminhoInvalido(caminho.into()));
         }
@@ -52,6 +55,12 @@ impl CaminhoFonte {
             .filter(|&i| i > 0)
             .map(|i| nome[i + 1..].to_ascii_lowercase())
     }
+}
+
+fn componente_invalido(p: &str) -> bool {
+    let b = p.as_bytes();
+    p.trim_end_matches(['.', ' ']).is_empty() // "", ".", "..", "...", ".. "
+        || (b.len() >= 2 && b[0].is_ascii_alphabetic() && b[1] == b':') // C: C:x
 }
 
 impl TryFrom<String> for CaminhoFonte {
@@ -121,6 +130,20 @@ mod testes {
     }
 
     #[test]
+    fn aceita_nomes_com_pontos_e_dois_pontos_no_meio() {
+        for bom in [
+            ".nomedia",
+            "a/.thumbnails/x.jpg",
+            "a/b.c/..d",
+            "a/2026-01-02 10:00:00.jpg",
+            "a/arquivo.",
+            "a/ab:c",
+        ] {
+            assert!(CaminhoFonte::novo(bom).is_ok(), "{bom} deveria ser aceito");
+        }
+    }
+
+    #[test]
     fn recusa_caminhos_que_escapam_da_raiz() {
         for ruim in [
             "",
@@ -130,6 +153,13 @@ mod testes {
             "a/../b",
             "a//b",
             "..",
+            "a/C:/Windows",
+            "a/c:x",
+            "a/./b",
+            "a/.",
+            "a/.../b",
+            "a/.. /b",
+            "a/ /b",
         ] {
             assert!(
                 CaminhoFonte::novo(ruim).is_err(),

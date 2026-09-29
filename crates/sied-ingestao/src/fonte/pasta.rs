@@ -6,7 +6,7 @@
 use chrono::{DateTime, SecondsFormat, Utc};
 use std::fs::{self, File, Metadata};
 use std::io::BufReader;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::time::SystemTime;
 use walkdir::WalkDir;
 
@@ -40,8 +40,16 @@ impl PastaSomenteLeitura {
                 motivo: "leitura dentro de contêineres (.tar, .zip, .ab)".into(),
             });
         }
+        // Segunda barreira, com as regras de caminho da plataforma: cada parte tem de ser
+        // um nome comum (nunca unidade, raiz, `.` ou `..`), senão o destino sairia da raiz.
         let mut p = self.raiz.clone();
-        p.extend(caminho.como_str().split('/'));
+        for parte in caminho.como_str().split('/') {
+            let mut c = Path::new(parte).components();
+            if !matches!((c.next(), c.next()), (Some(Component::Normal(_)), None)) {
+                return Err(ErroIngestao::CaminhoInvalido(caminho.to_string()));
+            }
+            p.push(parte);
+        }
         Ok(p)
     }
 
@@ -53,7 +61,15 @@ impl PastaSomenteLeitura {
             caminho: rel.to_string_lossy().into(),
             motivo: "nome com caracteres inválidos (não UTF-8)".into(),
         })?;
-        CaminhoFonte::novo(texto)
+        // Um nome que o SIED não consegue endereçar com segurança (ex.: pasta "C:" ou
+        // "..." numa extração lida no Linux) vira item ignorado, com aviso, em vez de
+        // interromper a importação inteira.
+        CaminhoFonte::novo(texto).map_err(|_| ErroIngestao::ItemIgnorado {
+            caminho: texto.into(),
+            motivo: "nome que não pode ser endereçado com segurança \
+                     (unidade, \".\", só pontos ou só espaços)"
+                .into(),
+        })
     }
 }
 
@@ -172,5 +188,45 @@ mod testes {
         let itens: Vec<_> = f.listar().collect();
         assert!(matches!(itens[0], Err(ErroIngestao::ItemIgnorado { .. })));
         assert!(f.abrir(&CaminhoFonte::novo("link").unwrap()).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn nome_perigoso_vira_item_ignorado_sem_interromper() {
+        let dir = tempfile::tempdir().unwrap();
+        for nome in ["...", " ", "C:"] {
+            fs::create_dir_all(dir.path().join(nome)).unwrap();
+            fs::write(dir.path().join(nome).join("x.txt"), "x").unwrap();
+        }
+        fs::write(dir.path().join("bom.txt"), "1").unwrap();
+        let f = PastaSomenteLeitura::abrir(dir.path()).unwrap();
+        let mut bons = Vec::new();
+        let mut ignorados = 0;
+        for item in f.listar() {
+            match item {
+                Ok(e) => bons.push(e.caminho.to_string()),
+                Err(ErroIngestao::ItemIgnorado { .. }) => ignorados += 1,
+                Err(e) => panic!("erro inesperado: {e}"),
+            }
+        }
+        assert_eq!(bons, ["bom.txt"]);
+        assert_eq!(ignorados, 6, "3 pastas e 3 arquivos dentro delas");
+    }
+
+    /// Mesmo que um caminho perigoso chegasse por outro meio (banco do caso adulterado),
+    /// a leitura recusaria em vez de abrir fora da raiz.
+    #[test]
+    fn leitura_recusa_parte_que_nao_e_nome_comum() {
+        let dir = tempfile::tempdir().unwrap();
+        let f = PastaSomenteLeitura::abrir(dir.path()).unwrap();
+        let forjado = CaminhoFonte("a/../../fora".into());
+        assert!(matches!(
+            f.abrir(&forjado),
+            Err(ErroIngestao::CaminhoInvalido(_))
+        ));
+        assert!(matches!(
+            f.entrada(&forjado),
+            Err(ErroIngestao::CaminhoInvalido(_))
+        ));
     }
 }
