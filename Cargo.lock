@@ -4241,6 +4241,7 @@ dependencies = [
  "chrono",
  "chrono-tz",
  "hex",
+ "image",
  "rusqlite",
  "serde",
  "serde_json",
