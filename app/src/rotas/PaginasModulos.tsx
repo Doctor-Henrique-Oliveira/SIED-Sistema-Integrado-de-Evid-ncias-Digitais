@@ -54,8 +54,9 @@ function PorExtracao({ caso, midias }: { caso: Caso; midias?: boolean }) {
         <div className="space-y-3">
           {midias && (
             <Aviso tipo="info">
-              Miniaturas e reprodução ainda não estão disponíveis: a grade mostra o tipo, o nome e o tamanho. Selecione um item para ver
-              caminho, datas e SHA-256.
+              As miniaturas das imagens são geradas do arquivo da extração só depois de conferir o SHA-256 com o inventário, e ficam
+              guardadas na pasta do caso. Vídeos e áudios aparecem sem miniatura e sem reprodução nesta versão. Selecione um item para
+              ver caminho, datas e SHA-256.
             </Aviso>
           )}
           <InventarioArquivos key={id} caso={caso} extracaoId={id} midias={midias} />

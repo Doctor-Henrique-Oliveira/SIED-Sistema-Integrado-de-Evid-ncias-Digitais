@@ -3,13 +3,25 @@
 // nada aqui altera registros. Título, tipo e nomes vêm dos registros que o próprio
 // app gravou na mesma extração (ex.: assunto do grupo e agenda do WhatsApp).
 
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import type { ArtefatoResumo, Caso, Conversa } from "../api/cliente";
-import { useConversa, useConversas, useExtracoes, useMensagensConversa } from "../api/consultas";
-import { Aviso, Cabecalho, Carregando, entrada, Filtros, LinkBotao, Paginacao, SecaoRecolhivel, Selo, Vazio } from "../componentes/Estrutura";
+import { api, type ArtefatoResumo, type Caso, type Conversa, type FiltroConversas, type Pagina } from "../api/cliente";
+import {
+  chaves,
+  useAppsDasConversas,
+  useConversa,
+  useConversas,
+  useExtracoes,
+  useLocalizarNaConversa,
+  useMensagensConversa,
+  usePosicaoMensagem,
+} from "../api/consultas";
+import { Aviso, Cabecalho, Carregando, entrada, Filtros, LinkBotao, SecaoRecolhivel, Selo, Vazio } from "../componentes/Estrutura";
 import { Icone } from "../componentes/Icone";
+import { MiniaturaArquivo } from "../componentes/Miniatura";
 import { PainelTecnico } from "../componentes/PainelTecnico";
+import { useListaPaginada } from "../util/listaPaginada";
 import { dataHoraMs, dia, hora, numero, tamanho } from "../util/formatar";
 import { nomeEstadoRegistro, nomeTipoConversa, nomeVinculoAnexo, rotuloApp, rotuloSubtipo } from "../util/rotulos";
 import { ComCasoAberto, VoltarAoCaso } from "./PaginaCaso";
@@ -141,26 +153,44 @@ function Conversas({ caso }: { caso: Caso }) {
 
 // ---------------------------------------------------------------- Lista
 
+/** Valor que só muda depois de `ms` sem alteração (evita uma consulta por tecla). */
+function useAdiado<T>(valor: T, ms: number): T {
+  const [adiado, setAdiado] = useState(valor);
+  useEffect(() => {
+    const t = setTimeout(() => setAdiado(valor), ms);
+    return () => clearTimeout(t);
+  }, [valor, ms]);
+  return adiado;
+}
+
 function ListaConversas({ caso, selecionada }: { caso: Caso; selecionada: number | null }) {
   const [extracaoId, setExtracaoId] = useState<string | null>(null);
-  const [deslocamento, setDeslocamento] = useState(0);
-  const [filtro, setFiltro] = useState("");
+  const [texto, setTexto] = useState("");
   const [app, setApp] = useState<string | null>(null);
+  const [tipo, setTipo] = useState<string | null>(null);
+  const [comAnexo, setComAnexo] = useState(false);
+  const termo = useAdiado(texto.trim(), 250);
+  const filtro: FiltroConversas = {
+    extracao_id: extracaoId ?? undefined,
+    texto: termo || undefined,
+    app: app ?? undefined,
+    tipo: tipo ?? undefined,
+    com_anexo: comAnexo || undefined,
+  };
+  const filtrando = !!(termo || app || tipo || comAnexo);
   const extracoes = useExtracoes(caso.id);
-  const lista = useConversas(caso.id, extracaoId, deslocamento, LIMITE_LISTA);
+  const apps = useAppsDasConversas(caso.id, extracaoId);
+  const lista = useConversas(caso.id, filtro, 0, LIMITE_LISTA);
+  const rolagem = useRef<HTMLDivElement>(null);
 
-  const itens = lista.data?.itens ?? [];
-  const apps = [...new Set(itens.map((c) => c.app))];
-  const termo = filtro.trim().toLowerCase();
-  const visiveis = itens.filter(
-    (c) =>
-      (app == null || c.app === app) &&
-      (!termo ||
-        tituloConversa(c).toLowerCase().includes(termo) ||
-        c.participantes.some((p) => p.identificador.toLowerCase().includes(termo)) ||
-        (c.ultima_mensagem ?? "").toLowerCase().includes(termo)),
-  );
+  function limpar() {
+    setTexto("");
+    setApp(null);
+    setTipo(null);
+    setComAnexo(false);
+  }
 
+  const totalApps = apps.data?.reduce((n, a) => n + a.conversas, 0) ?? 0;
   return (
     <section aria-label="Conversas do caso" className="flex min-h-0 w-full flex-col rounded-xl border border-borda bg-sup">
       <div className="space-y-2 border-b border-borda p-2.5">
@@ -168,9 +198,10 @@ function ListaConversas({ caso, selecionada }: { caso: Caso; selecionada: number
           <Icone nome="busca" className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-texto-3" />
           <input
             type="search"
-            value={filtro}
-            onChange={(e) => setFiltro(e.target.value)}
-            placeholder="Filtrar por participante ou texto"
+            value={texto}
+            onChange={(e) => setTexto(e.target.value)}
+            placeholder="Nome, número ou título"
+            title="Filtra no caso inteiro: título, participante, nome nos contatos do app ou telefone (com ou sem máscara)"
             aria-label="Filtrar conversas"
             className={`${entrada} w-full pl-8`}
           />
@@ -181,7 +212,7 @@ function ListaConversas({ caso, selecionada }: { caso: Caso; selecionada: number
             value={extracaoId ?? ""}
             onChange={(e) => {
               setExtracaoId(e.target.value || null);
-              setDeslocamento(0);
+              setApp(null);
             }}
             className={`${entrada} w-full`}
           >
@@ -193,16 +224,56 @@ function ListaConversas({ caso, selecionada }: { caso: Caso; selecionada: number
             ))}
           </select>
         )}
-        {apps.length > 1 && (
+        {(apps.data?.length ?? 0) > 1 && (
           <Filtros
             rotulo="Filtrar por app"
             atual={app}
             mudar={setApp}
-            opcoes={[[null, "Todos"] as [string | null, ReactNode], ...apps.map((a): [string | null, ReactNode] => [a, rotuloApp(a)])]}
+            opcoes={[
+              [null, `Todos (${numero(totalApps)})`] as [string | null, ReactNode],
+              ...apps.data!.map((a): [string | null, ReactNode] => [a.app, `${rotuloApp(a.app)} (${numero(a.conversas)})`]),
+            ]}
           />
         )}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Filtros
+            rotulo="Filtrar por tipo de conversa"
+            atual={tipo}
+            mudar={setTipo}
+            opcoes={[
+              [null, "Todas"],
+              ["individual", "Individuais"],
+              ["grupo", "Grupos"],
+            ]}
+          />
+          <button
+            type="button"
+            aria-pressed={comAnexo}
+            onClick={() => setComAnexo(!comAnexo)}
+            className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium ring-1 ring-inset transition-colors ${
+              comAnexo ? "bg-ouro/15 text-ouro-claro ring-ouro/40" : "text-texto-2 ring-borda-2 hover:bg-sup-2 hover:text-texto"
+            }`}
+          >
+            <Icone nome="midias" className="size-3" />
+            Com anexo
+          </button>
+        </div>
+        {lista.data && (
+          <p className="tabular flex items-center justify-between text-[11px] text-texto-3" role="status">
+            <span>
+              {numero(lista.data.total)} {lista.data.total === 1 ? "conversa" : "conversas"}
+              {filtrando ? " com os filtros" : ""}
+              {lista.isFetching && lista.isPlaceholderData ? " · atualizando…" : ""}
+            </span>
+            {filtrando && (
+              <button type="button" onClick={limpar} className="text-ouro-claro hover:underline">
+                Limpar filtros
+              </button>
+            )}
+          </p>
+        )}
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div ref={rolagem} className="min-h-0 flex-1 overflow-y-auto">
         {lista.isPending ? (
           <div className="px-3">
             <Carregando />
@@ -213,57 +284,110 @@ function ListaConversas({ caso, selecionada }: { caso: Caso; selecionada: number
           </div>
         ) : lista.data.total === 0 ? (
           <div className="p-3">
-            <Vazio titulo="Nenhuma conversa" icone="conversas">
-              Importe uma extração com mensagens para ver as conversas aqui.
-            </Vazio>
+            {filtrando ? (
+              <p className="px-3 py-6 text-center text-xs text-texto-2">Nenhuma conversa com esses filtros.</p>
+            ) : (
+              <Vazio titulo="Nenhuma conversa" icone="conversas">
+                Importe uma extração com mensagens para ver as conversas aqui.
+              </Vazio>
+            )}
           </div>
-        ) : (
+        ) : lista.data.total <= LIMITE_LISTA ? (
           <ul className="divide-y divide-borda/70" aria-label="Lista de conversas">
-            {visiveis.map((c) => {
-              const ativa = selecionada === c.id;
-              return (
-                <li key={c.id}>
-                  <Link
-                    to={`/casos/${caso.id}/conversas/${c.id}`}
-                    aria-current={ativa ? "true" : undefined}
-                    className={`flex gap-2.5 px-3 py-2.5 transition-colors ${
-                      ativa ? "bg-ouro/10 shadow-[inset_2px_0_0_var(--color-ouro)]" : "hover:bg-sup-2"
-                    }`}
-                  >
-                    <Avatar c={c} />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-baseline justify-between gap-2">
-                        <span className={`truncate text-[13px] font-medium ${ativa ? "text-ouro-claro" : "text-texto"}`}>{tituloConversa(c)}</span>
-                        <span className="tabular shrink-0 text-[11px] text-texto-3">
-                          {c.ultima_ms == null ? "—" : dataHoraMs(c.ultima_ms, caso.fuso_horario).slice(0, 10)}
-                        </span>
-                      </div>
-                      <p className="truncate text-xs text-texto-2">{c.ultima_mensagem ?? "—"}</p>
-                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-texto-3">
-                        <span className="tabular whitespace-nowrap">{numero(c.total_mensagens)} mensagens · {rotuloApp(c.app)}</span>
-                        {eGrupo(c) && <Selo tom="info">Grupo</Selo>}
-                        {c.com_anexo > 0 && (
-                          <span className="flex items-center gap-0.5" title={`${c.com_anexo} com anexo`}>
-                            <Icone nome="midias" className="size-3" />
-                            {numero(c.com_anexo)}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </Link>
-                </li>
-              );
-            })}
-            {visiveis.length === 0 && <li className="px-3 py-6 text-center text-xs text-texto-2">Nenhuma conversa com esse filtro.</li>}
+            {lista.data.itens.map((c) => (
+              <li key={c.id}>
+                <ItemConversa caso={caso} c={c} ativa={selecionada === c.id} />
+              </li>
+            ))}
           </ul>
+        ) : (
+          <ListaConversasLonga caso={caso} filtro={filtro} primeira={lista.data} selecionada={selecionada} rolagem={rolagem} />
         )}
       </div>
-      {lista.data && lista.data.total > LIMITE_LISTA && (
-        <div className="border-t border-borda px-2">
-          <Paginacao total={lista.data.total} deslocamento={deslocamento} limite={LIMITE_LISTA} mudar={setDeslocamento} />
-        </div>
-      )}
     </section>
+  );
+}
+
+function ItemConversa({ caso, c, ativa }: { caso: Caso; c: Conversa; ativa: boolean }) {
+  return (
+    <Link
+      to={`/casos/${caso.id}/conversas/${c.id}`}
+      aria-current={ativa ? "true" : undefined}
+      className={`flex gap-2.5 px-3 py-2.5 transition-colors ${
+        ativa ? "bg-ouro/10 shadow-[inset_2px_0_0_var(--color-ouro)]" : "hover:bg-sup-2"
+      }`}
+    >
+      <Avatar c={c} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline justify-between gap-2">
+          <span className={`truncate text-[13px] font-medium ${ativa ? "text-ouro-claro" : "text-texto"}`}>{tituloConversa(c)}</span>
+          <span className="tabular shrink-0 text-[11px] text-texto-3">
+            {c.ultima_ms == null ? "—" : dataHoraMs(c.ultima_ms, caso.fuso_horario).slice(0, 10)}
+          </span>
+        </div>
+        <p className="truncate text-xs text-texto-2">{c.ultima_mensagem ?? "—"}</p>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-texto-3">
+          <span className="tabular whitespace-nowrap">{numero(c.total_mensagens)} mensagens · {rotuloApp(c.app)}</span>
+          {eGrupo(c) && <Selo tom="info">Grupo</Selo>}
+          {c.com_anexo > 0 && (
+            <span className="flex items-center gap-0.5" title={`${c.com_anexo} com anexo`}>
+              <Icone nome="midias" className="size-3" />
+              {numero(c.com_anexo)}
+            </span>
+          )}
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+/** Mais conversas do que cabem numa página: só as linhas visíveis existem na tela e
+ * as páginas seguintes vêm do banco conforme a rolagem. */
+function ListaConversasLonga({ caso, filtro, primeira, selecionada, rolagem }: {
+  caso: Caso;
+  filtro: FiltroConversas;
+  primeira: Pagina<Conversa>;
+  selecionada: number | null;
+  rolagem: RefObject<HTMLDivElement | null>;
+}) {
+  const virtual = useVirtualizer({
+    count: primeira.total,
+    getScrollElement: () => rolagem.current,
+    estimateSize: () => 78,
+    overscan: 8,
+  });
+  const itens = virtual.getVirtualItems();
+  const { item } = useListaPaginada({
+    chave: [...chaves.conversas(caso.id), "lista", filtro],
+    primeira,
+    tamanho: LIMITE_LISTA,
+    buscar: (d, l) => api.listarConversas(filtro, d, l),
+    indices: itens.map((v) => v.index),
+  });
+  return (
+    <ul aria-label="Lista de conversas" className="relative w-full" style={{ height: virtual.getTotalSize() }}>
+      {itens.map((v) => {
+        const c = item(v.index);
+        return (
+          <li
+            key={v.key}
+            data-index={v.index}
+            ref={virtual.measureElement}
+            className="absolute inset-x-0 border-b border-borda/70"
+            style={{ transform: `translateY(${v.start}px)` }}
+          >
+            {c ? (
+              <ItemConversa caso={caso} c={c} ativa={selecionada === c.id} />
+            ) : (
+              <div className="flex h-[77px] animate-pulse items-center gap-2.5 px-3" aria-hidden>
+                <span className="size-9 rounded-full bg-sup-3" />
+                <span className="h-3 flex-1 rounded bg-sup-3" />
+              </div>
+            )}
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -287,19 +411,31 @@ function Chat({
   setContexto: (v: boolean) => void;
 }) {
   const conversa = useConversa(caso.id, conversaId);
-  const [deslocamento, setDeslocamento] = useState(0);
-  const mensagens = useMensagensConversa(caso.id, conversaId, deslocamento, LIMITE_MENSAGENS);
+  const mensagens = useMensagensConversa(caso.id, conversaId, 0, LIMITE_MENSAGENS);
   const [selecionado, setSelecionado] = useState<number | null>(destaque);
   const [localizar, setLocalizar] = useState("");
   const [achado, setAchado] = useState(0);
+  const [carregados, setCarregados] = useState<ArtefatoResumo[]>([]);
   const navegar = useNavigate();
 
+  // Conversa longa: as mensagens vêm por página conforme a rolagem, e localizar e
+  // "resultado da busca" perguntam ao banco a posição de cada mensagem.
+  const longa = (mensagens.data?.total ?? 0) > LIMITE_MENSAGENS;
   const termo = localizar.trim().toLowerCase();
-  const achados = useMemo(
-    () => (termo ? (mensagens.data?.itens ?? []).filter((m) => (m.conteudo ?? "").toLowerCase().includes(termo)).map((m) => m.id) : []),
-    [termo, mensagens.data],
+  const termoAdiado = useAdiado(termo, 300);
+  const noBanco = useLocalizarNaConversa(caso.id, conversaId, termoAdiado, longa);
+  const posicaoDestaque = usePosicaoMensagem(caso.id, conversaId, destaque, longa);
+
+  const achadosLocais = useMemo(
+    () => (!longa && termo ? (mensagens.data?.itens ?? []).filter((m) => (m.conteudo ?? "").toLowerCase().includes(termo)).map((m) => m.id) : []),
+    [longa, termo, mensagens.data],
   );
-  const atual = achados.length ? achados[Math.min(achado, achados.length - 1)]! : null;
+  const achadosBanco = longa && termo ? (noBanco.data?.itens ?? []) : [];
+  const nAchados = longa ? achadosBanco.length : achadosLocais.length;
+  const indiceAchado = nAchados ? Math.min(achado, nAchados - 1) : 0;
+  const atual = longa ? (achadosBanco[indiceAchado]?.id ?? null) : (achadosLocais[indiceAchado] ?? null);
+  const posicaoAtual = longa ? (achadosBanco[indiceAchado]?.posicao ?? null) : null;
+  const totalAchados = longa ? (noBanco.data?.total ?? 0) : achadosLocais.length;
 
   if (conversa.isPending)
     return (
@@ -309,6 +445,7 @@ function Chat({
     );
   if (conversa.isError) return <Aviso>{conversa.error.message}</Aviso>;
   const c = conversa.data;
+  const lista = longa ? carregados : (mensagens.data?.itens ?? []);
 
   const botaoModo = (valor: boolean, rotulo: string) => (
     <button
@@ -323,6 +460,12 @@ function Chat({
       {rotulo}
     </button>
   );
+
+  const selecionar = (id: number) => {
+    setSelecionado(id);
+    setTecnica(true);
+    if (destaque != null) navegar(`/casos/${caso.id}/conversas/${conversaId}`, { replace: true });
+  };
 
   return (
     <>
@@ -363,15 +506,19 @@ function Chat({
               setAchado(0);
             }}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && achados.length) setAchado((achado + (e.shiftKey ? achados.length - 1 : 1)) % achados.length);
+              if (e.key === "Enter" && nAchados) setAchado((indiceAchado + (e.shiftKey ? nAchados - 1 : 1)) % nAchados);
             }}
-            placeholder="Localizar nesta página da conversa (Enter: próximo)"
+            placeholder="Localizar nesta conversa (Enter: próximo, Shift+Enter: anterior)"
             aria-label="Localizar na conversa"
             className="min-w-0 flex-1 bg-transparent text-xs text-texto outline-none placeholder:text-texto-3"
           />
           {termo && (
             <span className="tabular text-[11px] text-texto-3" role="status">
-              {achados.length ? `${Math.min(achado, achados.length - 1) + 1} de ${achados.length}` : "nenhuma"}
+              {longa && (termo !== termoAdiado || noBanco.isFetching)
+                ? "procurando…"
+                : nAchados
+                  ? `${indiceAchado + 1} de ${numero(totalAchados)}${totalAchados > nAchados ? ` (primeiras ${numero(nAchados)})` : ""}`
+                  : "nenhuma"}
             </span>
           )}
         </div>
@@ -383,29 +530,33 @@ function Chat({
           <div className="p-4">
             <Aviso>{mensagens.error.message}</Aviso>
           </div>
+        ) : longa ? (
+          <MensagensLongas
+            caso={caso}
+            conversaId={conversaId}
+            grupo={eGrupo(c)}
+            nomes={nomesDe(c)}
+            primeira={mensagens.data}
+            selecionado={selecionado}
+            destaque={destaque}
+            termo={termo}
+            achadoAtual={atual}
+            rolarPara={posicaoAtual ?? posicaoDestaque.data ?? null}
+            aoCarregar={setCarregados}
+            selecionar={selecionar}
+          />
         ) : (
-          <>
-            {mensagens.data.total > LIMITE_MENSAGENS && (
-              <div className="border-b border-borda px-3">
-                <Paginacao total={mensagens.data.total} deslocamento={deslocamento} limite={LIMITE_MENSAGENS} mudar={setDeslocamento} />
-              </div>
-            )}
-            <Mensagens
-              caso={caso}
-              grupo={eGrupo(c)}
-              nomes={nomesDe(c)}
-              itens={mensagens.data.itens}
-              selecionado={selecionado}
-              destaque={destaque}
-              termo={termo}
-              achadoAtual={atual}
-              selecionar={(id) => {
-                setSelecionado(id);
-                setTecnica(true);
-                if (destaque != null) navegar(`/casos/${caso.id}/conversas/${conversaId}`, { replace: true });
-              }}
-            />
-          </>
+          <Mensagens
+            caso={caso}
+            grupo={eGrupo(c)}
+            nomes={nomesDe(c)}
+            itens={mensagens.data.itens}
+            selecionado={selecionado}
+            destaque={destaque}
+            termo={termo}
+            achadoAtual={atual}
+            selecionar={selecionar}
+          />
         )}
       </section>
       {tecnica ? (
@@ -415,7 +566,7 @@ function Chat({
           <PainelContexto
             caso={caso}
             c={c}
-            selecionada={mensagens.data?.itens.find((m) => m.id === selecionado) ?? null}
+            selecionada={lista.find((m) => m.id === selecionado) ?? null}
             abrirOrigem={() => setTecnica(true)}
             abrirRegistro={(id) => {
               setSelecionado(id);
@@ -452,6 +603,119 @@ function ComDestaque({ texto, termo }: { texto: string; termo: string }) {
   return <>{partes}</>;
 }
 
+const diaDe = (m: ArtefatoResumo, fuso: string) => (m.data_hora_ms == null ? "Sem data" : dia(m.data_hora_ms, fuso));
+
+function SeparadorDia({ d, fixo }: { d: string; fixo?: boolean }) {
+  return (
+    <div className={`${fixo ? "sticky top-0 z-10" : ""} py-2 text-center`}>
+      <span className="rounded-full border border-borda bg-sup-2 px-3 py-0.5 text-[11px] text-texto-2 shadow-sm">{d}</span>
+    </div>
+  );
+}
+
+/** Uma mensagem: bolha à esquerda (recebida) ou à direita (enviada), ou a linha
+ * centralizada de uma mensagem de sistema. */
+function Bolha({
+  caso,
+  m,
+  grupo,
+  nomes,
+  respondida,
+  semResposta,
+  ativo,
+  daBusca,
+  termo,
+  atual,
+  alvo,
+  preguicoso,
+  selecionar,
+}: {
+  caso: Caso;
+  m: ArtefatoResumo;
+  grupo: boolean;
+  nomes: Map<string, string>;
+  respondida: ArtefatoResumo | undefined;
+  semResposta: string;
+  ativo: boolean;
+  daBusca: boolean;
+  termo: string;
+  atual: boolean;
+  alvo?: RefObject<HTMLDivElement | null>;
+  preguicoso: boolean;
+  selecionar: (id: number) => void;
+}) {
+  const enviada = m.de_mim === true;
+  const achado = termo !== "" && (m.conteudo ?? "").toLowerCase().includes(termo);
+  const lazy = preguicoso ? "render-preguicoso " : "";
+  if (m.subtipo === "sistema")
+    return (
+      <div ref={alvo} className={`${lazy}flex justify-center`}>
+        <button
+          type="button"
+          onClick={() => selecionar(m.id)}
+          aria-pressed={ativo}
+          data-teste="mensagem"
+          className={`max-w-[min(85%,40rem)] rounded-full border border-borda bg-fundo/60 px-3 py-1 text-center text-[12px] text-texto-2 hover:bg-sup-2 ${
+            ativo ? "outline-2 outline-offset-2 outline-ouro" : ""
+          } ${daBusca || (achado && atual) ? "ring-2 ring-ouro/70" : ""}`}
+        >
+          {m.conteudo != null ? <ComDestaque texto={m.conteudo} termo={termo} /> : rotuloSubtipo("sistema")}
+          <span className="tabular ml-2 text-[11px] text-texto-3">{m.data_hora_ms == null ? "—" : hora(m.data_hora_ms, caso.fuso_horario)}</span>
+        </button>
+      </div>
+    );
+  return (
+    <div ref={alvo} className={`${lazy}flex ${enviada ? "justify-end" : "justify-start"}`}>
+      <button
+        type="button"
+        onClick={() => selecionar(m.id)}
+        aria-pressed={ativo}
+        data-teste="mensagem"
+        className={`max-w-[min(75%,40rem)] rounded-2xl border px-3 py-2 text-left text-[13px] transition-colors ${
+          enviada ? "rounded-br-sm border-info/25 bg-info/12 hover:bg-info/18" : "rounded-bl-sm border-borda-2 bg-sup-2 hover:bg-sup-3"
+        } ${ativo ? "outline-2 outline-offset-2 outline-ouro" : ""} ${daBusca || (achado && atual) ? "ring-2 ring-ouro/70" : achado ? "ring-1 ring-ouro/35" : ""}`}
+      >
+        {!enviada && m.remetente && (
+          <p className="mb-0.5 flex min-w-0 items-baseline gap-1.5 text-[11px]">
+            {nomes.has(m.remetente) && (
+              <span className={`truncate font-medium ${grupo ? "text-ouro-claro" : "text-texto-2"}`}>{nomes.get(m.remetente)}</span>
+            )}
+            <span className={`truncate font-mono ${grupo && !nomes.has(m.remetente) ? "text-ouro-claro" : "text-texto-3"}`}>{m.remetente}</span>
+          </p>
+        )}
+        {m.subtipo && m.subtipo !== "texto" && m.subtipo !== m.app && (
+          <p className="mb-1">
+            <Selo tom={m.subtipo === "apagada" || m.subtipo === "desconhecido" ? "atencao" : "info"}>{rotuloSubtipo(m.subtipo)}</Selo>
+          </p>
+        )}
+        {m.resposta_a_id_externo && <Citacao alvo={respondida} nomes={nomes} ausente={semResposta} />}
+        {temAnexo(m) && <Anexo caso={caso} m={m} />}
+        {temLocal(m) && (
+          <p className="mb-1 flex items-center gap-1 font-mono text-xs text-texto-2" title="Latitude, longitude">
+            <Icone nome="localizacoes" className="size-3.5 shrink-0 text-texto-3" />
+            {coordenadas(m)}
+          </p>
+        )}
+        {(m.conteudo != null || !(temAnexo(m) || temLocal(m))) && (
+          <p className="whitespace-pre-wrap break-words text-texto">
+            {m.conteudo != null ? (
+              <ComDestaque texto={m.conteudo} termo={termo} />
+            ) : (
+              <span className="italic text-texto-3">{m.subtipo === "apagada" ? "(mensagem apagada: o texto não está no banco)" : "(sem texto)"}</span>
+            )}
+          </p>
+        )}
+        <p className="mt-1 flex items-center justify-end gap-2 text-[11px] text-texto-3">
+          {daBusca && <span className="text-ouro-claro">resultado da busca</span>}
+          {m.estado_registro !== "ativo" && <Selo tom="atencao">{nomeEstadoRegistro[m.estado_registro] ?? m.estado_registro}</Selo>}
+          <span className="tabular">{m.data_hora_ms == null ? "—" : hora(m.data_hora_ms, caso.fuso_horario)}</span>
+        </p>
+      </button>
+    </div>
+  );
+}
+
+/** Conversa que cabe numa página: todas as mensagens na tela. */
 function Mensagens({
   caso,
   grupo,
@@ -483,89 +747,29 @@ function Mensagens({
   let diaAnterior: string | null = null;
   return (
     <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-4 py-3" aria-label="Mensagens da conversa">
-      {itens.length === 0 && <p className="py-6 text-center text-[13px] text-texto-2">Nenhuma mensagem nesta página.</p>}
+      {itens.length === 0 && <p className="py-6 text-center text-[13px] text-texto-2">Nenhuma mensagem nesta conversa.</p>}
       {itens.map((m) => {
-        const d = m.data_hora_ms == null ? "Sem data" : dia(m.data_hora_ms, caso.fuso_horario);
+        const d = diaDe(m, caso.fuso_horario);
         const separador = d !== diaAnterior;
         diaAnterior = d;
-        const enviada = m.de_mim === true;
-        const ativo = selecionado === m.id;
-        const daBusca = destaque === m.id;
-        const achado = termo !== "" && (m.conteudo ?? "").toLowerCase().includes(termo);
         return (
           <Fragment key={m.id}>
-            {separador && (
-              <div className="sticky top-0 z-10 py-2 text-center">
-                <span className="rounded-full border border-borda bg-sup-2 px-3 py-0.5 text-[11px] text-texto-2 shadow-sm">{d}</span>
-              </div>
-            )}
-            {m.subtipo === "sistema" ? (
-              <div ref={m.id === rolarPara ? alvo : undefined} className="render-preguicoso flex justify-center">
-                <button
-                  type="button"
-                  onClick={() => selecionar(m.id)}
-                  aria-pressed={ativo}
-                  data-teste="mensagem"
-                  className={`max-w-[min(85%,40rem)] rounded-full border border-borda bg-fundo/60 px-3 py-1 text-center text-[12px] text-texto-2 hover:bg-sup-2 ${
-                    ativo ? "outline-2 outline-offset-2 outline-ouro" : ""
-                  } ${daBusca || (achado && m.id === achadoAtual) ? "ring-2 ring-ouro/70" : ""}`}
-                >
-                  {m.conteudo != null ? <ComDestaque texto={m.conteudo} termo={termo} /> : rotuloSubtipo("sistema")}
-                  <span className="tabular ml-2 text-[11px] text-texto-3">{m.data_hora_ms == null ? "—" : hora(m.data_hora_ms, caso.fuso_horario)}</span>
-                </button>
-              </div>
-            ) : (
-              <div
-                ref={m.id === rolarPara ? alvo : undefined}
-                className={`render-preguicoso flex ${enviada ? "justify-end" : "justify-start"}`}
-              >
-                <button
-                  type="button"
-                  onClick={() => selecionar(m.id)}
-                  aria-pressed={ativo}
-                  data-teste="mensagem"
-                  className={`max-w-[min(75%,40rem)] rounded-2xl border px-3 py-2 text-left text-[13px] transition-colors ${
-                    enviada ? "rounded-br-sm border-info/25 bg-info/12 hover:bg-info/18" : "rounded-bl-sm border-borda-2 bg-sup-2 hover:bg-sup-3"
-                  } ${ativo ? "outline-2 outline-offset-2 outline-ouro" : ""} ${daBusca || (achado && m.id === achadoAtual) ? "ring-2 ring-ouro/70" : achado ? "ring-1 ring-ouro/35" : ""}`}
-                >
-                  {!enviada && m.remetente && (
-                    <p className="mb-0.5 flex min-w-0 items-baseline gap-1.5 text-[11px]">
-                      {nomes.has(m.remetente) && (
-                        <span className={`truncate font-medium ${grupo ? "text-ouro-claro" : "text-texto-2"}`}>{nomes.get(m.remetente)}</span>
-                      )}
-                      <span className={`truncate font-mono ${grupo && !nomes.has(m.remetente) ? "text-ouro-claro" : "text-texto-3"}`}>{m.remetente}</span>
-                    </p>
-                  )}
-                  {m.subtipo && m.subtipo !== "texto" && m.subtipo !== m.app && (
-                    <p className="mb-1">
-                      <Selo tom={m.subtipo === "apagada" || m.subtipo === "desconhecido" ? "atencao" : "info"}>{rotuloSubtipo(m.subtipo)}</Selo>
-                    </p>
-                  )}
-                  {m.resposta_a_id_externo && <Citacao alvo={porIdExterno.get(m.resposta_a_id_externo)} nomes={nomes} />}
-                  {temAnexo(m) && <Anexo m={m} />}
-                  {temLocal(m) && (
-                    <p className="mb-1 flex items-center gap-1 font-mono text-xs text-texto-2" title="Latitude, longitude">
-                      <Icone nome="localizacoes" className="size-3.5 shrink-0 text-texto-3" />
-                      {coordenadas(m)}
-                    </p>
-                  )}
-                  {(m.conteudo != null || !(temAnexo(m) || temLocal(m))) && (
-                    <p className="whitespace-pre-wrap break-words text-texto">
-                      {m.conteudo != null ? (
-                        <ComDestaque texto={m.conteudo} termo={termo} />
-                      ) : (
-                        <span className="italic text-texto-3">{m.subtipo === "apagada" ? "(mensagem apagada: o texto não está no banco)" : "(sem texto)"}</span>
-                      )}
-                    </p>
-                  )}
-                  <p className="mt-1 flex items-center justify-end gap-2 text-[11px] text-texto-3">
-                    {daBusca && <span className="text-ouro-claro">resultado da busca</span>}
-                    {m.estado_registro !== "ativo" && <Selo tom="atencao">{nomeEstadoRegistro[m.estado_registro] ?? m.estado_registro}</Selo>}
-                    <span className="tabular">{m.data_hora_ms == null ? "—" : hora(m.data_hora_ms, caso.fuso_horario)}</span>
-                  </p>
-                </button>
-              </div>
-            )}
+            {separador && <SeparadorDia d={d} fixo />}
+            <Bolha
+              caso={caso}
+              m={m}
+              grupo={grupo}
+              nomes={nomes}
+              respondida={m.resposta_a_id_externo ? porIdExterno.get(m.resposta_a_id_externo) : undefined}
+              semResposta="A mensagem respondida não está entre os registros desta conversa."
+              ativo={selecionado === m.id}
+              daBusca={destaque === m.id}
+              termo={termo}
+              atual={m.id === achadoAtual}
+              alvo={m.id === rolarPara ? alvo : undefined}
+              preguicoso
+              selecionar={selecionar}
+            />
           </Fragment>
         );
       })}
@@ -573,8 +777,138 @@ function Mensagens({
   );
 }
 
-/** Trecho da mensagem respondida, quando ela está nesta página da conversa. */
-function Citacao({ alvo, nomes }: { alvo: ArtefatoResumo | undefined; nomes: Map<string, string> }) {
+/**
+ * Conversa longa (milhares de mensagens): só as mensagens perto da área visível
+ * existem na tela; as páginas são pedidas ao banco conforme a rolagem. A altura de
+ * cada mensagem é medida quando ela aparece.
+ */
+function MensagensLongas({
+  caso,
+  conversaId,
+  grupo,
+  nomes,
+  primeira,
+  selecionado,
+  destaque,
+  termo,
+  achadoAtual,
+  rolarPara,
+  aoCarregar,
+  selecionar,
+}: {
+  caso: Caso;
+  conversaId: number;
+  grupo: boolean;
+  nomes: Map<string, string>;
+  primeira: Pagina<ArtefatoResumo>;
+  selecionado: number | null;
+  destaque: number | null;
+  termo: string;
+  achadoAtual: number | null;
+  /** Posição (na ordem da conversa) a trazer para o centro. */
+  rolarPara: number | null;
+  aoCarregar: (itens: ArtefatoResumo[]) => void;
+  selecionar: (id: number) => void;
+}) {
+  const rolagem = useRef<HTMLDivElement>(null);
+  const virtual = useVirtualizer({
+    count: primeira.total,
+    getScrollElement: () => rolagem.current,
+    estimateSize: () => 76,
+    overscan: 12,
+    gap: 6,
+  });
+  const visiveis = virtual.getVirtualItems();
+  const { item, carregados } = useListaPaginada({
+    chave: [...chaves.conversas(caso.id), "mensagens", conversaId],
+    primeira,
+    tamanho: LIMITE_MENSAGENS,
+    buscar: (d, l) => api.mensagensConversa(conversaId, d, l),
+    indices: visiveis.map((v) => v.index),
+  });
+
+  const nCarregados = carregados.length;
+  useEffect(() => aoCarregar(carregados), [nCarregados]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (rolarPara != null) virtual.scrollToIndex(rolarPara, { align: "center" });
+  }, [rolarPara, virtual]);
+
+  const porIdExterno = new Map(carregados.flatMap((m) => (m.id_externo ? [[m.id_externo, m] as const] : [])));
+  const primeiraVisivel = visiveis.find((v) => v.start + v.size > virtual.scrollOffset!) ?? visiveis[0];
+  // No topo da conversa o próprio separador do primeiro dia já aparece.
+  const diaTopo = primeiraVisivel && (virtual.scrollOffset ?? 0) > 8 ? item(primeiraVisivel.index) : undefined;
+
+  return (
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      {diaTopo && (
+        <div className="pointer-events-none absolute inset-x-0 top-1 z-10 text-center">
+          <span className="rounded-full border border-borda bg-sup-2 px-3 py-0.5 text-[11px] text-texto-2 shadow-sm">{diaDe(diaTopo, caso.fuso_horario)}</span>
+        </div>
+      )}
+      <div ref={rolagem} className="min-h-0 flex-1 overflow-y-auto px-4 py-3" aria-label="Mensagens da conversa">
+        <div className="relative w-full" style={{ height: virtual.getTotalSize() }}>
+          {visiveis.map((v) => {
+            const m = item(v.index);
+            const anterior = v.index > 0 ? item(v.index - 1) : undefined;
+            const d = m ? diaDe(m, caso.fuso_horario) : null;
+            const separador = m && (v.index === 0 || (anterior && diaDe(anterior, caso.fuso_horario) !== d));
+            return (
+              <div
+                key={v.key}
+                data-index={v.index}
+                ref={virtual.measureElement}
+                className="absolute inset-x-0"
+                style={{ transform: `translateY(${v.start}px)` }}
+              >
+                {m ? (
+                  <>
+                    {separador && <SeparadorDia d={d!} />}
+                    <Bolha
+                      caso={caso}
+                      m={m}
+                      grupo={grupo}
+                      nomes={nomes}
+                      respondida={m.resposta_a_id_externo ? porIdExterno.get(m.resposta_a_id_externo) : undefined}
+                      semResposta="A mensagem respondida não está na parte da conversa já carregada."
+                      ativo={selecionado === m.id}
+                      daBusca={destaque === m.id}
+                      termo={termo}
+                      atual={m.id === achadoAtual}
+                      preguicoso={false}
+                      selecionar={selecionar}
+                    />
+                  </>
+                ) : (
+                  <div className="h-14 animate-pulse rounded-2xl bg-sup-2/40" aria-hidden />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div className="flex items-center justify-between gap-2 border-t border-borda px-3.5 py-1 text-[11px] text-texto-3">
+        <span className="tabular" role="status">
+          {numero(primeira.total)} mensagens · carregadas conforme a rolagem
+        </span>
+        <span className="flex gap-1">
+          <button type="button" onClick={() => virtual.scrollToIndex(0, { align: "start" })} className="rounded px-1.5 py-0.5 hover:bg-sup-2 hover:text-texto">
+            Primeira
+          </button>
+          <button
+            type="button"
+            onClick={() => virtual.scrollToIndex(primeira.total - 1, { align: "end" })}
+            className="rounded px-1.5 py-0.5 hover:bg-sup-2 hover:text-texto"
+          >
+            Última
+          </button>
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** Trecho da mensagem respondida, quando ela está entre as mensagens carregadas. */
+function Citacao({ alvo, nomes, ausente }: { alvo: ArtefatoResumo | undefined; nomes: Map<string, string>; ausente: string }) {
   return (
     <div className="mb-1.5 rounded-md border-l-2 border-ouro/60 bg-fundo/50 px-2 py-1 text-xs" aria-label="Mensagem respondida">
       {alvo ? (
@@ -585,17 +919,29 @@ function Citacao({ alvo, nomes }: { alvo: ArtefatoResumo | undefined; nomes: Map
           <p className="line-clamp-2 text-texto-3">{alvo.conteudo ?? (alvo.nome_arquivo ? alvo.nome_arquivo : alvo.subtipo ? rotuloSubtipo(alvo.subtipo) : "—")}</p>
         </>
       ) : (
-        <p className="text-texto-3">Resposta a uma mensagem que não está nesta página.</p>
+        <p className="text-texto-3">{ausente}</p>
       )}
     </div>
   );
 }
 
-/** Arquivo anexado, com o que se sabe dele no app e se foi achado na extração. */
-function Anexo({ m }: { m: ArtefatoResumo }) {
+/** Arquivo anexado, com o que se sabe dele no app e se foi achado na extração. Foto
+ * ligada ao inventário mostra a miniatura (gerada do arquivo conferido pelo hash). */
+function Anexo({ caso, m }: { caso: Caso; m: ArtefatoResumo }) {
   const s = situacaoAnexo(m);
+  const foto = m.anexo_arquivo_id != null && iconeAnexo(m.subtipo) === "midias";
   return (
     <div className="mb-1.5 min-w-[14rem] rounded-md border border-borda bg-fundo/50 px-2 py-1.5" aria-label="Anexo">
+      {foto && (
+        <MiniaturaArquivo
+          caso={caso}
+          arquivoId={m.anexo_arquivo_id}
+          categoria="imagem"
+          icone="midias"
+          ajuste="conter"
+          className="mb-1.5 h-40 w-full rounded"
+        />
+      )}
       <div className="flex items-center gap-2">
         <Icone nome={iconeAnexo(m.subtipo)} className="size-4 shrink-0 text-texto-3" />
         <div className="min-w-0 flex-1">

@@ -1,9 +1,11 @@
 # SIED — Documento de continuidade
 
-Estado em 28/09/2026, com o **leitor WhatsApp Android** pronto na branch `fase1-whatsapp` (PR #8,
-em rascunho, **aguardando aval para o merge**). A `main` continua em `85273d1` (redesign, PR #6 e
-#7). O fechamento da fase do WhatsApp está em `docs/checkpoints/2026-09-28-fase1-whatsapp.md`; a
-interface do redesign, no §15. Este documento permite retomar o projeto do
+Estado em 28/09/2026, com a **interface para volume real** pronta na branch `fase1-visual-volume`
+(PR #9, em rascunho, **aguardando aval para o merge**): miniaturas conferidas pelo SHA-256, listas
+virtualizadas, filtros de conversa no banco e progresso real da importação. A `main` está em
+`dc402cf` (merge do PR #8, leitor WhatsApp Android). O fechamento desta etapa está em
+`docs/checkpoints/2026-09-28-fase1-visual-volume.md`; o do WhatsApp, em
+`docs/checkpoints/2026-09-28-fase1-whatsapp.md`; a interface do redesign, no §15. Este documento permite retomar o projeto do
 zero: o que existe, onde está, por que foi feito assim e o que vem a seguir. Os detalhes de cada
 etapa ficam nos checkpoints em `docs/checkpoints/` e na preparação em
 `docs/PREPARACAO-AVILLA-WHATSAPP.md`.
@@ -68,8 +70,9 @@ release, execução manual ou PR que muda o build (opção "Só tags", PR #4).
 | `ci-otimizacao` | `ee2738c` | #4 | mesclado (`65eae8d`) |
 | `roadmap-console-importacao` | `df83890` | #5 | mesclado (`5258374`) |
 | `fase1-redesign` | `9bbad7a` | #6 | mesclado (`5e8e734`) |
-| `fase1-redesign-registro` | — | #7 | mesclado (`85273d1`, último commit da `main`) |
-| `fase1-whatsapp` | ver §3 | #8 | **rascunho, sem merge**: leitor WhatsApp Android (criada da `main` em `85273d1`) |
+| `fase1-redesign-registro` | — | #7 | mesclado (`85273d1`) |
+| `fase1-whatsapp` | `baee700` | #8 | mesclado (`dc402cf`, último commit da `main`) |
+| `fase1-visual-volume` | ver §3 | #9 | **rascunho, sem merge**: interface para volume real (criada da `main` em `dc402cf`) |
 
 As branches mescladas **não foram apagadas**. Podem ser removidas depois que a `main` for
 confirmada íntegra e com CI verde, com aval do usuário.
@@ -103,6 +106,9 @@ explícito** e CI completa verde (Linux e Windows).
 | `85273d1` | Merge do PR #7 na `main`: checkpoint do redesign |
 | `314b258` | `fase1-whatsapp`: parser WhatsApp Android, pareamento `msgstore.db`/`wa.db`, anexos ligados ao inventário, migração 4 |
 | `1ebe173` | `fase1-whatsapp`: conversas do WhatsApp na interface e gerador `--whatsapp` |
+| `dc402cf` | Merge do PR #8 na `main`: leitor WhatsApp Android |
+| `65a7af2` | `fase1-visual-volume`: miniaturas (crate `sied-midia`), filtros de conversa no banco, posição e localizar, progresso detalhado |
+| `f440877` | `fase1-visual-volume`: interface para volume real e gerador `--volume` |
 
 ---
 
@@ -118,9 +124,13 @@ explícito** e CI completa verde (Linux e Windows).
 - Inventário completo com SHA-256, categoria e tamanho; manifesto da importação com hashes.
 - Cópia de trabalho verificada; parsers leem só a cópia.
 - Execução em segundo plano com progresso, cancelamento e registro de interrupção.
+- Progresso real na tela (PR #9): as quatro etapas (contagem, inventário e SHA-256, bancos
+  conhecidos, cópia verificada e leitura), barra da etapa atual, tempo decorrido, taxa e tempo
+  restante do inventário medidos desde o início da etapa, bytes da cópia de trabalho sendo
+  conferida. Resumo "etapa n/4 · %" no cabeçalho.
 - Importador genérico (pasta); importador Avilla registrado **só como contrato**.
 - Parser de SMS Android (`mmssms.db`), incluindo registros que só existem no `-wal`.
-- Parser **WhatsApp Android** (branch `fase1-whatsapp`, PR #8):
+- Parser **WhatsApp Android** (PR #8, na `main`):
   - `msgstore.db` nos esquemas novo (`message`) e antigo (`messages`), detectados pelo conteúdo;
   - `wa.db` (contatos);
   - mensagens de texto, mídia, localização, contato, sistema, resposta, encaminhada e apagada;
@@ -150,6 +160,20 @@ explícito** e CI completa verde (Linux e Windows).
 - Conversas em três colunas; busca com resultados agrupados; Mídias, Arquivos e Contatos com dados
   reais; Localizações, Consultas e Relatórios com a estrutura pronta e o aviso "ainda não disponível".
 
+**Volume real** (PR #9)
+- Miniaturas das imagens na galeria de Mídias, no detalhe do arquivo e nos anexos das conversas.
+  O arquivo é lido da pasta da extração em modo somente leitura, o SHA-256 é conferido com o
+  inventário antes de decodificar, e a miniatura (JPEG, lado maior 320 px) fica em
+  `<pasta do caso>/miniaturas/`. Sem miniatura, a tela mostra o ícone e o motivo (origem
+  indisponível, arquivo difere do inventário, imagem ilegível, formato sem suporte).
+- Listas virtualizadas: conversas (acima de 100), mensagens (acima de 500) e grade de mídias
+  (acima de 100). Só as linhas visíveis existem na tela; as páginas vêm do banco conforme a
+  rolagem. Botões "Primeira" e "Última" na conversa longa.
+- Filtros de conversa no banco, valendo para o caso inteiro: texto (título, participante, nome no
+  app, telefone com ou sem máscara), app (com contagem), individuais ou grupos, com anexo.
+- Localizar em conversa longa pergunta ao banco (total de achados e posição de cada um) e rola até
+  o achado; vindo da busca, a conversa rola até o registro mesmo fora da primeira página.
+
 **Busca global** (migração 3)
 - FTS5 em registros e nomes de arquivo, sem diferenciar acentos e maiúsculas, com prefixo.
 - Texto digitado protegido contra sintaxe do FTS (cada palavra vira frase com prefixo).
@@ -161,9 +185,9 @@ explícito** e CI completa verde (Linux e Windows).
 
 | Conjunto | Quantidade | Resultado |
 |---|---|---|
-| Rust (`cargo test --workspace`, soma de todos os `test result`) | 140 (114 na `main`) | todos passam |
+| Rust (`cargo test --workspace`, soma de todos os `test result`) | 155 (140 na `main`) | todos passam |
 | `cargo clippy -D warnings` e `cargo fmt --check` | — | limpos |
-| Interface (`vitest`) | 26 (23 na `main`) | todos passam |
+| Interface (`vitest`) | 35 (26 na `main`) | todos passam |
 | Build da interface (`npm run build`) e do app (`tauri build --debug --no-bundle`) | — | ok |
 | Typecheck TypeScript | — | limpo |
 | Tipos gerados (ts-rs) atualizados | — | conferido pela CI |
@@ -175,7 +199,10 @@ segurança `.antes-vN.bak`), gatilhos de somente inclusão, inventário e hash, 
 e plano, parser de SMS (inclusive WAL), conversas, busca (texto, prefixo sem acento, telefone,
 nomes de arquivo, sintaxe maliciosa, filtros), resumo do caso e identificadores, filtro de mídias,
 WhatsApp (dois esquemas, `wa.db`, WAL, avisos, anexos, títulos e nomes, migração 3→4), e
-a interface: chat, busca, importação, formulário de dispositivo, barra lateral (12 módulos, módulos
+miniaturas (redução, cache, hash divergente, origem ausente, formatos, pedidos simultâneos),
+filtros de conversa, posição e localizar sobre 1.200 mensagens sintéticas, progresso final, e
+a interface: listas virtualizadas, filtros enviados ao banco, localizar em conversa longa,
+miniaturas na galeria e nos anexos, etapas do progresso, chat, busca, importação, formulário de dispositivo, barra lateral (12 módulos, módulos
 desativados sem caso), indicador sem dado, seção recolhível, Contatos e Mídias. O ponta a ponta
 continua o mesmo roteiro, sem nenhuma verificação removida.
 
@@ -183,7 +210,7 @@ continua o mesmo roteiro, sem nenhuma verificação removida.
 
 - **Avilla sem importador**: falta a árvore de uma extração real (ver §10).
 - **Contêineres** (`.tar`, `.zip`, `.ab`) são inventariados com hash, mas não abertos.
-- São interpretados **SMS** (sem MMS) e, na branch `fase1-whatsapp`, **WhatsApp Android**. A
+- São interpretados **SMS** (sem MMS) e **WhatsApp Android**. A
   agenda e as chamadas do Android vêm a seguir.
 - WhatsApp:
   - conferido só com bancos sintéticos, com nomes da referência pública do app;
@@ -195,19 +222,21 @@ continua o mesmo roteiro, sem nenhuma verificação removida.
   interrompida fica registrada).
 - Sem exclusão de extração (somente inclusão, de propósito).
 - Sem verificação do "hash declarado" do laudo de aquisição.
-- Conversa carrega 500 mensagens por página; vindo da busca, o registro só é destacado se estiver
-  na página carregada.
+- Localizar dentro da conversa longa compara minúsculas só em letras sem acento (ASCII); com
+  acento, o texto precisa ser digitado igual ao original. Traz as 1.000 primeiras ocorrências.
 - Busca ordenada só por relevância; a tela expõe filtros de extração, app e período (tipo só no
   backend).
-- Mídias sem miniatura nem reprodução (a grade mostra tipo, nome e tamanho). Mídias e Arquivos
-  mostram uma extração por vez.
-- Filtro de conversas por texto e app atua na página carregada (100 conversas), não no banco.
-- Sem virtualização de listas: há paginação (100/500 itens) e `content-visibility` nas mensagens.
+- Miniaturas só de imagens JPEG, PNG, GIF, WebP, BMP e TIFF até 256 MB. HEIC/HEIF, vídeos e
+  áudios aparecem sem miniatura e sem reprodução. Mídias e Arquivos mostram uma extração por vez.
+- A lista de Arquivos (tabela) continua paginada de 100 em 100; a de Contatos também.
+- A taxa e o tempo restante aparecem só no inventário (etapa medida em bytes). Na leitura dos
+  bancos, a barra avança por banco concluído; o tempo de cada parser não é estimado.
 - Localizações, Consultas e Relatórios só com estrutura; Configurações somente leitura; tema único
   (escuro). O ícone do instalador continua o anterior.
 - A imagem de referência citada no pedido do redesign não chegou ao projeto; o redesign seguiu a
   especificação escrita.
-- Sem evidências selecionadas nem relatório PDF (fecham o critério de pronto da fase 1).
+- Sem evidências selecionadas nem relatório PDF (fecham o critério de pronto da fase 1; próxima
+  etapa, §13).
 
 ## 7. Decisões técnicas
 
@@ -232,6 +261,15 @@ continua o mesmo roteiro, sem nenhuma verificação removida.
     nunca gravados na conversa derivada.
 13. Anexo só é ligado quando o arquivo é único e o tamanho confere. O motivo fica em
     `artefato.anexo_vinculo`.
+14. Miniatura é dado **derivado**, fora do banco: arquivo em `<caso>/miniaturas/<sha[..2]>/<sha>-v1.jpg`,
+    gerado sob demanda depois de conferir o SHA-256 do arquivo na extração, reconstruível a qualquer
+    momento. Chega à tela como `data:` (a política de conteúdo do app só aceita imagens locais).
+    No máximo 4 gerações ao mesmo tempo.
+15. Listas longas: a primeira página vem como antes; acima do tamanho da página, a lista é
+    virtualizada (`@tanstack/react-virtual`) e as demais páginas são buscadas conforme a rolagem.
+    Filtros, posição e localizar são consultas SQL sobre o caso inteiro.
+16. Progresso: o backend informa início da importação e da etapa, fase da tarefa e bytes da cópia
+    conferida; a tela só calcula frações e taxas a partir desses números, sem simulação.
 
 ## 8. Estrutura do banco e migrações
 
@@ -248,14 +286,13 @@ Arquivos em `crates/sied-armazenamento/migracoes/`, registrados em `src/migracoe
 | 1 | inicial | `caso` (linha única), `dispositivo`, `auditoria` (somente inclusão) |
 | 2 | importacao | `extracao`, `arquivo` (inventário), `execucao_parser`, `aviso_parser`, `artefato`, `referencia_origem`; gatilhos de somente inclusão em arquivo, artefato e origem |
 | 3 | conversas_busca | `conversa`, `conversa_participante`, FTS5 `busca_artefato` e `busca_arquivo`; gatilhos `artefato_indexa_busca`, `artefato_agrega_conversa`, `arquivo_indexa_busca`; preenchimento dos dados já importados |
-| 4 | whatsapp (branch `fase1-whatsapp`) | coluna `artefato.anexo_vinculo`; índices `idx_arquivo_nome` e `idx_artefato_id_externo` |
+| 4 | whatsapp | coluna `artefato.anexo_vinculo`; índices `idx_arquivo_nome` e `idx_artefato_id_externo` |
 
 Um caso criado em versão anterior é migrado ao abrir, depois da cópia de segurança.
 
 ## 9. Estado da importação, conversas e busca
 
-- **Importação**: completa para pasta genérica com SMS Android e, na branch `fase1-whatsapp`,
-  WhatsApp Android (`msgstore.db` + `wa.db`). Vai do início (seleção) ao fim (artefatos com
+- **Importação**: completa para pasta genérica com SMS Android e WhatsApp Android (`msgstore.db` + `wa.db`). Vai do início (seleção) ao fim (artefatos com
   origem), em segundo plano e com auditoria.
 - **Conversas**: funcionam para qualquer parser que preencha `conversa_id_externo`. Título, tipo
   e nomes aparecem quando o app grava registros `conversa` e `contato` (hoje, o WhatsApp); sem
@@ -300,28 +337,25 @@ cargo clippy --workspace --all-targets -- -D warnings
 cd app && npm run typecheck && npm test          # tipos e testes da interface
 cd app && npx tauri build --debug --no-bundle    # binário para o ponta a ponta
 testes/e2e/executar.sh target/debug/sied-desktop # ponta a ponta no app real
+python3 testes/gerador/extracao_sintetica.py --whatsapp --volume <pasta>  # extração sintética com volume
 ```
 
 Detalhes no `README.md`.
 
 ## 13. Próximo passo recomendado
 
-**Leitor WhatsApp Android: concluído na branch `fase1-whatsapp` (PR #8, rascunho).** O plano
-desta seção foi cumprido:
-- fixtures sintéticas nos dois esquemas;
-- detecção pelo conteúdo;
-- mensagens, grupos e contatos;
-- anexos ligados ao inventário;
-- títulos e nomes nas conversas.
+**Interface para volume real: concluída na branch `fase1-visual-volume` (PR #9, rascunho).**
+Miniaturas, listas virtualizadas, filtros no banco e progresso real estão descritos no §4 e em
+`docs/checkpoints/2026-09-28-fase1-visual-volume.md`. Falta o **aval do usuário para o merge**.
 
-Tudo está registrado em `docs/checkpoints/2026-09-28-fase1-whatsapp.md`. Falta o **aval do
-usuário para o merge** na `main`.
+Em andamento, na ordem pedida pelo usuário: **evidências selecionadas e relatório PDF** (Typst),
+com hashes, origem e cadeia de custódia.
 
-Depois, em ordem:
+Depois:
 1. importador Avilla (quando a árvore chegar, §10);
 2. conferência do WhatsApp com um banco de aparelho de teste;
 3. agenda de contatos e chamadas do Android;
-4. evidências selecionadas e relatório PDF.
+4. console de importação em tempo real (§14.1).
 
 ---
 

@@ -32,8 +32,18 @@ import type { AchadoArquivo } from "./tipos/AchadoArquivo";
 import type { Identificador } from "./tipos/Identificador";
 import type { ResumoCaso } from "./tipos/ResumoCaso";
 import type { TotalTipo } from "./tipos/TotalTipo";
+import type { AppConversas } from "./tipos/AppConversas";
+import type { EstadoMiniatura } from "./tipos/EstadoMiniatura";
+import type { FiltroConversas } from "./tipos/FiltroConversas";
+import type { Miniatura } from "./tipos/Miniatura";
+import type { PosicaoMensagem } from "./tipos/PosicaoMensagem";
 
 export type {
+  AppConversas,
+  EstadoMiniatura,
+  FiltroConversas,
+  Miniatura,
+  PosicaoMensagem,
   Identificador,
   ResumoCaso,
   TotalTipo,
@@ -136,8 +146,25 @@ export const api = {
     chamar<Pagina<ArtefatoResumo>>("listar_artefatos", { extracaoId, deslocamento, limite }),
   detalheArtefato: (artefatoId: number) => chamar<ArtefatoDetalhe>("detalhe_artefato", { artefatoId }),
 
-  listarConversas: (extracaoId: ExtracaoId | null, deslocamento: number, limite: number) =>
-    chamar<Pagina<Conversa>>("listar_conversas", { extracaoId, deslocamento, limite }),
+  /** Filtros aplicados no banco, sobre o caso inteiro (não só sobre a página). */
+  listarConversas: (filtro: FiltroConversas, deslocamento: number, limite: number) =>
+    chamar<Pagina<Conversa>>("listar_conversas", {
+      extracaoId: filtro.extracao_id ?? null,
+      texto: filtro.texto ?? null,
+      app: filtro.app ?? null,
+      tipo: filtro.tipo ?? null,
+      comAnexo: filtro.com_anexo ?? null,
+      deslocamento,
+      limite,
+    }),
+  appsDasConversas: async (extracaoId: ExtracaoId | null) =>
+    (await chamar<AppConversas[] | undefined>("apps_das_conversas", { extracaoId })) ?? [],
+  posicaoMensagem: async (conversaId: number, artefatoId: number) =>
+    (await chamar<number | null | undefined>("posicao_mensagem", { conversaId, artefatoId })) ?? null,
+  localizarNaConversa: (conversaId: number, termo: string, limite: number) =>
+    chamar<Pagina<PosicaoMensagem>>("localizar_na_conversa", { conversaId, termo, limite }),
+  /** Miniatura de uma imagem do inventário (lida da extração e conferida pelo SHA-256). */
+  miniatura: async (arquivoId: number) => (await chamar<Miniatura | undefined>("miniatura", { arquivoId })) ?? null,
   obterConversa: (conversaId: number) => chamar<Conversa>("obter_conversa", { conversaId }),
   mensagensConversa: (conversaId: number, deslocamento: number, limite: number) =>
     chamar<Pagina<ArtefatoResumo>>("mensagens_conversa", { conversaId, deslocamento, limite }),

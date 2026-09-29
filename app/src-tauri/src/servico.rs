@@ -5,7 +5,7 @@ use serde::Serialize;
 use sied_armazenamento::auditoria::{RegistroAuditoria, VerificacaoAuditoria};
 use sied_armazenamento::busca::{FiltroBusca, ResultadoBusca};
 use sied_armazenamento::caso::{nome_pasta_sugerido, NOME_ARQUIVO_CASO};
-use sied_armazenamento::conversas::Conversa;
+use sied_armazenamento::conversas::{AppConversas, Conversa, FiltroConversas, PosicaoMensagem};
 use sied_armazenamento::extracoes::{
     ArquivoExtracao, ArtefatoDetalhe, ArtefatoResumo, ExecucaoParser, Extracao, Pagina,
     TotalCategoria,
@@ -19,6 +19,7 @@ use sied_ingestao::fonte::pasta::PastaSomenteLeitura;
 use sied_ingestao::importador::{Deteccao, Suporte};
 use sied_ingestao::pipeline::{self, Controle, Progresso};
 use sied_ingestao::Registro;
+use sied_midia::Pedido as PedidoMiniatura;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
@@ -324,10 +325,10 @@ impl Servico {
                 match &r {
                     Ok(_) => {}
                     Err(sied_ingestao::ErroIngestao::Cancelado) => {
-                        c.atualizar(|p| p.etapa = pipeline::Etapa::Cancelada)
+                        c.atualizar(|p| p.entrar(pipeline::Etapa::Cancelada))
                     }
                     Err(e) => c.atualizar(|p| {
-                        p.etapa = pipeline::Etapa::Falhou;
+                        p.entrar(pipeline::Etapa::Falhou);
                         p.mensagem = Some(e.to_string());
                     }),
                 }
@@ -415,6 +416,8 @@ impl Servico {
         Ok(self.banco()?.artefato(artefato_id)?)
     }
 
+    /// Sem filtros além da extração (atalho dos testes; a tela usa a versão filtrada).
+    #[cfg(test)]
     pub fn listar_conversas(
         &mut self,
         extracao_id: Option<ExtracaoId>,
@@ -424,6 +427,58 @@ impl Servico {
         Ok(self
             .banco()?
             .conversas(extracao_id, deslocamento.max(0), limite.clamp(1, 500))?)
+    }
+
+    pub fn listar_conversas_filtradas(
+        &mut self,
+        filtro: &FiltroConversas,
+        deslocamento: i64,
+        limite: i64,
+    ) -> ResultadoApp<Pagina<Conversa>> {
+        Ok(self
+            .banco()?
+            .conversas_filtradas(filtro, deslocamento.max(0), limite.clamp(1, 500))?)
+    }
+
+    pub fn apps_das_conversas(
+        &mut self,
+        extracao_id: Option<ExtracaoId>,
+    ) -> ResultadoApp<Vec<AppConversas>> {
+        Ok(self.banco()?.apps_das_conversas(extracao_id)?)
+    }
+
+    pub fn posicao_mensagem(
+        &mut self,
+        conversa_id: i64,
+        artefato_id: i64,
+    ) -> ResultadoApp<Option<i64>> {
+        Ok(self.banco()?.posicao_mensagem(conversa_id, artefato_id)?)
+    }
+
+    pub fn localizar_na_conversa(
+        &mut self,
+        conversa_id: i64,
+        termo: &str,
+        limite: i64,
+    ) -> ResultadoApp<Pagina<PosicaoMensagem>> {
+        Ok(self
+            .banco()?
+            .localizar_na_conversa(conversa_id, termo, limite.clamp(1, 5000))?)
+    }
+
+    /// O que é preciso para gerar a miniatura fora da trava do estado (a leitura da
+    /// evidência e a decodificação não seguram os outros comandos).
+    pub fn pedido_miniatura(&mut self, arquivo_id: i64) -> ResultadoApp<PedidoMiniatura> {
+        let banco = self.banco()?;
+        let a = banco.arquivo_com_origem(arquivo_id)?;
+        Ok(PedidoMiniatura {
+            pasta_extracao: PathBuf::from(a.origem_caminho),
+            caminho: a.arquivo.caminho,
+            sha256: a.arquivo.sha256,
+            tamanho: a.arquivo.tamanho.max(0) as u64,
+            categoria: a.arquivo.categoria,
+            pasta_caso: banco.pasta().to_path_buf(),
+        })
     }
 
     pub fn obter_conversa(&mut self, conversa_id: i64) -> ResultadoApp<Conversa> {

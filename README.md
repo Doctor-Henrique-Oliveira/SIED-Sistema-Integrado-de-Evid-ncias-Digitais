@@ -24,7 +24,8 @@ crates/
     migracoes/caso/    SQL versionado do banco de caso
   sied-ingestao/       fonte somente leitura (pasta), inventário e manifesto, pipeline de importação,
                        importadores (por ferramenta: Pasta genérica; Avilla só contrato),
-                       parsers (por app: SMS Android), protocolo JSON para parsers externos
+                       parsers (por app: SMS e WhatsApp Android), protocolo JSON para parsers externos
+  sied-midia/          miniaturas das imagens do inventário (lidas somente leitura, SHA-256 conferido)
 app/
   src-tauri/           camada Tauri: comandos, estado, logs
   src/                 interface React + TypeScript
@@ -56,6 +57,8 @@ a registra em outra estação. Nível de log: `SIED_LOG=debug`.
     log-importacao.jsonl             log detalhado da importação (um evento JSON por linha)
   cache\bancos\<id da extração>\<id do arquivo>\
                                      cópias de trabalho conferidas por hash (o parser lê só estas)
+  miniaturas\<2 primeiros do SHA-256>\<SHA-256>-v1.jpg
+                                     miniaturas das imagens (dado derivado; pode ser apagado)
 ```
 
 ## Importação de extrações
@@ -96,6 +99,14 @@ Parsers disponíveis:
   estação.
 - **Dashboard do caso**: dados do procedimento, atalhos, indicadores contados no banco do caso,
   dispositivos, extrações, alertas e trilha de auditoria com verificação.
+- **Progresso da importação**: as quatro etapas, barra da etapa atual, tempo decorrido, taxa e
+  tempo restante do inventário (medidos, não estimados por fórmula fixa) e a cópia de trabalho em
+  conferência. Tudo vem dos números que o backend informa.
+- **Volume real**: listas de conversas, mensagens e mídias longas são virtualizadas (só o que está
+  visível existe na tela) e as páginas vêm do banco conforme a rolagem.
+- **Miniaturas** na galeria de Mídias e nos anexos das conversas: o SIED lê a imagem da extração
+  (somente leitura), confere o SHA-256 com o inventário e só então reduz. Se o arquivo mudou ou
+  sumiu, a tela diz isso em vez de mostrar a imagem.
 - **Detalhes técnicos** em blocos recolhíveis: origem (arquivo, SHA-256, tabela, registro,
   consulta, valores brutos), data original e formato, parser, importador, estado e confiança.
 - Estrutura completa das telas e componentes em [`docs/CONTINUIDADE.md`](docs/CONTINUIDADE.md) §15.
@@ -108,7 +119,10 @@ Parsers disponíveis:
   tabela, registro, valores brutos). No WhatsApp:
   - título (assunto do grupo ou nome do contato), tipo e nomes dos participantes vêm do próprio
     app na mesma extração;
-  - anexos mostram se o arquivo foi achado na extração.
+  - anexos mostram se o arquivo foi achado na extração, com a miniatura quando é imagem.
+- **Filtros de conversa** valem para o caso inteiro: texto (título, participante, nome no app ou
+  telefone com ou sem máscara), app, individuais ou grupos e "com anexo". Em conversa longa,
+  **Localizar** consulta o banco e rola até cada ocorrência (Enter e Shift+Enter).
 - **Busca global** (SQLite FTS5): conteúdo das mensagens, remetentes/destinatários e nomes de arquivo do
   inventário, sem diferenciar acentos e maiúsculas, com busca por prefixo. Um texto só com dígitos e
   separadores é tratado como telefone e encontrado em qualquer formato (`(11) 90000-0001` acha
@@ -166,7 +180,9 @@ registros, os detalhes técnicos e o manifesto contra os arquivos, e prova que a
 Para experimentar a importação manualmente:
 `python3 testes/gerador/extracao_sintetica.py C:\Temp\Extracao-SINTETICA` e importe essa pasta.
 Com `--whatsapp` antes da pasta, a extração ganha também `msgstore.db`, `wa.db`, mídias e um
-backup `.crypt14`, todos sintéticos, gerados a partir de `testes/fixtures/whatsapp`.
+backup `.crypt14`, todos sintéticos, gerados a partir de `testes/fixtures/whatsapp`. Com
+`--volume`, ganha uma conversa SMS de 5.000 mensagens, 300 conversas curtas e 400 imagens PNG
+desenhadas pelo próprio gerador, para testar as telas com volume.
 
 ## Regras do repositório
 

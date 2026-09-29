@@ -3,7 +3,7 @@
 
 use sied_armazenamento::auditoria::{RegistroAuditoria, VerificacaoAuditoria};
 use sied_armazenamento::busca::{FiltroBusca, ResultadoBusca};
-use sied_armazenamento::conversas::Conversa;
+use sied_armazenamento::conversas::{AppConversas, Conversa, FiltroConversas, PosicaoMensagem};
 use sied_armazenamento::extracoes::{
     ArquivoExtracao, ArtefatoDetalhe, ArtefatoResumo, ExecucaoParser, Extracao, Pagina,
     TotalCategoria,
@@ -12,6 +12,7 @@ use sied_armazenamento::resumo::{Identificador, ResumoCaso};
 use sied_armazenamento::CasoCatalogado;
 use sied_dominio::{CasoId, Dispositivo, DispositivoId, ExtracaoId, NovoCaso, NovoDispositivo};
 use sied_ingestao::importador::Deteccao;
+use sied_midia::Miniatura;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::State;
@@ -194,14 +195,62 @@ pub fn detalhe_artefato(
     estado.com(|s| s.detalhe_artefato(artefato_id))
 }
 
+/// Filtros opcionais (texto, app, tipo, com anexo) valem para o caso inteiro.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub fn listar_conversas(
     estado: State<'_, Estado>,
     extracao_id: Option<ExtracaoId>,
     deslocamento: i64,
     limite: i64,
+    texto: Option<String>,
+    app: Option<String>,
+    tipo: Option<String>,
+    com_anexo: Option<bool>,
 ) -> ResultadoApp<Pagina<Conversa>> {
-    estado.com(|s| s.listar_conversas(extracao_id, deslocamento, limite))
+    let filtro = FiltroConversas {
+        extracao_id,
+        texto,
+        app,
+        tipo,
+        com_anexo,
+    };
+    estado.com(|s| s.listar_conversas_filtradas(&filtro, deslocamento, limite))
+}
+
+#[tauri::command]
+pub fn apps_das_conversas(
+    estado: State<'_, Estado>,
+    extracao_id: Option<ExtracaoId>,
+) -> ResultadoApp<Vec<AppConversas>> {
+    estado.com(|s| s.apps_das_conversas(extracao_id))
+}
+
+#[tauri::command]
+pub fn posicao_mensagem(
+    estado: State<'_, Estado>,
+    conversa_id: i64,
+    artefato_id: i64,
+) -> ResultadoApp<Option<i64>> {
+    estado.com(|s| s.posicao_mensagem(conversa_id, artefato_id))
+}
+
+#[tauri::command]
+pub fn localizar_na_conversa(
+    estado: State<'_, Estado>,
+    conversa_id: i64,
+    termo: String,
+    limite: i64,
+) -> ResultadoApp<Pagina<PosicaoMensagem>> {
+    estado.com(|s| s.localizar_na_conversa(conversa_id, &termo, limite))
+}
+
+/// Fora da thread principal (`async`): a leitura da evidência e a decodificação
+/// acontecem depois de soltar a trava do estado.
+#[tauri::command(async)]
+pub fn miniatura(estado: State<'_, Estado>, arquivo_id: i64) -> ResultadoApp<Miniatura> {
+    let pedido = estado.com(|s| s.pedido_miniatura(arquivo_id))?;
+    Ok(sied_midia::obter(&pedido))
 }
 
 #[tauri::command]

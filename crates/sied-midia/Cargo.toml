@@ -1,0 +1,20 @@
+[package]
+name = "sied-midia"
+description = "Miniaturas das imagens da extração do SIED: lidas somente leitura, conferidas pelo SHA-256 do inventário e guardadas na pasta do caso."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+base64 = "0.22"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "webp", "bmp", "tiff"] }
+serde.workspace = true
+sied-ingestao.workspace = true
+tracing.workspace = true
+ts-rs.workspace = true
+
+[dev-dependencies]
+hex.workspace = true
+sha2.workspace = true
+tempfile.workspace = true

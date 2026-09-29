@@ -77,6 +77,48 @@ pub struct Progresso {
     pub avisos: u64,
     pub item_atual: Option<String>,
     pub mensagem: Option<String>,
+    /// Início da importação e da etapa atual (ms desde 1970, UTC): a tela mostra o
+    /// tempo decorrido e a taxa sem inventar estimativa.
+    #[ts(optional, type = "number")]
+    pub inicio_ms: Option<i64>,
+    #[ts(optional, type = "number")]
+    pub etapa_inicio_ms: Option<i64>,
+    /// No processamento: o que a tarefa atual está fazendo.
+    #[ts(optional)]
+    pub fase_tarefa: Option<FaseTarefa>,
+    /// Cópia de trabalho em curso (bytes copiados e conferidos pelo SHA-256).
+    #[ts(optional, type = "number")]
+    pub copia_bytes_total: Option<u64>,
+    #[ts(optional, type = "number")]
+    pub copia_bytes_feitos: Option<u64>,
+}
+
+/// Passos de cada tarefa do processamento.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum FaseTarefa {
+    /// Copiando o banco para a área de trabalho do caso e conferindo o SHA-256.
+    CopiandoVerificando,
+    /// Parser lendo a cópia verificada e gravando registros.
+    Interpretando,
+}
+
+fn agora_ms() -> i64 {
+    Utc::now().timestamp_millis()
+}
+
+impl Progresso {
+    /// Muda de etapa e marca quando ela começou.
+    pub fn entrar(&mut self, etapa: Etapa) {
+        self.etapa = etapa;
+        self.etapa_inicio_ms = Some(agora_ms());
+        if matches!(etapa, Etapa::Concluida | Etapa::Cancelada | Etapa::Falhou) {
+            self.fase_tarefa = None;
+            self.copia_bytes_total = None;
+            self.copia_bytes_feitos = None;
+        }
+    }
 }
 
 /// Compartilhado entre a tarefa e quem a acompanha (interface).
@@ -363,6 +405,10 @@ pub fn executar(
     controle: &Controle,
     ctx: &ContextoImportacao,
 ) -> Resultado<ResumoImportacao> {
+    controle.atualizar(|p| {
+        p.inicio_ms = Some(agora_ms());
+        p.etapa_inicio_ms = p.inicio_ms;
+    });
     fs::create_dir_all(&ctx.pasta_importacao)?;
     let mut log = Log::criar(&ctx.pasta_importacao)?;
     log.registrar(
@@ -392,7 +438,7 @@ fn executar_etapas(
     let mut resumo = ResumoImportacao::default();
 
     // 1. Contar
-    controle.atualizar(|p| p.etapa = Etapa::Contando);
+    controle.atualizar(|p| p.entrar(Etapa::Contando));
     let (mut n, mut bytes) = (0u64, 0u64);
     for e in fonte.listar().flatten() {
         if !e.diretorio {
@@ -408,12 +454,12 @@ fn executar_etapas(
     log.registrar("info", "contagem", json!({ "arquivos": n, "bytes": bytes }));
 
     // 2. Inventariar + manifesto
-    controle.atualizar(|p| p.etapa = Etapa::Inventariando);
+    controle.atualizar(|p| p.entrar(Etapa::Inventariando));
     inventariar(fonte, destino, controle, ctx, log, &mut resumo)?;
 
     // 3. Planejar
     controle.atualizar(|p| {
-        p.etapa = Etapa::Planejando;
+        p.entrar(Etapa::Planejando);
         p.item_atual = None;
     });
     let plano = importador.planejar(fonte)?;
@@ -433,7 +479,7 @@ fn executar_etapas(
 
     // 4. Processar
     controle.atualizar(|p| {
-        p.etapa = Etapa::Processando;
+        p.entrar(Etapa::Processando);
         p.tarefas_total = tarefas.len() as u64;
     });
     for tarefa in &tarefas {
@@ -451,7 +497,7 @@ fn executar_etapas(
         controle.atualizar(|p| p.tarefas_feitas += 1);
     }
     controle.atualizar(|p| {
-        p.etapa = Etapa::Concluida;
+        p.entrar(Etapa::Concluida);
         p.item_atual = None;
     });
     Ok(resumo)
@@ -588,7 +634,16 @@ fn copiar_verificado(
     let destino = pasta.join(caminho.nome());
     let mut f = File::create(&destino)?;
     let mut leitor = fonte.abrir(caminho)?;
-    let lido = inventario::ler_com_hash(&mut leitor, Some(&mut f), |_| !controle.cancelado())?;
+    let total = fonte.entrada(caminho)?.map(|e| e.tamanho);
+    controle.atualizar(|p| {
+        p.fase_tarefa = Some(FaseTarefa::CopiandoVerificando);
+        p.copia_bytes_total = total;
+        p.copia_bytes_feitos = Some(0);
+    });
+    let lido = inventario::ler_com_hash(&mut leitor, Some(&mut f), |b| {
+        controle.atualizar(|p| p.copia_bytes_feitos = Some(p.copia_bytes_feitos.unwrap_or(0) + b));
+        !controle.cancelado()
+    })?;
     f.sync_all()?;
     drop(f);
     if lido.sha256 != esperado {
@@ -716,6 +771,11 @@ fn processar_tarefa(
         json!({ "parser": info, "execucao": exec, "arquivos": arquivos }),
     );
 
+    controle.atualizar(|p| {
+        p.fase_tarefa = Some(FaseTarefa::Interpretando);
+        p.copia_bytes_total = None;
+        p.copia_bytes_feitos = None;
+    });
     let entrada = EntradaParser {
         arquivos,
         fuso_horario: ctx.fuso_horario.clone(),

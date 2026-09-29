@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { api, normalizarErro, type Caso, type Deteccao, type Dispositivo, type EstadoImportacao } from "../api/cliente";
 import { useCancelarImportacao, useIniciarImportacao } from "../api/consultas";
 import { numero, tamanho } from "../util/formatar";
+import { duracaoMs, fracaoCopia, fracaoDaEtapa, PASSOS, passoDaEtapa, ritmoInventario, useAgora } from "../util/progresso";
 import { nomeEtapa, nomeStatusExtracao, nomeSuporte, tomStatus } from "../util/rotulos";
 import { Botao } from "./Botao";
 import { Selecao } from "./Campo";
@@ -171,7 +172,11 @@ export function PainelImportacao({ caso, estado, aoDispensar }: {
   const cancelar = useCancelarImportacao();
   const p = estado.progresso;
   const x = estado.extracao;
-  const fracao = p.bytes_total > 0 ? p.bytes_feitos / p.bytes_total : p.etapa === "contando" ? null : 0;
+  const agora = useAgora(!estado.terminada);
+  const fracao = fracaoDaEtapa(p);
+  const passo = passoDaEtapa(p.etapa);
+  const copia = fracaoCopia(p);
+  const ritmo = ritmoInventario(p, agora);
 
   if (estado.terminada) {
     return (
@@ -221,6 +226,7 @@ export function PainelImportacao({ caso, estado, aoDispensar }: {
           Cancelar importação
         </Botao>
       </div>
+      <Passos atual={passo} />
       <BarraProgresso fracao={fracao} rotulo="Progresso da importação" />
       <div className="tabular flex flex-wrap gap-x-6 gap-y-1 text-xs text-texto-2">
         <span>
@@ -235,7 +241,24 @@ export function PainelImportacao({ caso, estado, aoDispensar }: {
           </span>
         )}
         {p.artefatos > 0 && <span>Registros: {numero(p.artefatos)}</span>}
+        {p.avisos > 0 && <span className="text-atencao">Avisos: {numero(p.avisos)}</span>}
+        {p.inicio_ms != null && <span>Decorrido: {duracaoMs(agora - p.inicio_ms)}</span>}
+        {ritmo && (
+          <span title="Medido desde o início desta etapa">
+            {tamanho(ritmo.porSegundo)}/s
+            {ritmo.restanteMs != null && ` · restam cerca de ${duracaoMs(ritmo.restanteMs)}`}
+          </span>
+        )}
       </div>
+      {p.etapa === "processando" && p.fase_tarefa && (
+        <p className="tabular text-xs text-texto-2" data-teste="fase-tarefa">
+          {p.fase_tarefa === "copiando_verificando"
+            ? `Copiando para a pasta do caso e conferindo o SHA-256${
+                p.copia_bytes_total ? `: ${tamanho(p.copia_bytes_feitos ?? 0)} de ${tamanho(p.copia_bytes_total)}` : ""
+              }${copia != null ? ` (${Math.round(copia * 100)}%)` : ""}`
+            : "Lendo a cópia verificada e gravando os registros"}
+        </p>
+      )}
       {p.item_atual && (
         <p className="truncate font-mono text-xs text-texto-3" title={p.item_atual}>
           {p.item_atual}
@@ -243,6 +266,42 @@ export function PainelImportacao({ caso, estado, aoDispensar }: {
       )}
       <ConsoleImportacao progresso={p} />
     </div>
+  );
+}
+
+/** As quatro etapas da importação, com a atual em destaque. */
+function Passos({ atual }: { atual: number | null }) {
+  return (
+    <ol className="grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label="Etapas da importação">
+      {PASSOS.map((passo, i) => {
+        const n = i + 1;
+        const estado = atual == null ? "pendente" : n < atual ? "feito" : n === atual ? "atual" : "pendente";
+        return (
+          <li
+            key={passo.id}
+            aria-current={estado === "atual" ? "step" : undefined}
+            className={`flex items-center gap-2 rounded-md border px-2 py-1.5 text-xs ${
+              estado === "atual"
+                ? "border-ouro/60 bg-ouro/10 text-texto"
+                : estado === "feito"
+                  ? "border-borda text-texto-2"
+                  : "border-borda text-texto-3"
+            }`}
+          >
+            <span
+              className={`grid size-4.5 shrink-0 place-items-center rounded-full text-[10px] font-semibold ${
+                estado === "feito" ? "bg-ok/20 text-ok" : estado === "atual" ? "bg-ouro text-[#1a1305]" : "bg-sup-3 text-texto-3"
+              }`}
+              aria-hidden
+            >
+              {estado === "feito" ? "✓" : n}
+            </span>
+            <span className="truncate">{passo.rotulo}</span>
+            <span className="sr-only">{estado === "feito" ? " (concluída)" : estado === "atual" ? " (em andamento)" : ""}</span>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
@@ -260,6 +319,8 @@ export function ConsoleImportacao({ progresso: p }: { progresso: EstadoImportaca
     ["registros", numero(p.artefatos)],
     ["avisos", numero(p.avisos)],
   ];
+  if (p.fase_tarefa) linhas.push(["tarefa", p.fase_tarefa]);
+  if (p.copia_bytes_total != null) linhas.push(["copia", `${tamanho(p.copia_bytes_feitos ?? 0)}/${tamanho(p.copia_bytes_total)}`]);
   if (p.item_atual) linhas.push(["item", p.item_atual]);
   if (p.mensagem) linhas.push(["mensagem", p.mensagem]);
   return (
