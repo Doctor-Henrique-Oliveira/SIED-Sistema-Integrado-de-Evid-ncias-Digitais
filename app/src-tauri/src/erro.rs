@@ -44,9 +44,44 @@ impl ErroApp {
     }
 }
 
+/// Falhas do SQLite que o analista consegue entender e resolver, em português.
+/// O texto técnico original continua no log.
+fn traduzir_sqlite(e: &rusqlite::Error) -> Option<(CodigoErro, &'static str)> {
+    use rusqlite::ErrorCode as C;
+    Some(match e.sqlite_error_code()? {
+        C::DatabaseCorrupt | C::NotADatabase => (
+            CodigoErro::Integridade,
+            "o banco de dados está corrompido ou não é um banco do SIED; restaure uma cópia do caso",
+        ),
+        C::DiskFull => (
+            CodigoErro::Interno,
+            "não há espaço livre no disco da pasta do caso; libere espaço e tente de novo",
+        ),
+        C::ReadOnly | C::PermissionDenied | C::CannotOpen => (
+            CodigoErro::Interno,
+            "sem permissão para gravar na pasta do caso (somente leitura, sincronização ou antivírus bloqueando); confira a pasta e tente de novo",
+        ),
+        C::DatabaseBusy | C::DatabaseLocked => (
+            CodigoErro::Conflito,
+            "o banco do caso está ocupado por outro programa; feche-o e tente de novo",
+        ),
+        C::SystemIoFailure => (
+            CodigoErro::Interno,
+            "falha de leitura ou gravação no disco da pasta do caso (disco removido ou com defeito?)",
+        ),
+        _ => return None,
+    })
+}
+
 impl From<ErroArmazenamento> for ErroApp {
     fn from(e: ErroArmazenamento) -> Self {
         use ErroArmazenamento as E;
+        if let E::Sqlite(s) = &e {
+            if let Some((codigo, mensagem)) = traduzir_sqlite(s) {
+                tracing::error!(erro = %e, "falha de armazenamento");
+                return ErroApp::novo(codigo, mensagem);
+            }
+        }
         let codigo = match &e {
             E::Validacao(v) => {
                 return ErroApp {
@@ -119,3 +154,31 @@ impl<T> From<std::sync::PoisonError<T>> for ErroApp {
 }
 
 pub type ResultadoApp<T> = Result<T, ErroApp>;
+
+#[cfg(test)]
+mod testes {
+    use super::*;
+
+    #[test]
+    fn falhas_do_sqlite_viram_mensagens_em_portugues() {
+        let falha = |codigo: i32| {
+            ErroApp::from(ErroArmazenamento::Sqlite(rusqlite::Error::SqliteFailure(
+                rusqlite::ffi::Error::new(codigo),
+                Some("mensagem técnica em inglês".into()),
+            )))
+        };
+        let e = falha(rusqlite::ffi::SQLITE_CORRUPT);
+        assert!(matches!(e.codigo, CodigoErro::Integridade));
+        assert!(e.mensagem.contains("corrompido"));
+        let e = falha(rusqlite::ffi::SQLITE_FULL);
+        assert!(e.mensagem.contains("espaço"));
+        let e = falha(rusqlite::ffi::SQLITE_READONLY);
+        assert!(e.mensagem.contains("permissão"));
+        let e = falha(rusqlite::ffi::SQLITE_BUSY);
+        assert!(matches!(e.codigo, CodigoErro::Conflito));
+        // Outros erros seguem com o texto original.
+        let e = falha(rusqlite::ffi::SQLITE_CONSTRAINT);
+        assert!(matches!(e.codigo, CodigoErro::Interno));
+        assert!(e.mensagem.contains("inglês"), "{}", e.mensagem);
+    }
+}

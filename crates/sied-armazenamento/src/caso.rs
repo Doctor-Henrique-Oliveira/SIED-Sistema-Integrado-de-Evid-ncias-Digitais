@@ -23,6 +23,7 @@ use std::path::{Path, PathBuf};
 
 use crate::auditoria::{self, RegistroAuditoria, VerificacaoAuditoria};
 use crate::busca::{self, FiltroBusca, ResultadoBusca};
+use crate::conexao::{self, Abertura};
 use crate::conversas::{self, AppConversas, Conversa, FiltroConversas, PosicaoMensagem, Trecho};
 use crate::evidencias::{self, Evidencia, Marcacoes, NovaEvidencia, TextosEvidencia};
 use crate::extracoes::{
@@ -33,7 +34,7 @@ use crate::importacao::Importacao;
 use crate::migracoes::{self, BANCO_CASO};
 use crate::relatorios::{self, NovoRelatorio, RelatorioRegistrado};
 use crate::resumo::{self, Identificador, ResumoCaso};
-use crate::{conexao, ErroArmazenamento, Resultado, Sessao};
+use crate::{ErroArmazenamento, Resultado, Sessao};
 
 pub const NOME_ARQUIVO_CASO: &str = "caso.sied.db";
 
@@ -86,7 +87,7 @@ impl BancoCaso {
         let pasta = pasta.canonicalize()?;
         let trava = travar(&pasta)?;
         let caminho = pasta.join(NOME_ARQUIVO_CASO);
-        let mut conn = conexao::abrir(&caminho)?;
+        let mut conn = conexao::abrir(&caminho, &BANCO_CASO, Abertura::Criar)?;
         migracoes::preparar(&mut conn, &caminho, &BANCO_CASO)?;
 
         let agora = Utc::now();
@@ -145,9 +146,10 @@ impl BancoCaso {
         // Antes de tocar no banco: outra janela com o caso aberto pode estar importando,
         // e marcar_interrompidas trataria a importação dela como interrompida.
         let trava = travar(&pasta)?;
-        let mut conn = conexao::abrir(&caminho)?;
-        migracoes::preparar(&mut conn, &caminho, &BANCO_CASO)?;
-        let caso = ler_caso(&conn)?;
+        let mut conn = conexao::abrir(&caminho, &BANCO_CASO, Abertura::Existente)?;
+        migracoes::preparar(&mut conn, &caminho, &BANCO_CASO)
+            .map_err(|e| conexao::corrompido_em(e, &caminho))?;
+        let caso = ler_caso(&conn).map_err(|e| conexao::corrompido_em(e, &caminho))?;
         let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
         auditoria::registrar(&tx, &sessao, "caso_aberto", json!({ "pasta": pasta }))?;
         marcar_interrompidas(&tx, &sessao)?;

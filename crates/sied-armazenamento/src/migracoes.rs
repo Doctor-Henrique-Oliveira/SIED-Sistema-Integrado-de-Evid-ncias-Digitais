@@ -12,7 +12,7 @@
 use chrono::Utc;
 use rusqlite::{params, Connection, OptionalExtension};
 use sha2::{Digest, Sha256};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::{ErroArmazenamento, Resultado};
 
@@ -93,6 +93,26 @@ fn banco_vazio(conn: &Connection) -> Resultado<bool> {
     Ok(n == 0)
 }
 
+/// `<arquivo>.antes-v<N>.bak`, ou `-2`, `-3`... se já existir: uma cópia anterior
+/// (ex.: de uma migração que falhou no meio) nunca é sobrescrita, e o `VACUUM INTO`
+/// recusaria gravar sobre ela, impedindo o caso de abrir.
+fn caminho_copia(caminho: &Path, versao: i64) -> PathBuf {
+    let base = caminho
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("banco");
+    (1..)
+        .map(|n| {
+            caminho.with_file_name(if n == 1 {
+                format!("{base}.antes-v{versao}.bak")
+            } else {
+                format!("{base}.antes-v{versao}-{n}.bak")
+            })
+        })
+        .find(|c| !c.exists())
+        .expect("sequência infinita de nomes")
+}
+
 /// Confere o tipo do banco e aplica as migrações pendentes. Devolve a versão final.
 pub fn preparar(conn: &mut Connection, caminho: &Path, tipo: &TipoBanco) -> Resultado<i64> {
     let app_id: i32 = conn.query_row("PRAGMA application_id", [], |r| r.get(0))?;
@@ -148,14 +168,7 @@ pub fn preparar(conn: &mut Connection, caminho: &Path, tipo: &TipoBanco) -> Resu
     }
 
     if atual > 0 {
-        let copia = caminho.with_file_name(format!(
-            "{}.antes-v{}.bak",
-            caminho
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("banco"),
-            pendentes[0].versao
-        ));
+        let copia = caminho_copia(caminho, pendentes[0].versao);
         tracing::info!(banco = tipo.nome, copia = %copia.display(), "cópia de segurança antes da migração");
         conn.execute("VACUUM INTO ?1", [copia.to_string_lossy()])?;
     }

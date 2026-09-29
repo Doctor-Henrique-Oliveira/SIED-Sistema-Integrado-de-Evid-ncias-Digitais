@@ -8,8 +8,9 @@ use std::path::{Path, PathBuf};
 use ts_rs::TS;
 
 use crate::caso::NOME_ARQUIVO_CASO;
+use crate::conexao::{self, Abertura};
 use crate::migracoes::{self, BANCO_GLOBAL};
-use crate::{conexao, Resultado};
+use crate::Resultado;
 
 pub const NOME_ARQUIVO_GLOBAL: &str = "sied-global.db";
 
@@ -39,7 +40,8 @@ impl CatalogoGlobal {
     pub fn abrir(pasta_dados: &Path) -> Resultado<Self> {
         std::fs::create_dir_all(pasta_dados)?;
         let caminho = pasta_dados.join(NOME_ARQUIVO_GLOBAL);
-        let mut conn = conexao::abrir(&caminho)?;
+        // Um arquivo vazio (queda durante a criação) é tratado como banco novo.
+        let mut conn = conexao::abrir(&caminho, &BANCO_GLOBAL, Abertura::Criar)?;
         let versao = migracoes::preparar(&mut conn, &caminho, &BANCO_GLOBAL)?;
         tracing::info!(caminho = %caminho.display(), versao, "banco global aberto");
         Ok(CatalogoGlobal { conn, caminho })
