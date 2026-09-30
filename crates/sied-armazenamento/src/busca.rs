@@ -139,7 +139,7 @@ fn filtros_artefato(f: &FiltroBusca) -> Filtros {
     Filtros { sql, valores }
 }
 
-fn colunas_achado() -> String {
+pub(crate) fn colunas_achado() -> String {
     format!(
         "{COLUNAS_RESUMO}, a.extracao_id,
          (SELECT c.id FROM conversa c WHERE c.extracao_id = a.extracao_id
@@ -147,7 +147,7 @@ fn colunas_achado() -> String {
     )
 }
 
-fn ler_achado(r: &rusqlite::Row, com_trecho: bool) -> rusqlite::Result<AchadoArtefato> {
+pub(crate) fn ler_achado(r: &rusqlite::Row, com_trecho: bool) -> rusqlite::Result<AchadoArtefato> {
     Ok(AchadoArtefato {
         artefato: ler_resumo(r)?,
         extracao_id: uuid(r.get(N_RESUMO)?)?,

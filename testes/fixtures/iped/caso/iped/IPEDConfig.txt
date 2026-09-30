@@ -1,0 +1,1 @@
+# Arquivo SINTÉTICO para testes do SIED: não é uma configuração real do IPED.

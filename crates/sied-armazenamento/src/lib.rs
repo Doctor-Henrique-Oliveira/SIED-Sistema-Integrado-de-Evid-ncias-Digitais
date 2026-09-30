@@ -20,6 +20,7 @@ pub mod evidencias;
 pub mod extracoes;
 pub mod global;
 pub mod importacao;
+pub mod linha_tempo;
 pub mod migracoes;
 pub mod relatorios;
 pub mod resumo;

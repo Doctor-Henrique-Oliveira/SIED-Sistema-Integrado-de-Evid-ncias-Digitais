@@ -5,6 +5,7 @@ import { useBusca, useExtracoes } from "../api/consultas";
 import { Botao } from "../componentes/Botao";
 import { Aviso, Cabecalho, Cartao, Carregando, entrada, Paginacao, Selo, tabela, Vazio } from "../componentes/Estrutura";
 import { Icone } from "../componentes/Icone";
+import { destinoRegistro } from "../componentes/LinhaTempo";
 import { dataHoraMs, limiteDia, numero, tamanho } from "../util/formatar";
 import { nomeApp, nomeCategoria, nomeTipoArtefato, rotuloApp, rotuloSubtipo } from "../util/rotulos";
 import { ComCasoAberto, VoltarAoCaso } from "./PaginaCaso";
@@ -183,12 +184,7 @@ function Busca({ caso }: { caso: Caso }) {
                 <ul className="divide-y divide-borda" aria-label="Registros encontrados">
                   {r.artefatos.itens.map((a) => {
                     const reg = a.artefato;
-                    const destino =
-                      a.conversa_id != null
-                        ? `/casos/${caso.id}/conversas/${a.conversa_id}?registro=${reg.id}`
-                        : reg.tipo === "chamada" || reg.tipo === "contato"
-                          ? `/casos/${caso.id}/contatos?aba=${reg.tipo === "chamada" ? "chamadas" : "agenda"}&registro=${reg.id}`
-                          : `/casos/${caso.id}/extracoes/${a.extracao_id}`;
+                    const { para: destino, acao } = destinoRegistro(caso.id, a);
                     return (
                       <li key={reg.id}>
                         <Link to={destino} className="group block px-4 py-2.5 transition-colors hover:bg-sup-2" data-teste="achado">
@@ -199,11 +195,7 @@ function Busca({ caso }: { caso: Caso }) {
                             <span>{reg.de_mim == null ? "" : reg.de_mim ? "Enviada" : "Recebida"}</span>
                             <span className="font-mono">{reg.remetente ?? (reg.destinatarios.join(", ") || (reg.tipo !== "mensagem" ? reg.id_externo : ""))}</span>
                             <span className="ml-auto text-ouro-claro opacity-0 transition-opacity group-hover:opacity-100">
-                              {a.conversa_id != null
-                                ? "abrir na conversa →"
-                                : reg.tipo === "chamada" || reg.tipo === "contato"
-                                  ? "abrir em Contatos →"
-                                  : "abrir na extração →"}
+                              {acao}
                             </span>
                           </div>
                           <p className="mt-0.5 text-sm text-texto">

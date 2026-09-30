@@ -3,7 +3,8 @@
 //! Colunas usadas: `_id`, `thread_id`, `address`, `date` (ms UTC), `date_sent`,
 //! `type` (1 recebida, 2 enviada, 3 rascunho, 4 caixa de saída, 5 falha, 6 na fila),
 //! `body`, `read`, `seen`, `status`. A linha inteira vai para `valores_brutos`.
-//! MMS (tabelas `pdu`/`part`) ainda não são interpretadas.
+//! Os MMS do mesmo banco (tabelas `pdu`, `addr`, `part`) são lidos por
+//! [`super::android_mms`].
 
 use serde_json::{json, Map, Value};
 use sied_dominio::artefato::{
@@ -16,6 +17,8 @@ use crate::{ErroIngestao, InfoComponente, Resultado};
 
 pub const ID: &str = "android_sms";
 pub const PAPEL: &str = "mmssms";
+/// Valor de `app` das mensagens (SMS e MMS dividem as conversas).
+pub const APP: &str = "sms";
 const CONSULTA: &str = "SELECT * FROM sms ORDER BY _id";
 const OBRIGATORIAS: &[&str] = &["_id", "address", "date", "type", "body"];
 
@@ -119,7 +122,7 @@ impl Parser for ParserSmsAndroid {
                 },
             );
             a.subtipo = Some("sms".into());
-            a.app = Some("sms".into());
+            a.app = Some(APP.into());
             a.id_externo = Some(id.to_string());
             a.conversa_id_externo = inteiro(&brutos, "thread_id").map(|t| t.to_string());
             a.conteudo = texto(&brutos, "body");

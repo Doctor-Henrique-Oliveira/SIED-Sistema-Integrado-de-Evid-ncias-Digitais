@@ -2,16 +2,18 @@
 // backend: lê daqui e invalida após cada alteração.
 
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   api,
   type CasoId,
   type DispositivoId,
+  type EventoImportacao,
   type ExtracaoId,
   type FiltroBusca,
   type FiltroChamadas,
   type FiltroContatos,
   type FiltroConversas,
+  type FiltroLinhaTempo,
   type NovoCaso,
   type NovoDispositivo,
   type NovaEvidencia,
@@ -136,6 +138,57 @@ export function useEstadoImportacao(casoId: CasoId) {
     anterior.current = terminada;
   }, [terminada, casoId, qc]);
   return consulta;
+}
+
+/** Eventos guardados na tela (os mais antigos saem; o log da importação guarda todos). */
+const MAX_EVENTOS_TELA = 5000;
+
+/** Console da importação em curso: busca os eventos novos a cada 500 ms (pela
+ * sequência) até a importação terminar, e mais uma vez depois do fim. */
+export function useEventosImportacao(extracaoId: ExtracaoId | null, terminada: boolean) {
+  const [eventos, setEventos] = useState<EventoImportacao[]>([]);
+  const ultimo = useRef(0);
+  const atual = useRef<ExtracaoId | null>(null);
+  useEffect(() => {
+    if (!extracaoId) return;
+    if (atual.current !== extracaoId) {
+      atual.current = extracaoId;
+      ultimo.current = 0;
+      setEventos([]);
+    }
+    let vivo = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const buscar = async () => {
+      let n = 0;
+      try {
+        const novos = await api.eventosImportacao(ultimo.current);
+        if (!vivo) return;
+        n = novos.length;
+        if (n > 0) {
+          ultimo.current = novos[n - 1]!.seq;
+          setEventos((ev) => {
+            const todos = [...ev, ...novos];
+            return todos.length > MAX_EVENTOS_TELA ? todos.slice(-MAX_EVENTOS_TELA) : todos;
+          });
+        }
+      } catch {
+        // Tenta de novo na próxima volta.
+      }
+      // Lote cheio: ainda há eventos; busca já. Senão, espera enquanto não terminar.
+      if (vivo && (n >= 1000 || !terminada)) timer = setTimeout(buscar, n >= 1000 ? 0 : 500);
+    };
+    void buscar();
+    return () => {
+      vivo = false;
+      clearTimeout(timer);
+    };
+  }, [extracaoId, terminada]);
+  return eventos;
+}
+
+/** Console de uma importação passada, relido do log gravado na pasta do caso. */
+export function useEventosDaExtracao(id: ExtracaoId, ativo: boolean) {
+  return useQuery({ queryKey: [...chaves.extracao(id), "console"], queryFn: () => api.eventosDaExtracao(id), enabled: ativo });
 }
 
 export function useIniciarImportacao(casoId: CasoId) {
@@ -323,6 +376,23 @@ export function useChamadas(casoId: CasoId, filtro: FiltroChamadas, deslocamento
 
 export function useResumoChamadas(casoId: CasoId) {
   return useQuery({ queryKey: [...chaves.conversas(casoId), "chamadas-resumo"], queryFn: api.resumoChamadas });
+}
+
+/** Linha do tempo: registros com data de todas as extrações, em ordem cronológica. */
+export function useLinhaDoTempo(casoId: CasoId, filtro: FiltroLinhaTempo, deslocamento: number, limite: number) {
+  return useQuery({
+    queryKey: [...chaves.conversas(casoId), "linha-do-tempo", filtro, deslocamento, limite],
+    queryFn: () => api.linhaDoTempo(filtro, deslocamento, limite),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useResumoLinhaDoTempo(casoId: CasoId, filtro: FiltroLinhaTempo) {
+  return useQuery({
+    queryKey: [...chaves.conversas(casoId), "linha-do-tempo-resumo", filtro],
+    queryFn: () => api.resumoLinhaDoTempo(filtro),
+    placeholderData: keepPreviousData,
+  });
 }
 
 // ---------- Evidências e relatórios ----------

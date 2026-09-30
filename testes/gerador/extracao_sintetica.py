@@ -10,15 +10,21 @@ sintéticas de testes/fixtures/whatsapp (msgstore.db no esquema novo e wa.db), m
 citadas pelas mensagens e um backup .crypt14 inventado. Sem a opção, a saída é a
 mesma de sempre (é a que o teste E2E usa).
 
-Com --android, acrescenta a agenda (contacts2.db) e o registro de chamadas
-(calllog.db) do Android, montados a partir das fixtures sintéticas de
-testes/fixtures/android (esquemas públicos do AOSP; números e nomes inventados).
+Com --android, acrescenta a agenda (contacts2.db), o registro de chamadas
+(calllog.db) e MMS no mmssms.db (tabelas pdu/addr/part, com os arquivos das partes
+em app_parts), montados a partir das fixtures sintéticas de testes/fixtures/android
+(esquemas públicos do AOSP; números, nomes e arquivos inventados).
 
 Com --volume, acrescenta volume para testar as telas com dados em quantidade: uma
 conversa SMS com milhares de mensagens, centenas de conversas curtas e centenas de
 imagens PNG desenhadas aqui mesmo (padrões geométricos, sem pessoas nem texto).
 
+Com --iped, a saída é outra: um caso SINTÉTICO do IPED, copiado de testes/fixtures/iped/caso
+(pasta iped/ com IPEDConfig.txt, conf/ e index/ sem índice real, "Lista de Arquivos.csv" com as
+15 colunas do IPED e dois arquivos em Exportados/arquivos). Não se combina com as outras opções.
+
 Uso: python3 testes/gerador/extracao_sintetica.py [--whatsapp] [--android] [--volume] <pasta de destino>
+     python3 testes/gerador/extracao_sintetica.py --iped <pasta de destino>
 """
 
 import os
@@ -31,6 +37,7 @@ import zlib
 
 FIXTURES_WHATSAPP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "fixtures", "whatsapp")
 FIXTURES_ANDROID = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "fixtures", "android")
+FIXTURE_IPED = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "fixtures", "iped", "caso")
 
 # 2026-01-01 00:00:00 UTC em milissegundos
 BASE_MS = 1767225600000
@@ -170,6 +177,9 @@ def gerar(destino: str, whatsapp: bool = False, volume: bool = False, android: b
                    "VALUES (?, ?, ?, ?, ?, ?, 1, 1)")
         for (i, t, a, m, tipo, corpo) in MENSAGENS:
             conn.execute(inserir, (i, t, a, BASE_MS + m * MINUTO, tipo, corpo))
+        if android:
+            with open(os.path.join(FIXTURES_ANDROID, "mms.sql"), encoding="utf-8") as f:
+                conn.executescript(f.read())
         if volume:
             conn.execute("BEGIN")
             for (i, t, a, m, tipo, corpo) in mensagens_volume():
@@ -188,13 +198,34 @@ def gerar(destino: str, whatsapp: bool = False, volume: bool = False, android: b
         gerar_whatsapp(destino)
     if android:
         gerar_android(destino)
+        partes = os.path.join(destino, "dados", "com.android.providers.telephony", "app_parts")
+        # Foto e áudio citados pelos MMS; a segunda imagem do MMS 3 fica de fora.
+        os.makedirs(partes, exist_ok=True)
+        with open(os.path.join(partes, "PART_1767232800000_IMG_0002.png"), "wb") as f:
+            f.write(png(96, 72, 7))
+        arquivo(os.path.join(partes, "PART_1767240000000_audio_sintetico.amr"), b"#!AMR\n", 32)
     if volume:
         gerar_imagens(destino)
     print(destino)
 
 
+def gerar_iped(destino: str) -> None:
+    if os.path.exists(destino) and os.listdir(destino):
+        sys.exit(f"a pasta {destino} já existe e não está vazia")
+    if os.path.exists(destino):
+        os.rmdir(destino)
+    shutil.copytree(FIXTURE_IPED, destino)
+    print(destino)
+
+
 if __name__ == "__main__":
     args = sys.argv[1:]
+    if "--iped" in args:
+        resto = [a for a in args if a != "--iped"]
+        if len(resto) != 1 or resto[0].startswith("--"):
+            sys.exit(__doc__)
+        gerar_iped(resto[0])
+        sys.exit(0)
     whatsapp = "--whatsapp" in args
     volume = "--volume" in args
     android = "--android" in args

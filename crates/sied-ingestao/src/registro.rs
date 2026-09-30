@@ -4,10 +4,13 @@ use crate::fonte::FonteSomenteLeitura;
 use crate::importador::{Deteccao, Importador, Suporte};
 use crate::importadores::avilla::AvillaImporter;
 use crate::importadores::generico::ImportadorGenerico;
+use crate::importadores::iped::IpedImporter;
 use crate::parser::Parser;
 use crate::parsers::android_chamadas::ParserChamadasAndroid;
 use crate::parsers::android_contatos::ParserContatosAndroid;
+use crate::parsers::android_mms::ParserMmsAndroid;
 use crate::parsers::android_sms::ParserSmsAndroid;
+use crate::parsers::iped_lista::ParserListaIped;
 use crate::parsers::whatsapp_android::ParserWhatsAppAndroid;
 use crate::Resultado;
 
@@ -22,11 +25,14 @@ impl Registro {
     pub fn padrao() -> Self {
         let mut r = Registro::default();
         r.adicionar_importador(Box::new(AvillaImporter));
+        r.adicionar_importador(Box::new(IpedImporter));
         r.adicionar_importador(Box::new(ImportadorGenerico));
         r.adicionar_parser(Box::new(ParserSmsAndroid));
         r.adicionar_parser(Box::new(ParserWhatsAppAndroid));
         r.adicionar_parser(Box::new(ParserContatosAndroid));
         r.adicionar_parser(Box::new(ParserChamadasAndroid));
+        r.adicionar_parser(Box::new(ParserMmsAndroid));
+        r.adicionar_parser(Box::new(ParserListaIped));
         r
     }
 

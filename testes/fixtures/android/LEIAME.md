@@ -8,9 +8,10 @@ fique legível e revisável no Git.
 |---|---|---|
 | `contacts2.sql` | `contacts2.db` | `accounts`, `mimetypes`, `contacts`, `raw_contacts`, `data` |
 | `calllog.sql` | `calllog.db` | `calls` |
+| `mms.sql` | tabelas de MMS aplicadas sobre um `mmssms.db` que já tem `sms` | `pdu`, `addr`, `part` |
 
-Os nomes de tabelas e colunas seguem a documentação pública do Android (`ContactsContract` e
-`CallLog.Calls`, AOSP), em esquema reduzido, e **não foram conferidos com um banco real** de aparelho
+Os nomes de tabelas e colunas seguem a documentação pública do Android (`ContactsContract`,
+`CallLog.Calls` e `Telephony.Mms`, AOSP), em esquema reduzido, e **não foram conferidos com um banco real** de aparelho
 de teste. Nada aqui representa a estrutura de pastas de qualquer ferramenta de extração (Avilla,
 IPED...).
 
@@ -18,6 +19,7 @@ Os números de Ana (`+55 11 90000-0011`) e Bruno (`+55 11 90000-0012`) são os m
 `../whatsapp/wa.sql`, para exercitar a ligação de chamadas à agenda pelo mesmo número.
 
 Usados por:
-- `crates/sied-ingestao/src/parsers/android_contatos.rs` e `android_chamadas.rs` (parsers);
+- `crates/sied-ingestao/src/parsers/android_contatos.rs`, `android_chamadas.rs` e `android_mms.rs` (parsers);
+- `crates/sied-armazenamento/tests/mms.rs` (MMS na conversa dos SMS, anexos em `app_parts`);
 - `crates/sied-armazenamento/tests/agenda_chamadas.rs` (importação completa no banco do caso);
 - `testes/gerador/extracao_sintetica.py --android` (extração sintética para o app real).

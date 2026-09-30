@@ -50,12 +50,20 @@ import type { ContatoAgenda } from "./tipos/ContatoAgenda";
 import type { ContatoVinculado } from "./tipos/ContatoVinculado";
 import type { FiltroChamadas } from "./tipos/FiltroChamadas";
 import type { FiltroContatos } from "./tipos/FiltroContatos";
+import type { EventoImportacao } from "./tipos/EventoImportacao";
+import type { FiltroLinhaTempo } from "./tipos/FiltroLinhaTempo";
+import type { NivelEvento } from "./tipos/NivelEvento";
+import type { ResumoLinhaTempo } from "./tipos/ResumoLinhaTempo";
 import type { ResumoChamadas } from "./tipos/ResumoChamadas";
 import type { TelefoneContato } from "./tipos/TelefoneContato";
 import type { TotalApp } from "./tipos/TotalApp";
 
 export type {
   Chamada,
+  EventoImportacao,
+  NivelEvento,
+  FiltroLinhaTempo,
+  ResumoLinhaTempo,
   ContatoAgenda,
   ContatoVinculado,
   FiltroChamadas,
@@ -163,6 +171,8 @@ export const api = {
     chamar<EstadoImportacao>("iniciar_importacao", { dispositivoId, pasta, importador }),
   estadoImportacao: () => chamar<EstadoImportacao | null>("estado_importacao"),
   cancelarImportacao: () => chamar<null>("cancelar_importacao"),
+  eventosImportacao: (desde: number) => chamar<EventoImportacao[]>("eventos_importacao", { desde }),
+  eventosDaExtracao: (id: ExtracaoId) => chamar<EventoImportacao[]>("eventos_da_extracao", { id }),
   listarExtracoes: () => chamar<Extracao[]>("listar_extracoes"),
   obterExtracao: (extracaoId: ExtracaoId) => chamar<Extracao>("obter_extracao", { extracaoId }),
   totaisPorCategoria: (extracaoId: ExtracaoId) =>
@@ -213,6 +223,9 @@ export const api = {
   listarChamadas: (filtro: FiltroChamadas, deslocamento: number, limite: number) =>
     chamar<Pagina<Chamada>>("listar_chamadas", { filtro, deslocamento, limite }),
   resumoChamadas: () => chamar<ResumoChamadas>("resumo_chamadas"),
+  linhaDoTempo: (filtro: FiltroLinhaTempo, deslocamento: number, limite: number) =>
+    chamar<Pagina<AchadoArtefato>>("linha_do_tempo", { filtro, deslocamento, limite }),
+  resumoLinhaDoTempo: (filtro: FiltroLinhaTempo) => chamar<ResumoLinhaTempo>("resumo_linha_do_tempo", { filtro }),
 
   listarEvidencias: () => chamar<Evidencia[]>("listar_evidencias"),
   marcacoesEvidencias: () => chamar<Marcacoes>("marcacoes_evidencias"),

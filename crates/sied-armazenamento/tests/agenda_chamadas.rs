@@ -152,7 +152,9 @@ fn agenda_e_chamadas_importadas_e_ligadas_pelo_mesmo_numero() {
     assert_eq!(execucoes["android_contatos"], "parcial");
     assert_eq!(execucoes["android_chamadas"], "ok");
     // Com calllog.db na pasta, o contacts2.db não vai para o leitor de chamadas.
-    assert_eq!(execucoes.len(), 4);
+    // O mmssms.db vai para SMS e MMS (sem tabela pdu: nada a ler, sem aviso).
+    assert_eq!(execucoes["android_mms"], "ok");
+    assert_eq!(execucoes.len(), 5);
 
     // Todo registro importado confere com o próprio hash (inclusive as origens
     // adicionais da agenda: conta, contato agrupado e linhas de `data`).

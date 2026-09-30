@@ -6,7 +6,7 @@ use sied_armazenamento::agenda::{
     Chamada, ContatoAgenda, FiltroChamadas, FiltroContatos, ResumoChamadas, TotalApp,
 };
 use sied_armazenamento::auditoria::{RegistroAuditoria, VerificacaoAuditoria};
-use sied_armazenamento::busca::{FiltroBusca, ResultadoBusca};
+use sied_armazenamento::busca::{AchadoArtefato, FiltroBusca, ResultadoBusca};
 use sied_armazenamento::caso::{nome_pasta_sugerido, NOME_ARQUIVO_CASO};
 use sied_armazenamento::conversas::{AppConversas, Conversa, FiltroConversas, PosicaoMensagem};
 use sied_armazenamento::evidencias::{Evidencia, Marcacoes, NovaEvidencia, TextosEvidencia};
@@ -14,12 +14,14 @@ use sied_armazenamento::extracoes::{
     ArquivoExtracao, ArtefatoDetalhe, ArtefatoResumo, ExecucaoParser, Extracao, Pagina,
     TotalCategoria,
 };
+use sied_armazenamento::linha_tempo::{FiltroLinhaTempo, ResumoLinhaTempo};
 use sied_armazenamento::relatorios::RelatorioRegistrado;
 use sied_armazenamento::resumo::{Identificador, ResumoCaso};
 use sied_armazenamento::{BancoCaso, CasoCatalogado, CatalogoGlobal, Sessao};
 use sied_dominio::{
     Caso, CasoId, Dispositivo, DispositivoId, ExtracaoId, NovoCaso, NovoDispositivo,
 };
+use sied_ingestao::eventos::{EventoImportacao, NivelEvento};
 use sied_ingestao::fonte::pasta::PastaSomenteLeitura;
 use sied_ingestao::importador::{Deteccao, Suporte};
 use sied_ingestao::pipeline::{self, Controle, Progresso};
@@ -348,10 +350,24 @@ impl Servico {
                         p.mensagem = Some(e.to_string());
                     }),
                 }
+                c.anunciar(
+                    NivelEvento::Info,
+                    "Gravando o resultado da extração no caso e na trilha de auditoria...",
+                );
                 let final_ = gravador.finalizar(&r).map_err(|e| {
                     tracing::error!(erro = %e, "falha ao gravar o fim da importação");
                     e.to_string()
                 });
+                match &final_ {
+                    Ok(x) => c.anunciar(
+                        NivelEvento::Ok,
+                        format!("Extração registrada com status \"{}\".", x.status),
+                    ),
+                    Err(e) => c.anunciar(
+                        NivelEvento::Erro,
+                        format!("Falha ao gravar o resultado da extração: {e}"),
+                    ),
+                };
                 if let Ok(mut f) = f.lock() {
                     *f = Some(final_);
                 }
@@ -376,6 +392,19 @@ impl Servico {
 
     pub fn estado_importacao(&self) -> Option<EstadoImportacao> {
         self.importacao.as_ref().map(TarefaImportacao::estado)
+    }
+
+    /// Eventos do console da importação em curso (ou da última) depois de `desde`.
+    pub fn eventos_importacao(&self, desde: u64) -> Vec<EventoImportacao> {
+        self.importacao
+            .as_ref()
+            .map(|t| t.controle.eventos_desde(desde))
+            .unwrap_or_default()
+    }
+
+    /// Console de uma importação já terminada, relido do log gravado no caso.
+    pub fn eventos_da_extracao(&mut self, id: ExtracaoId) -> ResultadoApp<Vec<EventoImportacao>> {
+        Ok(self.banco()?.eventos_da_importacao(id)?)
     }
 
     pub fn cancelar_importacao(&self) {
@@ -576,6 +605,26 @@ impl Servico {
 
     pub fn resumo_chamadas(&mut self) -> ResultadoApp<ResumoChamadas> {
         Ok(self.banco()?.resumo_chamadas()?)
+    }
+
+    // ------------------------------------------------------------ linha do tempo
+
+    pub fn linha_do_tempo(
+        &mut self,
+        filtro: &FiltroLinhaTempo,
+        deslocamento: i64,
+        limite: i64,
+    ) -> ResultadoApp<Pagina<AchadoArtefato>> {
+        Ok(self
+            .banco()?
+            .linha_do_tempo(filtro, deslocamento.max(0), limite.clamp(1, 500))?)
+    }
+
+    pub fn resumo_linha_do_tempo(
+        &mut self,
+        filtro: &FiltroLinhaTempo,
+    ) -> ResultadoApp<ResumoLinhaTempo> {
+        Ok(self.banco()?.resumo_linha_do_tempo(filtro)?)
     }
 
     // ------------------------------------------------------------ evidências

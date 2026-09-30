@@ -242,6 +242,7 @@ fn nome_app(app: Option<&str>) -> String {
         Some("telegram") => "Telegram".into(),
         Some("telefone") => "Telefone".into(),
         Some("contatos_android") => "Agenda (Android)".into(),
+        Some("iped") => "IPED (lista de itens)".into(),
         Some(outro) => outro.into(),
         None => "Não informado".into(),
     }
@@ -270,6 +271,9 @@ fn nome_subtipo(s: &str) -> &str {
         "rejeitada" => "Rejeitada",
         "bloqueada" => "Bloqueada",
         "atendida_em_outro_aparelho" => "Atendida em outro aparelho",
+        "mms_nao_baixado" => "MMS não baixado",
+        "item" => "Item do caso",
+        "recuperado" => "Recuperado (carving)",
         outro => outro,
     }
 }
@@ -280,6 +284,7 @@ fn nome_tipo_artefato(s: &str) -> &str {
         "conversa" => "Registro da conversa",
         "contato" => "Contato",
         "chamada" => "Chamada",
+        "arquivo" => "Arquivo",
         outro => outro,
     }
 }
