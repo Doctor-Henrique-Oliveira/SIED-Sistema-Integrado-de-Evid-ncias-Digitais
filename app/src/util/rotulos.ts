@@ -62,6 +62,7 @@ export const nomeApp: Record<string, string> = {
   telegram: "Telegram",
   telefone: "Telefone",
   contatos_android: "Agenda (Android)",
+  iped: "IPED (lista de itens)",
 };
 
 export function rotuloApp(app: string | null | undefined): string {
@@ -83,6 +84,7 @@ export const nomeTipoArtefato: Record<string, string> = {
   conversa: "Registro da conversa",
   contato: "Contato",
   chamada: "Chamada",
+  arquivo: "Arquivo",
 };
 
 /** Subtipos emitidos pelos parsers (o código bruto fica nos detalhes técnicos). */
@@ -111,6 +113,8 @@ export const nomeSubtipo: Record<string, string> = {
   bloqueada: "Bloqueada",
   atendida_em_outro_aparelho: "Atendida em outro aparelho",
   mms_nao_baixado: "MMS não baixado",
+  item: "Item do caso",
+  recuperado: "Recuperado (carving)",
 };
 
 export function rotuloSubtipo(s: string): string {

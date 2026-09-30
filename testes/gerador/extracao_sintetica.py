@@ -19,7 +19,12 @@ Com --volume, acrescenta volume para testar as telas com dados em quantidade: um
 conversa SMS com milhares de mensagens, centenas de conversas curtas e centenas de
 imagens PNG desenhadas aqui mesmo (padrões geométricos, sem pessoas nem texto).
 
+Com --iped, a saída é outra: um caso SINTÉTICO do IPED, copiado de testes/fixtures/iped/caso
+(pasta iped/ com IPEDConfig.txt, conf/ e index/ sem índice real, "Lista de Arquivos.csv" com as
+15 colunas do IPED e dois arquivos em Exportados/arquivos). Não se combina com as outras opções.
+
 Uso: python3 testes/gerador/extracao_sintetica.py [--whatsapp] [--android] [--volume] <pasta de destino>
+     python3 testes/gerador/extracao_sintetica.py --iped <pasta de destino>
 """
 
 import os
@@ -32,6 +37,7 @@ import zlib
 
 FIXTURES_WHATSAPP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "fixtures", "whatsapp")
 FIXTURES_ANDROID = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "fixtures", "android")
+FIXTURE_IPED = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "fixtures", "iped", "caso")
 
 # 2026-01-01 00:00:00 UTC em milissegundos
 BASE_MS = 1767225600000
@@ -203,8 +209,23 @@ def gerar(destino: str, whatsapp: bool = False, volume: bool = False, android: b
     print(destino)
 
 
+def gerar_iped(destino: str) -> None:
+    if os.path.exists(destino) and os.listdir(destino):
+        sys.exit(f"a pasta {destino} já existe e não está vazia")
+    if os.path.exists(destino):
+        os.rmdir(destino)
+    shutil.copytree(FIXTURE_IPED, destino)
+    print(destino)
+
+
 if __name__ == "__main__":
     args = sys.argv[1:]
+    if "--iped" in args:
+        resto = [a for a in args if a != "--iped"]
+        if len(resto) != 1 or resto[0].startswith("--"):
+            sys.exit(__doc__)
+        gerar_iped(resto[0])
+        sys.exit(0)
     whatsapp = "--whatsapp" in args
     volume = "--volume" in args
     android = "--android" in args

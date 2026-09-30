@@ -210,9 +210,9 @@ function AbaArtefatos({ caso, x }: { caso: Caso; x: Extracao }) {
                   <td className={tabela.td}>
                     {a.de_mim == null ? "—" : a.de_mim ? <span className="text-ouro-claro">Enviada</span> : <span className="text-info">Recebida</span>}
                   </td>
-                  <td className={`${tabela.td} whitespace-nowrap font-mono text-xs`}>{a.remetente ?? (a.destinatarios.join(", ") || (a.tipo !== "mensagem" ? a.id_externo : null) || "—")}</td>
-                  <td className={`${tabela.td} max-w-md truncate text-texto`} title={a.conteudo ?? undefined}>
-                    {a.conteudo ?? "—"}
+                  <td className={`${tabela.td} whitespace-nowrap font-mono text-xs`}>{a.remetente ?? (a.destinatarios.join(", ") || (a.tipo !== "mensagem" && a.tipo !== "arquivo" ? a.id_externo : null) || "—")}</td>
+                  <td className={`${tabela.td} max-w-md truncate text-texto`} title={a.conteudo ?? a.nome_arquivo ?? undefined}>
+                    {a.conteudo ?? a.nome_arquivo ?? "—"}
                   </td>
                   <td className={tabela.td}>
                     {a.estado_registro !== "ativo" ? (

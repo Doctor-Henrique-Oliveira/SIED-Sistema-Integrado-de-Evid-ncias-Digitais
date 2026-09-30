@@ -2,13 +2,14 @@
 
 Estado em 30/09/2026: depois da auditoria, a `main` recebeu o saneamento dos documentos (PR #13) e o
 **design system global com a casca do workspace** (PR #14, merge `132a8d5`) e a **agenda de
-contatos e registro de chamadas do Android** (PR #15, merge `<MERGE15>`; checkpoint
+contatos e registro de chamadas do Android** (PR #15, merge `9dd1947`; checkpoint
 `docs/checkpoints/2026-09-30-contatos-chamadas-android.md`). Desde a regra de construção contínua
 do usuário (30/09, 17:27), cada fase vai para a `main` quando a CI Linux e Windows está verde. Em
 seguida vieram os **MMS do Android**, a **linha do tempo unificada** (Consultas e Localizações) e
-o **console de importação em tempo real** (§14.1), na branch `claude/contatos-chamadas-android-z7m48s`
-reiniciada da `main` (checkpoints `2026-09-30-mms-android.md`, `2026-09-30-linha-do-tempo.md` e
-`2026-09-30-console-importacao.md`).
+o **console de importação em tempo real** (§14.1) e o **importador IPED** (lista de itens em CSV),
+na branch `claude/contatos-chamadas-android-z7m48s` reiniciada da `main` (checkpoints
+`2026-09-30-mms-android.md`, `2026-09-30-linha-do-tempo.md`, `2026-09-30-console-importacao.md` e
+`2026-09-30-importador-iped.md`).
 
 Estado em 29/09/2026: a fase 1 fecha o ciclo **importar → analisar → selecionar → relatar**. Na
 `main` estão a interface para volume real (PR #9, merge `24791ff`), as **evidências selecionadas
@@ -93,8 +94,8 @@ release, execução manual ou PR que muda o build (opção "Só tags", PR #4).
 | `claude/auditoria-hardening-7p20bx` (reiniciada da `main`) | — | #12 | só documentos: registra o commit final |
 | — | `951365e` | #13 | mesclado (`6f5d5c1`): saneamento dos documentos do handoff |
 | `claude/project-thread-dycfuw` | `24e44fe` | #14 | mesclado (`132a8d5`): design system global e casca do workspace |
-| `claude/contatos-chamadas-android-z7m48s` | `c9762ec` | #15 | mesclado (`<MERGE15>`): agenda e chamadas do Android |
-| `claude/contatos-chamadas-android-z7m48s` (reiniciada da `main`) | — | novo PR | MMS do Android, linha do tempo unificada e console de importação |
+| `claude/contatos-chamadas-android-z7m48s` | `c9762ec` | #15 | mesclado (`9dd1947`): agenda e chamadas do Android |
+| `claude/contatos-chamadas-android-z7m48s` (reiniciada da `main`) | — | novo PR | MMS do Android, linha do tempo unificada, console de importação e importador IPED |
 
 As branches mescladas **não foram apagadas**. Podem ser removidas depois que a `main` for
 confirmada íntegra e com CI verde, com aval do usuário.
@@ -291,6 +292,15 @@ depois do PR #15)
 - Console sob a barra de progresso (horário no fuso do caso, decorrido, nível, recolhível, "ao
   vivo"), fechado no resultado e reaberto na aba Processamento da extração a partir do log.
 
+**Importador IPED** (mesma branch; formato conferido no código-fonte público do IPED)
+- Reconhece a pasta de um caso do IPED (`iped/IPEDConfig.txt`, `iped/index`, `iped/conf`) e a
+  lista de itens na raiz (`FileList.csv`, "Lista de Arquivos.csv" e as outras 4 traduções).
+- Parser `iped_lista_arquivos`: um registro "arquivo" por linha (nome, tamanho, MD5/SHA1 do IPED,
+  caminho na evidência, marcadores, categorias, apagado, recuperado, datas com fuso inequívoco),
+  a linha inteira em `valores_brutos`; o atalho `=HIPERLINK(...)` liga o item ao arquivo exportado
+  no inventário. Fora de `iped/`, os bancos com nome padrão seguem para os leitores Android e
+  WhatsApp. O índice Lucene não é lido. Sem migração.
+
 **Busca global** (migração 3)
 - FTS5 em registros e nomes de arquivo, sem diferenciar acentos e maiúsculas, com prefixo.
 - Texto digitado protegido contra sintaxe do FTS (cada palavra vira frase com prefixo).
@@ -302,7 +312,7 @@ depois do PR #15)
 
 | Conjunto | Quantidade | Resultado |
 |---|---|---|
-| Rust (`cargo test --workspace`, soma de todos os `test result`) | 239 + 3 medições ignoradas com MMS, linha do tempo e console (222 com o PR #15; 201 após a auditoria) | todos passam |
+| Rust (`cargo test --workspace`, soma de todos os `test result`) | 248 + 3 medições ignoradas com MMS, linha do tempo, console e IPED (222 com o PR #15; 201 após a auditoria) | todos passam |
 | `cargo clippy -D warnings` e `cargo fmt --check` | — | limpos |
 | Interface (`vitest`) | 56 com a linha do tempo e o console (50 com o PR #15; 43 após a auditoria) | todos passam |
 | Build da interface (`npm run build`) e do app (`tauri build --debug --no-bundle`) | — | ok |
@@ -336,6 +346,9 @@ REAL infinito. Medições com volume em `tests/desempenho.rs` (ignoradas; ver o 
 
 - **Avilla sem importador**: falta a árvore de uma extração real (ver §10).
 - **Contêineres** (`.tar`, `.zip`, `.ab`) são inventariados com hash, mas não abertos.
+- **IPED**: só a lista de itens exportada em CSV é lida (o índice Lucene e os bancos internos
+  não); conferido só com um caso sintético montado pelo código-fonte público. Fuso ambíguo
+  (ex.: `CET`) fica só no valor original, com aviso.
 - São interpretados **SMS e MMS**, **WhatsApp Android**, **agenda** e **registro de chamadas**
   do Android. MMS, agenda e chamadas foram conferidos só com fixtures sintéticas montadas pela
   documentação pública (`Telephony.Mms`, `ContactsContract`, `CallLog.Calls`), não com um banco
@@ -515,12 +528,13 @@ Detalhes no `README.md`.
 `2026-09-29-fase1-evidencias-relatorio.md`. A auditoria pré-produção (PR #11) está em
 `2026-09-29-auditoria-hardening.md`; a passagem para outro agente, em `docs/HANDOFF-CODEX.md`.
 Depois vieram, em construção contínua, a agenda e as chamadas (PR #15), os MMS, a linha do
-tempo unificada e o console de importação (checkpoints de 30/09/2026).
+tempo unificada, o console de importação e o importador IPED (checkpoints de 30/09/2026).
 
 A seguir (ordem da construção contínua):
-1. importador IPED com fixtures sintéticas pelo formato público;
-2. importador Avilla (quando a árvore chegar, §10);
-3. conferência do WhatsApp, SMS/MMS, agenda e chamadas com bancos de aparelho de teste.
+1. importador Avilla (quando a árvore chegar, §10);
+2. conferência do WhatsApp, SMS/MMS, agenda, chamadas e da lista do IPED com dados de teste
+   (não de investigação);
+3. itens de dívida técnica medidos (HANDOFF §25).
 
 ---
 

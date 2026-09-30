@@ -35,13 +35,13 @@ Visão integral e permanente: `docs/VISAO.md`. Arquitetura aprovada (com ajustes
   evidências e relatório PDF (Typst embutido), e o hardening desta auditoria.
 - **Importador Avilla: só o contrato.** Responde `NaoImplementado`. Aguarda a árvore de uma
   extração real (§26).
-- Testes: 239 Rust (+3 medições ignoradas), 56 de interface (vitest), 1 roteiro E2E no app real
-  (com MMS, linha do tempo e console; 222 e 50 com o PR #15; 201 e 43 após a auditoria).
+- Testes: 248 Rust (+3 medições ignoradas), 56 de interface (vitest), 1 roteiro E2E no app real
+  (com MMS, linha do tempo, console e IPED; 222 e 50 com o PR #15; 201 e 43 após a auditoria).
   CI Linux e Windows.
 - Depois do handoff: design system global (PR #14, merge `132a8d5`), **agenda e registro de
-  chamadas do Android** (PR #15, merge `<MERGE15>`, §10.1) e, em construção contínua, **MMS do
-  Android** (§10.2), **linha do tempo unificada** (§13.1) e **console de importação em tempo
-  real** (§9.1). Próximos passos em §27.
+  chamadas do Android** (PR #15, merge `9dd1947`, §10.1) e, em construção contínua, **MMS do
+  Android** (§10.2), **linha do tempo unificada** (§13.1), **console de importação em tempo
+  real** (§9.1) e **importador IPED** (§9.2). Próximos passos em §27.
 
 ## 3. Arquitetura
 
@@ -121,9 +121,10 @@ crates/
     src/fonte.rs            CaminhoFonte (endereço seguro), FonteSomenteLeitura
     src/fonte/pasta.rs      PastaSomenteLeitura (não segue links, confere cada parte)
     src/importador.rs       contrato Importador
-    src/importadores/       generico.rs (pasta), avilla.rs (só contrato)
+    src/importadores/       generico.rs (pasta), iped.rs (caso do IPED), avilla.rs (só contrato)
     src/parser.rs           contrato Parser e SaidaParser
     src/parsers/            android_sms.rs, android_mms.rs, android_contatos.rs, android_chamadas.rs,
+                            iped_lista.rs (lista de itens do IPED),
                             whatsapp_android/, comum.rs (auxiliares), sqlite.rs (leitura segura)
     src/pipeline.rs         inventário, manifesto, cópias verificadas, execução dos parsers
     src/eventos.rs          eventos do console da importação (fila e releitura do log)
@@ -144,7 +145,7 @@ app/
   src-tauri/tauri.conf.json CSP e empacotamento
 testes/
   e2e/                      roteiro ponta a ponta no app real (WebDriver)
-  fixtures/                 fixtures SINTÉTICAS (WhatsApp e Android em SQL, imagem)
+  fixtures/                 fixtures SINTÉTICAS (WhatsApp e Android em SQL, imagem, caso do IPED)
   gerador/                  extracao_sintetica.py (--whatsapp, --android, --volume)
   rust/caso_sintetico.rs    caso sintético compartilhado pelos testes Rust (#[path])
 docs/                       VISAO, ARQUITETURA, CONTINUIDADE, PREPARACAO-AVILLA-WHATSAPP,
@@ -250,6 +251,7 @@ transforma nome perigoso da listagem em **item ignorado com aviso** (a importaç
 | Id | Arquivo | Situação |
 |---|---|---|
 | `generico` | `importadores/generico.rs` | Pasta qualquer. Reconhece `mmssms.db` (SMS e MMS), `msgstore.db` + `wa.db` do WhatsApp (pareados pela pasta; `com.whatsapp` e `com.whatsapp.w4b`), `contacts2.db` (agenda; sem `calllog.db` na mesma pasta, também vai ao leitor de chamadas) e `calllog.db` (chamadas); `.crypt*` só inventariados |
+| `iped` | `importadores/iped.rs` | Caso do IPED: lista de itens na raiz (6 nomes por idioma) → `iped_lista_arquivos`; fora de `iped/`, o mesmo plano da pasta genérica; §9.2 |
 | `avilla` | `importadores/avilla.rs` | **Só contrato.** `detectar` → `NaoImplementado`; `planejar` → erro `NaoImplementado` |
 
 Pipeline (`pipeline.rs`), nesta ordem, igual para toda ferramenta:
@@ -273,6 +275,19 @@ Artefato: `normalizar()` (−0.0 → 0.0; `app` vazio → ausente) e depois `has
   ao vivo. Interface: `app/src/componentes/ConsoleEventos.tsx`.
 - Mensagem nova de console = texto em pt-BR, frase completa, sem inventar dado.
 
+### 9.2 IPED
+
+- Formato conferido no código-fonte público do IPED (sepinf-inc/IPED: `ExportCSVTask`,
+  `ExportFileTask`, `iped-engine-messages*.properties`). Não invente além disso.
+- Detecção: `iped/IPEDConfig.txt`, `iped/index`, `iped/conf` e/ou lista com cabeçalho válido
+  (15 colunas; `MD5`, `SHA1` e `TrackId` nas posições fixas). `Parcial` sempre: o índice Lucene
+  e os bancos internos não são lidos (mudam com a versão).
+- Lista: UTF-8 com BOM, CRLF, `;` (pt, de) ou `,`; datas de `java.util.Date.toString()` no fuso
+  da máquina do IPED. Só `UTC/GMT/UT`, `GMT±hh:mm` e `BRT/BRST/FNT` são convertidos; o resto fica
+  no original com um aviso. O atalho `=HIPERLINK("Exportados\arquivos\E\0\<MD5>.png";"Abrir")`
+  é relativo à raiz do caso e liga o item ao inventário pelo caminho exato.
+- Fixture: `testes/fixtures/iped/` (`-text` no `.gitattributes`); gerador `--iped`.
+
 ## 10. Parsers
 
 | Id | Papéis | Versão | O que lê |
@@ -282,6 +297,7 @@ Artefato: `normalizar()` (−0.0 → 0.0; `app` vazio → ausente) e depois `has
 | `whatsapp_android` | `msgstore`, `wa` | 1.0.0 | §11 |
 | `android_contatos` | `contacts2` | 1.0.0 | agenda (`raw_contacts`, `data`, `mimetypes`, `accounts`, `contacts`); §10.1 |
 | `android_chamadas` | `chamadas` | 1.0.0 | tabela `calls` de `calllog.db` (ou de `contacts2.db` antigo); §10.1 |
+| `iped_lista_arquivos` | `lista_iped` | 1.0.0 | lista de itens do IPED em CSV; §9.2 |
 
 `parsers/sqlite.rs`: abre a **cópia** com `SQLITE_OPEN_READ_ONLY` e lê valores brutos. REAL não
 finito vira `{"real_nao_finito": "inf"|"-inf"|"nan"}` (JSON não tem infinito).
@@ -468,7 +484,7 @@ não capturado.
 
 | Conjunto | Onde | Quantidade |
 |---|---|---|
-| Rust | `crates/*/src` (unitários, inclusive os que exportam os tipos TS) e `crates/*/tests` | 239 + 3 medições `#[ignore]` |
+| Rust | `crates/*/src` (unitários, inclusive os que exportam os tipos TS) e `crates/*/tests` | 248 + 3 medições `#[ignore]` |
 | Interface | `app/src/**/*.test.ts(x)` | 56 |
 | E2E | `testes/e2e/executar.sh` + `persistencia.mjs` | 1 roteiro (cria caso, importa, analisa, reabre; confere que a extração não mudou: hash e datas antes/depois) |
 
@@ -491,6 +507,7 @@ Funcionais:
   contato, `deleted_contacts`, chamadas de apps nem junção de contatos repetidos. MMS: só a
   primeira mídia vira anexo (as demais ficam listadas nas partes); RCS não é lido.
 - WhatsApp, MMS, agenda e chamadas conferidos só com bancos sintéticos (§10.1, §10.2, §11).
+- IPED: só a lista de itens em CSV; conferida só com o caso sintético (§9.2).
 - Hash numa única thread; sem retomada de importação interrompida; sem exclusão de extração
   (de propósito); sem verificação do "hash declarado" do laudo de aquisição.
 - Miniaturas: sem HEIC, vídeo e áudio. Mídias e Arquivos mostram uma extração por vez; listas de
@@ -584,14 +601,13 @@ plano e pasta intacta, e importação completa no app real. Roteiro em
 ## 27. Próximos passos recomendados
 
 Construção contínua (regra do usuário de 30/09/2026): cada fase vai para a `main` com a CI
-verde. Feitas: agenda e chamadas (PR #15), MMS, linha do tempo e console de importação. Ordem
-seguinte:
+verde. Feitas: agenda e chamadas (PR #15), MMS, linha do tempo, console de importação e
+importador IPED (lista de itens). Ordem seguinte:
 
-1. **Importador IPED** com fixtures sintéticas pelo formato público.
-2. **Importador Avilla**, quando a árvore real chegar (§26).
-3. **Conferência do WhatsApp, SMS/MMS, agenda e chamadas** com bancos de aparelho de teste (não
-   de investigação).
-4. Itens F1–F9 (§25), conforme a necessidade medida.
+1. **Importador Avilla**, quando a árvore real chegar (§26).
+2. **Conferência do WhatsApp, SMS/MMS, agenda, chamadas e da lista do IPED** com dados de teste
+   (não de investigação).
+3. Itens F1–F9 (§25), conforme a necessidade medida.
 
 ## 28. Arquivos para ler primeiro
 
