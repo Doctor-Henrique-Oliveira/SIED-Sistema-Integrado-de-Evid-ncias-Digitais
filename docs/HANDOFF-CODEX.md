@@ -35,12 +35,12 @@ Visão integral e permanente: `docs/VISAO.md`. Arquitetura aprovada (com ajustes
   evidências e relatório PDF (Typst embutido), e o hardening desta auditoria.
 - **Importador Avilla: só o contrato.** Responde `NaoImplementado`. Aguarda a árvore de uma
   extração real (§26).
-- Testes: 222 Rust (+3 medições ignoradas), 50 de interface (vitest), 1 roteiro E2E no app real
-  (contagem da branch de agenda e chamadas; na `main` após a auditoria eram 201 e 43).
+- Testes: 232 Rust (+3 medições ignoradas), 54 de interface (vitest), 1 roteiro E2E no app real
+  (com MMS e linha do tempo; 222 e 50 com o PR #15; 201 e 43 após a auditoria).
   CI Linux e Windows.
-- Depois do handoff: design system global (PR #14, merge `132a8d5`) e, na branch
-  `claude/contatos-chamadas-android-z7m48s`, a **agenda e o registro de chamadas do Android**
-  (§10.1), aguardando o merge. Próximos passos em §27.
+- Depois do handoff: design system global (PR #14, merge `132a8d5`), **agenda e registro de
+  chamadas do Android** (PR #15, merge `<MERGE15>`, §10.1) e, em construção contínua, **MMS do
+  Android** (§10.2) e **linha do tempo unificada** (§13.1). Próximos passos em §27.
 
 ## 3. Arquitetura
 
@@ -112,8 +112,9 @@ crates/
     src/auditoria.rs        trilha encadeada por hash, verificar, conferir_ancoras
     src/resumo.rs           painel do caso e identificadores (com vínculo à agenda)
     src/agenda.rs           contatos, chamadas, resumo das chamadas e vínculo pela agenda
+    src/linha_tempo.rs      linha do tempo do caso (registros com data) e resumo
     tests/                  persistencia, importacao, whatsapp, volume, evidencias,
-                            hash_registro, agenda_chamadas, mms, desempenho (ignorado)
+                            hash_registro, agenda_chamadas, mms, linha_tempo, desempenho (ignorado)
   sied-ingestao/
     src/fonte.rs            CaminhoFonte (endereço seguro), FonteSomenteLeitura
     src/fonte/pasta.rs      PastaSomenteLeitura (não segue links, confere cada parte)
@@ -342,6 +343,16 @@ Fora disso ficam só no valor original. Regra geral: **"não sei" é melhor que 
   para contatos, também nos telefones da agenda e no normalizado).
 - Trecho destacado com marcadores `\u0001`/`\u0002` (ver B6 em §22).
 
+### 13.1 Linha do tempo
+
+- `linha_tempo.rs`: registros com `data_hora_ms` (todas as extrações e apps), `INDEXED BY
+  idx_artefato_tempo`, ordem por data e id (estável na paginação); filtros de extração, tipos, app,
+  período e coordenadas. O tipo `conversa` (cabeçalho do app) não entra.
+- `resumo_linha_do_tempo`: por tipo sem o filtro de tipo, apps sem o filtro de app, primeira e
+  última data e `sem_data` (sem o filtro de período, excluídos os contatos).
+- Interface: `app/src/componentes/LinhaTempo.tsx` (usado em Consultas e, fixo em coordenadas, em
+  Localizações); `destinoRegistro` decide onde abrir cada registro (também na busca).
+
 ## 14. Mídia e miniaturas
 
 - `sied-midia`: lê da pasta da extração (somente leitura), confere o SHA-256 com o inventário
@@ -443,8 +454,8 @@ não capturado.
 
 | Conjunto | Onde | Quantidade |
 |---|---|---|
-| Rust | `crates/*/src` (unitários, inclusive os que exportam os tipos TS) e `crates/*/tests` | 222 + 3 medições `#[ignore]` |
-| Interface | `app/src/**/*.test.ts(x)` | 50 |
+| Rust | `crates/*/src` (unitários, inclusive os que exportam os tipos TS) e `crates/*/tests` | 232 + 3 medições `#[ignore]` |
+| Interface | `app/src/**/*.test.ts(x)` | 54 |
 | E2E | `testes/e2e/executar.sh` + `persistencia.mjs` | 1 roteiro (cria caso, importa, analisa, reabre; confere que a extração não mudou: hash e datas antes/depois) |
 
 Medições (não rodam na bateria normal):
@@ -470,7 +481,8 @@ Funcionais:
   (de propósito); sem verificação do "hash declarado" do laudo de aquisição.
 - Miniaturas: sem HEIC, vídeo e áudio. Mídias e Arquivos mostram uma extração por vez; listas de
   Arquivos e Contatos paginadas de 100.
-- Localizações e Consultas só com estrutura; Configurações somente leitura; tema único.
+- Localizações só em lista (sem mapa offline); Consultas só com a linha do tempo (sem consultas
+  salvas); Configurações somente leitura; tema único.
 - Relatório: até 60 figuras; a geração segura o caso (outros comandos esperam); sem botão
   "Abrir PDF"; um modelo; sem assinatura digital; usuário é o do sistema operacional.
 
@@ -557,15 +569,14 @@ plano e pasta intacta, e importação completa no app real. Roteiro em
 
 ## 27. Próximos passos recomendados
 
-Nenhuma fase nova foi iniciada. Ordem sugerida (cada uma com aval do usuário):
+Construção contínua (regra do usuário de 30/09/2026): cada fase vai para a `main` com a CI
+verde. Feitas: agenda e chamadas (PR #15), MMS e linha do tempo. Ordem seguinte:
 
-1. **Importador Avilla**, quando a árvore real chegar (§26).
-2. **Conferência do WhatsApp, da agenda e das chamadas** com bancos de aparelho de teste (não de
-   investigação).
-3. Agenda e chamadas do Android: feitas na branch `claude/contatos-chamadas-android-z7m48s`;
-   falta o merge com aval.
-4. **Console de importação em tempo real** (`docs/CONTINUIDADE.md` §14.1), depois que o fluxo real
-   estabilizar.
+1. **Console de importação em tempo real** (`docs/CONTINUIDADE.md` §14.1).
+2. **Importador IPED** com fixtures sintéticas pelo formato público.
+3. **Importador Avilla**, quando a árvore real chegar (§26).
+4. **Conferência do WhatsApp, SMS/MMS, agenda e chamadas** com bancos de aparelho de teste (não
+   de investigação).
 5. Itens F1–F9 (§25), conforme a necessidade medida.
 
 ## 28. Arquivos para ler primeiro
@@ -611,8 +622,9 @@ Variáveis: `SIED_PASTA_DADOS`, `SIED_PASTA_CASOS`, `SIED_LOG`.
 - Repositório **único**: `Doctor-Henrique-Oliveira/SIED-Sistema-Integrado-de-Evid-ncias-Digitais`.
   Não criar outro.
 - Uma branch por etapa, PR em rascunho, commits coerentes por assunto em pt-BR.
-- `main` só recebe **merge commit** de PR, com CI Linux e Windows verde e sem conflito, e com aval
-  explícito do usuário a cada merge.
+- `main` só recebe **merge commit** de PR, com CI Linux e Windows verde e sem conflito. Desde
+  30/09/2026 (17:27) o usuário autorizou a construção contínua: cada fase concluída é mesclada
+  assim que a CI fica verde, sem pedir aval a cada merge; a CI da `main` é conferida depois.
 - Branches mescladas **não são apagadas** sem confirmação do usuário.
 - Cada etapa termina com um checkpoint em `docs/checkpoints/AAAA-MM-DD-<etapa>.md`
   (IMPLEMENTADO, TESTES, ARQUIVOS, DECISÕES, PROBLEMAS, COMO EXECUTAR, COMO TESTAR, LIMITAÇÕES,
@@ -660,7 +672,8 @@ git fetch origin && git log --oneline -1 origin/main
   sempre sintéticas e identificadas.
 - **Não** remova, pule, desative ou enfraqueça testes para a CI ficar verde; não mude gatilhos da
   CI sem plano aprovado.
-- **Não** faça merge na `main` sem CI Linux e Windows verde e sem aval do usuário; não apague
+- **Não** faça merge na `main` sem CI Linux e Windows verde nem fora da autorização vigente do
+  usuário (§30); não apague
   branches sem confirmação; não reescreva histórico da `main`.
 - **Não** crie outro repositório.
 - **Não** reative a depuração das dependências no perfil `dev` nem crie binários de teste que

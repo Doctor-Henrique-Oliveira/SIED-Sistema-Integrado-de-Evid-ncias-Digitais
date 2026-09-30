@@ -25,10 +25,8 @@ export function destinoRegistro(casoId: CasoId, a: AchadoArtefato): { para: stri
   return { para: `/casos/${casoId}/extracoes/${a.extracao_id}`, acao: "abrir na extração →" };
 }
 
-function sentido(tipo: string, deMim: boolean | null): string {
-  if (deMim == null) return "";
-  if (tipo === "chamada") return deMim ? "Efetuada" : "Recebida";
-  return deMim ? "Enviada" : "Recebida";
+function sentido(deMim: boolean | null): string {
+  return deMim == null ? "" : deMim ? "Enviada" : "Recebida";
 }
 
 /** Chave do dia no fuso do caso (AAAA-MM-DD), para agrupar. */
@@ -40,7 +38,7 @@ function Item({ a, casoId, fuso, coordenadas }: { a: AchadoArtefato; casoId: Cas
   const reg = a.artefato;
   const { para, acao } = destinoRegistro(casoId, a);
   const quem = reg.remetente ?? (reg.destinatarios.join(", ") || null);
-  const texto = reg.conteudo ?? reg.nome_arquivo ?? (reg.subtipo ? rotuloSubtipo(reg.subtipo) : "—");
+  const texto = reg.conteudo ?? reg.nome_arquivo ?? (reg.subtipo && reg.subtipo !== reg.app ? rotuloSubtipo(reg.subtipo) : "—");
   return (
     <li>
       <Link to={para} className="group grid grid-cols-[4.5rem_minmax(0,1fr)] gap-3 px-4 py-2 transition-colors hover:bg-sup-2" data-teste="evento">
@@ -51,8 +49,11 @@ function Item({ a, casoId, fuso, coordenadas }: { a: AchadoArtefato; casoId: Cas
             <Selo tom={reg.tipo === "chamada" ? "ouro" : reg.tipo === "mensagem" ? "neutro" : "info"}>
               {nomeTipoArtefato[reg.tipo] ?? reg.tipo}
             </Selo>
-            {reg.subtipo && reg.subtipo !== "texto" && <span>{rotuloSubtipo(reg.subtipo)}</span>}
-            <span>{sentido(reg.tipo, reg.de_mim)}</span>
+            {reg.subtipo && reg.subtipo !== "texto" && reg.subtipo !== reg.app && rotuloSubtipo(reg.subtipo) !== texto && (
+              <span>{rotuloSubtipo(reg.subtipo)}</span>
+            )}
+            {/* Na chamada o subtipo (recebida, efetuada, perdida...) já diz o sentido. */}
+            {reg.tipo !== "chamada" && <span>{sentido(reg.de_mim)}</span>}
             {quem && <span className="truncate font-mono">{quem}</span>}
             {reg.estado_registro !== "ativo" && <Selo tom="atencao">{reg.estado_registro === "apagado" ? "Apagado" : reg.estado_registro}</Selo>}
             <span className="ml-auto text-ouro-claro opacity-0 transition-opacity group-hover:opacity-100">{acao}</span>

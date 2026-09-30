@@ -1,10 +1,13 @@
 # SIED — Documento de continuidade
 
 Estado em 30/09/2026: depois da auditoria, a `main` recebeu o saneamento dos documentos (PR #13) e o
-**design system global com a casca do workspace** (PR #14, merge `132a8d5`). A etapa seguinte,
-**agenda de contatos e registro de chamadas do Android**, está na branch
-`claude/contatos-chamadas-android-z7m48s` (PR em rascunho; checkpoint
-`docs/checkpoints/2026-09-30-contatos-chamadas-android.md`), aguardando aval para o merge.
+**design system global com a casca do workspace** (PR #14, merge `132a8d5`) e a **agenda de
+contatos e registro de chamadas do Android** (PR #15, merge `<MERGE15>`; checkpoint
+`docs/checkpoints/2026-09-30-contatos-chamadas-android.md`). Desde a regra de construção contínua
+do usuário (30/09, 17:27), cada fase vai para a `main` quando a CI Linux e Windows está verde. Em
+seguida vieram os **MMS do Android** e a **linha do tempo unificada** (Consultas e Localizações),
+na branch `claude/contatos-chamadas-android-z7m48s` reiniciada da `main` (checkpoints
+`2026-09-30-mms-android.md` e `2026-09-30-linha-do-tempo.md`).
 
 Estado em 29/09/2026: a fase 1 fecha o ciclo **importar → analisar → selecionar → relatar**. Na
 `main` estão a interface para volume real (PR #9, merge `24791ff`), as **evidências selecionadas
@@ -89,13 +92,16 @@ release, execução manual ou PR que muda o build (opção "Só tags", PR #4).
 | `claude/auditoria-hardening-7p20bx` (reiniciada da `main`) | — | #12 | só documentos: registra o commit final |
 | — | `951365e` | #13 | mesclado (`6f5d5c1`): saneamento dos documentos do handoff |
 | `claude/project-thread-dycfuw` | `24e44fe` | #14 | mesclado (`132a8d5`): design system global e casca do workspace |
-| `claude/contatos-chamadas-android-z7m48s` | — | rascunho | agenda e chamadas do Android; aguarda aval para o merge |
+| `claude/contatos-chamadas-android-z7m48s` | `c9762ec` | #15 | mesclado (`<MERGE15>`): agenda e chamadas do Android |
+| `claude/contatos-chamadas-android-z7m48s` (reiniciada da `main`) | — | novo PR | MMS do Android e linha do tempo unificada |
 
 As branches mescladas **não foram apagadas**. Podem ser removidas depois que a `main` for
 confirmada íntegra e com CI verde, com aval do usuário.
 
-Regras de trabalho: push e PR em rascunho da branch de trabalho são autorizados; **merge só com aval
-explícito** e CI completa verde (Linux e Windows).
+Regras de trabalho: push e PR em rascunho da branch de trabalho são autorizados. Desde 30/09/2026
+(17:27) vale a construção contínua pedida pelo usuário: cada fase concluída é mesclada na `main`
+com a CI completa verde (Linux e Windows) e sem conflito, e a CI da `main` é conferida depois.
+Branches não são apagadas.
 
 ## 3. Commits principais
 
@@ -195,7 +201,8 @@ explícito** e CI completa verde (Linux e Windows).
 - Dashboard do caso com cabeçalho do procedimento, atalhos, 8 indicadores reais, dispositivos,
   extrações, alertas e auditoria.
 - Conversas em três colunas; busca com resultados agrupados; Mídias, Arquivos e Contatos com dados
-  reais; Localizações e Consultas com a estrutura pronta e o aviso "ainda não disponível".
+  reais; Consultas com a linha do tempo do caso e Localizações com a lista cronológica dos
+  registros com coordenadas (mapa e consultas salvas ainda indisponíveis).
 
 **Volume real** (PR #9)
 - Miniaturas das imagens na galeria de Mídias, no detalhe do arquivo e nos anexos das conversas.
@@ -265,6 +272,17 @@ depois do PR #15)
   linha de `addr`/`part` como origem adicional. Data em segundos. MMS não baixado aparece como
   tal. Entra em conversas, busca, evidências e relatório como qualquer mensagem.
 
+**Linha do tempo unificada** (mesma branch, depois do MMS)
+- Todos os registros com data do caso (todas as extrações e apps) em ordem cronológica, pelo
+  índice `idx_artefato_tempo`; filtros de tipo, app, extração, período e coordenadas; ordem
+  crescente ou decrescente; paginação de 100.
+- Resumo por tipo e por app, primeiro e último registro, e contagem dos registros **sem data
+  utilizável** (ficam fora da lista, nunca com data inventada). O cabeçalho de conversa não entra.
+- Tela em Consultas (aba "Linha do tempo"; "Consultas salvas" continua indisponível), agrupada por
+  dia no fuso do caso; cada linha abre a conversa com o registro destacado, a chamada em Contatos
+  ou a extração. Localizações usa a mesma lista só com coordenadas (latitude e longitude como
+  lidas); o mapa offline continua indisponível. Sem migração.
+
 **Busca global** (migração 3)
 - FTS5 em registros e nomes de arquivo, sem diferenciar acentos e maiúsculas, com prefixo.
 - Texto digitado protegido contra sintaxe do FTS (cada palavra vira frase com prefixo).
@@ -276,9 +294,9 @@ depois do PR #15)
 
 | Conjunto | Quantidade | Resultado |
 |---|---|---|
-| Rust (`cargo test --workspace`, soma de todos os `test result`) | 222 + 3 medições ignoradas na branch de agenda e chamadas (201 após a auditoria; 172 com o PR #10) | todos passam |
+| Rust (`cargo test --workspace`, soma de todos os `test result`) | 232 + 3 medições ignoradas com MMS e linha do tempo (222 com o PR #15; 201 após a auditoria) | todos passam |
 | `cargo clippy -D warnings` e `cargo fmt --check` | — | limpos |
-| Interface (`vitest`) | 50 na branch de agenda e chamadas (43 após a auditoria; 41 com o PR #10) | todos passam |
+| Interface (`vitest`) | 54 com a linha do tempo (50 com o PR #15; 43 após a auditoria) | todos passam |
 | Build da interface (`npm run build`) e do app (`tauri build --debug --no-bundle`) | — | ok |
 | Typecheck TypeScript | — | limpo |
 | Tipos gerados (ts-rs) atualizados | — | conferido pela CI |
@@ -335,8 +353,9 @@ REAL infinito. Medições com volume em `tests/desempenho.rs` (ignoradas; ver o 
 - A lista de Arquivos (tabela) continua paginada de 100 em 100; a de Contatos também.
 - A taxa e o tempo restante aparecem só no inventário (etapa medida em bytes). Na leitura dos
   bancos, a barra avança por banco concluído; o tempo de cada parser não é estimado.
-- Localizações e Consultas só com estrutura; Configurações somente leitura; tema único
-  (escuro). O ícone do instalador continua o anterior.
+- Localizações só em lista (sem mapa offline); Consultas só com a linha do tempo (sem consultas
+  salvas); linha do tempo paginada de 100 e com período por dia inteiro; Configurações somente
+  leitura; tema único (escuro). O ícone do instalador continua o anterior.
 - A imagem de referência citada no pedido do redesign não chegou ao projeto; o redesign seguiu a
   especificação escrita.
 - Relatório: no máximo 60 figuras; a geração segura a trava do caso (outros comandos esperam); sem
@@ -487,15 +506,14 @@ Detalhes no `README.md`.
 (PR #10) estão descritos no §4 e nos checkpoints `2026-09-28-fase1-visual-volume.md` e
 `2026-09-29-fase1-evidencias-relatorio.md`. A auditoria pré-produção (PR #11) está em
 `2026-09-29-auditoria-hardening.md`; a passagem para outro agente, em `docs/HANDOFF-CODEX.md`.
-Nenhuma fase nova foi iniciada.
+Depois vieram, em construção contínua, a agenda e as chamadas (PR #15), os MMS e a linha do
+tempo unificada (checkpoints de 30/09/2026).
 
-A seguir:
-1. importador Avilla (quando a árvore chegar, §10);
-2. conferência do WhatsApp, da agenda e das chamadas com bancos de aparelho de teste;
-3. console de importação em tempo real (§14.1).
-
-A agenda e as chamadas do Android estão prontas na branch `claude/contatos-chamadas-android-z7m48s`
-(checkpoint `2026-09-30-contatos-chamadas-android.md`), aguardando o merge.
+A seguir (ordem da construção contínua):
+1. console de importação em tempo real (§14.1);
+2. importador IPED com fixtures sintéticas pelo formato público;
+3. importador Avilla (quando a árvore chegar, §10);
+4. conferência do WhatsApp, SMS/MMS, agenda e chamadas com bancos de aparelho de teste.
 
 ---
 
@@ -607,8 +625,8 @@ indicador de importação em curso com percentual real, selo "Local" e usuário 
 | Mídias | `/casos/:id/midias` | pronta com o inventário (filtro `midia`), grade virtualizada e miniaturas de imagens conferidas por SHA-256; vídeos e áudios ainda sem miniatura ou reprodução |
 | Arquivos | `/casos/:id/arquivos` | pronta: busca, tipo, extensão, caminho, tamanho, SHA-256, data, parser |
 | Contatos | `/casos/:id/contatos` | identificadores das conversas (`listar_identificadores`), sem deduzir identidade |
-| Localizações | `/casos/:id/localizacoes` | estrutura + contagem real de registros com coordenadas |
-| Consultas | `/casos/:id/consultas` | estrutura |
+| Localizações | `/casos/:id/localizacoes` | lista cronológica dos registros com coordenadas (linha do tempo filtrada); mapa offline indisponível |
+| Consultas | `/casos/:id/consultas` | aba "Linha do tempo" (todos os registros com data, filtros, resumo, sem data à parte); "Consultas salvas" indisponível |
 | Relatórios | `/casos/:id/relatorios` | lista de evidências (ordem, textos, origem, remoção), gerar PDF e relatórios gerados (PR #10) |
 | Configurações | `/configuracoes` | somente leitura (versão, usuário, estação, pastas) |
 
