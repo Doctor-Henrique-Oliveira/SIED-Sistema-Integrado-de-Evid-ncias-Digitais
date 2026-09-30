@@ -536,7 +536,7 @@ indicador de importação em curso com percentual real, selo "Local" e usuário 
 | Extrações | `/casos/:id/extracoes` e `/extracoes/:x` | pronto; a extração tem blocos técnicos (dispositivo, ferramenta, contagens, tempo, origem, integridade) e abas |
 | Conversas | `/casos/:id/conversas[/:c]` | pronto: lista (filtro, app, grupo, anexos), chat (separador fixo por dia, localizar na conversa, destaque da busca), contexto ou detalhes técnicos |
 | Busca | `/casos/:id/busca?q=` | pronta: campo grande, filtros de extração, app e período, resultados agrupados |
-| Mídias | `/casos/:id/midias` | pronta com o inventário (filtro `midia`); sem miniaturas |
+| Mídias | `/casos/:id/midias` | pronta com o inventário (filtro `midia`), grade virtualizada e miniaturas de imagens conferidas por SHA-256; vídeos e áudios ainda sem miniatura ou reprodução |
 | Arquivos | `/casos/:id/arquivos` | pronta: busca, tipo, extensão, caminho, tamanho, SHA-256, data, parser |
 | Contatos | `/casos/:id/contatos` | identificadores das conversas (`listar_identificadores`), sem deduzir identidade |
 | Localizações | `/casos/:id/localizacoes` | estrutura + contagem real de registros com coordenadas |

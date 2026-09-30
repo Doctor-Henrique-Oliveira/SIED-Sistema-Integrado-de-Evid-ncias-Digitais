@@ -8,6 +8,15 @@ Este documento respondeu aos 9 pontos pedidos antes da implementação. Cada dec
 
 Estes ajustes prevalecem sobre o texto original quando houver diferença.
 
+> **Nota de estado atual (30/09/2026):** as seções seguintes preservam a proposta original e o
+> histórico das decisões, mas não constituem um inventário do que está implementado. O estado
+> efetivo está em `docs/HANDOFF-CODEX.md` e no código. Em particular, a implementação usa
+> componentes próprios e `ts-rs` (não Radix UI/`tauri-specta`), entrega miniaturas conferidas como
+> `data:` (não pelo protocolo `sied://`), acompanha a importação por uma tarefa em memória sem
+> retomada automática e não possui hoje `sied-cli` nem as tabelas propostas `pessoa`, `derivado` e
+> `tarefa`. Nomes de contatos e conversas são resolvidos nas consultas a partir dos artefatos da
+> mesma extração.
+
 1. **Stack aprovada**: Tauri, React, TypeScript, Rust (núcleo e parsers), SQLite, FTS5, Typst.
    O sistema de importadores/parsers deve permitir, no futuro, parsers em Python, Java ou outras
    linguagens, sem introduzir essas dependências agora. Implementado como contrato: entrada e saída

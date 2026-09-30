@@ -102,6 +102,11 @@ Telas (extração sintética, teste ponta a ponta no app real):
 
 ## 3. Parser WhatsApp Android: plano
 
+> **Registro histórico:** esta seção descreve o planejamento anterior à implementação. O parser
+> foi posteriormente implementado sem uma tabela `pessoa`: contatos e conversas são artefatos, e
+> títulos e nomes são resolvidos nas consultas a partir dos registros da mesma extração. O estado
+> atual está em `docs/HANDOFF-CODEX.md` §§ 10–12.
+
 O parser lê o banco do aplicativo, então vale para Avilla, pasta genérica ou qualquer importador
 que encontre os arquivos. Os papéis serão:
 
@@ -130,7 +135,9 @@ aviso do parser (como no SMS), nunca registro inventado.
 
 - Mensagens (texto, mídia, localização, contato compartilhado, sistema), com `conversa_id_externo` =
   jid da conversa, remetente, `de_mim`, data original e formato, resposta e encaminhamento.
-- Grupos e participantes, e a tabela `pessoa` com os nomes vindos de `wa.db`.
+- Grupos e participantes. No planejamento original, os nomes de `wa.db` iriam para uma tabela
+  `pessoa`; a implementação final emite contatos como artefatos e resolve os nomes nas consultas,
+  sem criar essa tabela.
 - Mídia: caminho informado pelo app ligado ao arquivo do inventário, quando existir na extração.
 - Registros que só existem no `-wal` continuam sendo lidos (mesma técnica do SMS).
 
