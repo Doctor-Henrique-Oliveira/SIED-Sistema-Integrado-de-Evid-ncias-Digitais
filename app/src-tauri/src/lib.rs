@@ -114,6 +114,8 @@ pub fn executar() {
             comandos::apps_dos_contatos,
             comandos::listar_chamadas,
             comandos::resumo_chamadas,
+            comandos::linha_do_tempo,
+            comandos::resumo_linha_do_tempo,
             comandos::listar_evidencias,
             comandos::marcacoes_evidencias,
             comandos::adicionar_evidencia,

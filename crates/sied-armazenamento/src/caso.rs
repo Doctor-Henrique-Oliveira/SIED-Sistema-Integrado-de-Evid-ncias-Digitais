@@ -25,6 +25,7 @@ use crate::agenda::{
     self, Chamada, ContatoAgenda, FiltroChamadas, FiltroContatos, ResumoChamadas, TotalApp,
 };
 use crate::auditoria::{self, RegistroAuditoria, VerificacaoAuditoria};
+use crate::busca::AchadoArtefato;
 use crate::busca::{self, FiltroBusca, ResultadoBusca};
 use crate::conexao::{self, Abertura};
 use crate::conversas::{self, AppConversas, Conversa, FiltroConversas, PosicaoMensagem, Trecho};
@@ -34,6 +35,7 @@ use crate::extracoes::{
     Extracao, Pagina, TotalCategoria,
 };
 use crate::importacao::Importacao;
+use crate::linha_tempo::{self, FiltroLinhaTempo, ResumoLinhaTempo};
 use crate::migracoes::{self, BANCO_CASO};
 use crate::relatorios::{self, NovoRelatorio, RelatorioRegistrado};
 use crate::resumo::{self, Identificador, ResumoCaso};
@@ -510,6 +512,20 @@ impl BancoCaso {
 
     pub fn resumo_chamadas(&self) -> Resultado<ResumoChamadas> {
         agenda::resumo_chamadas(&self.conn)
+    }
+
+    /// Registros com data de todas as extrações, em ordem cronológica.
+    pub fn linha_do_tempo(
+        &self,
+        filtro: &FiltroLinhaTempo,
+        deslocamento: i64,
+        limite: i64,
+    ) -> Resultado<Pagina<AchadoArtefato>> {
+        linha_tempo::linha_do_tempo(&self.conn, filtro, deslocamento, limite)
+    }
+
+    pub fn resumo_linha_do_tempo(&self, filtro: &FiltroLinhaTempo) -> Resultado<ResumoLinhaTempo> {
+        linha_tempo::resumo_linha_do_tempo(&self.conn, filtro)
     }
 }
 

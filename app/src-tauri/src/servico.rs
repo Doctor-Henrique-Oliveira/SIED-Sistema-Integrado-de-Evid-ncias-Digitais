@@ -6,7 +6,7 @@ use sied_armazenamento::agenda::{
     Chamada, ContatoAgenda, FiltroChamadas, FiltroContatos, ResumoChamadas, TotalApp,
 };
 use sied_armazenamento::auditoria::{RegistroAuditoria, VerificacaoAuditoria};
-use sied_armazenamento::busca::{FiltroBusca, ResultadoBusca};
+use sied_armazenamento::busca::{AchadoArtefato, FiltroBusca, ResultadoBusca};
 use sied_armazenamento::caso::{nome_pasta_sugerido, NOME_ARQUIVO_CASO};
 use sied_armazenamento::conversas::{AppConversas, Conversa, FiltroConversas, PosicaoMensagem};
 use sied_armazenamento::evidencias::{Evidencia, Marcacoes, NovaEvidencia, TextosEvidencia};
@@ -14,6 +14,7 @@ use sied_armazenamento::extracoes::{
     ArquivoExtracao, ArtefatoDetalhe, ArtefatoResumo, ExecucaoParser, Extracao, Pagina,
     TotalCategoria,
 };
+use sied_armazenamento::linha_tempo::{FiltroLinhaTempo, ResumoLinhaTempo};
 use sied_armazenamento::relatorios::RelatorioRegistrado;
 use sied_armazenamento::resumo::{Identificador, ResumoCaso};
 use sied_armazenamento::{BancoCaso, CasoCatalogado, CatalogoGlobal, Sessao};
@@ -576,6 +577,26 @@ impl Servico {
 
     pub fn resumo_chamadas(&mut self) -> ResultadoApp<ResumoChamadas> {
         Ok(self.banco()?.resumo_chamadas()?)
+    }
+
+    // ------------------------------------------------------------ linha do tempo
+
+    pub fn linha_do_tempo(
+        &mut self,
+        filtro: &FiltroLinhaTempo,
+        deslocamento: i64,
+        limite: i64,
+    ) -> ResultadoApp<Pagina<AchadoArtefato>> {
+        Ok(self
+            .banco()?
+            .linha_do_tempo(filtro, deslocamento.max(0), limite.clamp(1, 500))?)
+    }
+
+    pub fn resumo_linha_do_tempo(
+        &mut self,
+        filtro: &FiltroLinhaTempo,
+    ) -> ResultadoApp<ResumoLinhaTempo> {
+        Ok(self.banco()?.resumo_linha_do_tempo(filtro)?)
     }
 
     // ------------------------------------------------------------ evidências

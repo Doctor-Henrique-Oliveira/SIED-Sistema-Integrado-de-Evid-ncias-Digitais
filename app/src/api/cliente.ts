@@ -50,12 +50,16 @@ import type { ContatoAgenda } from "./tipos/ContatoAgenda";
 import type { ContatoVinculado } from "./tipos/ContatoVinculado";
 import type { FiltroChamadas } from "./tipos/FiltroChamadas";
 import type { FiltroContatos } from "./tipos/FiltroContatos";
+import type { FiltroLinhaTempo } from "./tipos/FiltroLinhaTempo";
+import type { ResumoLinhaTempo } from "./tipos/ResumoLinhaTempo";
 import type { ResumoChamadas } from "./tipos/ResumoChamadas";
 import type { TelefoneContato } from "./tipos/TelefoneContato";
 import type { TotalApp } from "./tipos/TotalApp";
 
 export type {
   Chamada,
+  FiltroLinhaTempo,
+  ResumoLinhaTempo,
   ContatoAgenda,
   ContatoVinculado,
   FiltroChamadas,
@@ -213,6 +217,9 @@ export const api = {
   listarChamadas: (filtro: FiltroChamadas, deslocamento: number, limite: number) =>
     chamar<Pagina<Chamada>>("listar_chamadas", { filtro, deslocamento, limite }),
   resumoChamadas: () => chamar<ResumoChamadas>("resumo_chamadas"),
+  linhaDoTempo: (filtro: FiltroLinhaTempo, deslocamento: number, limite: number) =>
+    chamar<Pagina<AchadoArtefato>>("linha_do_tempo", { filtro, deslocamento, limite }),
+  resumoLinhaDoTempo: (filtro: FiltroLinhaTempo) => chamar<ResumoLinhaTempo>("resumo_linha_do_tempo", { filtro }),
 
   listarEvidencias: () => chamar<Evidencia[]>("listar_evidencias"),
   marcacoesEvidencias: () => chamar<Marcacoes>("marcacoes_evidencias"),

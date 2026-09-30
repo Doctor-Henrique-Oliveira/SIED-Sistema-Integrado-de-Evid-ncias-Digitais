@@ -1,69 +1,79 @@
-// Módulos com a estrutura pronta e a funcionalidade ainda por vir: Localizações e
-// Consultas. Nenhum dado fictício: só o que o banco do caso já tem.
+// Localizações (lista cronológica dos registros com coordenadas; o mapa offline ainda
+// não existe) e Consultas (linha do tempo do caso; consultas salvas ainda por vir).
+// Nenhum dado fictício: só o que o banco do caso já tem.
 // Configurações mostra, somente leitura, como esta estação está configurada.
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { Caso } from "../api/cliente";
-import { useInfoApp, useResumoCaso } from "../api/consultas";
-import { Cabecalho, Cartao, Carregando, Definicoes, Indicador, Indisponivel, Selo } from "../componentes/Estrutura";
-import { identificacaoCaso, numero } from "../util/formatar";
+import { useInfoApp } from "../api/consultas";
+import { Abas, Cabecalho, Cartao, Carregando, Definicoes, Indisponivel, Selo } from "../componentes/Estrutura";
+import { LinhaDoTempo } from "../componentes/LinhaTempo";
+import { identificacaoCaso } from "../util/formatar";
 import { ComCasoAberto } from "./PaginaCaso";
 
 export function PaginaLocalizacoes() {
   return <ComCasoAberto>{(caso) => <Localizacoes caso={caso} />}</ComCasoAberto>;
 }
 
+const SO_COORDENADAS = { com_coordenadas: true };
+
 function Localizacoes({ caso }: { caso: Caso }) {
-  const resumo = useResumoCaso(caso.id);
   return (
     <>
       <Cabecalho
         icone="localizacoes"
         sobre={identificacaoCaso(caso)}
         titulo="Localizações"
-        subtitulo="Pontos com coordenadas extraídos dos aparelhos, em ordem cronológica."
+        subtitulo="Registros com coordenadas extraídos dos aparelhos, em ordem cronológica, com latitude e longitude como lidas."
       />
       <div className="space-y-4">
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Indicador
-            rotulo="Registros com coordenadas"
-            icone="localizacoes"
-            valor={resumo.data ? numero(resumo.data.localizacoes) : null}
-            detalhe="gravados no banco do caso"
-          />
-        </div>
-        <Indisponivel
-          titulo="Linha do tempo de localizações"
-          icone="mapa"
-          previsto={[
-            "Lista cronológica com data e hora no fuso do caso",
-            "Latitude, longitude e precisão como lidas",
-            "App, arquivo, tabela e registro de origem",
-            "Mapa offline, sem serviço de mapas da internet",
-          ]}
-        >
-          O leitor do WhatsApp já extrai coordenadas válidas e as exibe nas conversas. Este módulo dedicado ainda não possui lista ou
-          mapa; quando forem implementados, cada ponto manterá a mesma origem técnica das mensagens e o mapa usará apenas dados locais.
+        <LinhaDoTempo casoId={caso.id} fuso={caso.fuso_horario} fixo={SO_COORDENADAS} coordenadas rotulo="Localizações" />
+        <Indisponivel titulo="Mapa offline" icone="mapa" previsto={["Pontos no mapa sem serviço de mapas da internet", "Mesma origem técnica de cada registro"]}>
+          O SIED não usa internet e ainda não tem mapas locais. Por isso as coordenadas aparecem só em lista; cada ponto abre o registro
+          de origem (conversa, arquivo, tabela e registro).
         </Indisponivel>
       </div>
     </>
   );
 }
 
+type AbaConsultas = "linha" | "salvas";
+
 export function PaginaConsultas() {
+  const [aba, setAba] = useState<AbaConsultas>("linha");
   return (
     <ComCasoAberto>
       {(caso) => (
         <>
-          <Cabecalho icone="consultas" sobre={identificacaoCaso(caso)} titulo="Consultas" />
-          <Indisponivel
-            titulo="Consultas do caso"
+          <Cabecalho
             icone="consultas"
-            previsto={["Consultas salvas sobre os dados do caso", "Histórico com data, analista e resultado", "Execução local, sem internet"]}
-          >
-            Espaço reservado para consultas sobre os dados do caso. O SIED não acessa serviços externos: tudo o que for consultado aqui
-            sairá do banco local do caso.
-          </Indisponivel>
+            sobre={identificacaoCaso(caso)}
+            titulo="Consultas"
+            subtitulo="Consultas locais sobre os dados do caso. Nada sai desta estação."
+          />
+          <div className="space-y-3">
+            <Abas<AbaConsultas>
+              rotulo="Consultas do caso"
+              atual={aba}
+              mudar={setAba}
+              abas={[
+                ["linha", "Linha do tempo"],
+                ["salvas", "Consultas salvas"],
+              ]}
+            />
+            {aba === "linha" ? (
+              <LinhaDoTempo casoId={caso.id} fuso={caso.fuso_horario} />
+            ) : (
+              <Indisponivel
+                titulo="Consultas salvas"
+                icone="consultas"
+                previsto={["Consultas salvas sobre os dados do caso", "Histórico com data, analista e resultado", "Execução local, sem internet"]}
+              >
+                Espaço reservado para guardar consultas e reexecutá-las. O SIED não acessa serviços externos: tudo o que for consultado
+                aqui sairá do banco local do caso.
+              </Indisponivel>
+            )}
+          </div>
         </>
       )}
     </ComCasoAberto>

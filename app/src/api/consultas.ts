@@ -12,6 +12,7 @@ import {
   type FiltroChamadas,
   type FiltroContatos,
   type FiltroConversas,
+  type FiltroLinhaTempo,
   type NovoCaso,
   type NovoDispositivo,
   type NovaEvidencia,
@@ -323,6 +324,23 @@ export function useChamadas(casoId: CasoId, filtro: FiltroChamadas, deslocamento
 
 export function useResumoChamadas(casoId: CasoId) {
   return useQuery({ queryKey: [...chaves.conversas(casoId), "chamadas-resumo"], queryFn: api.resumoChamadas });
+}
+
+/** Linha do tempo: registros com data de todas as extrações, em ordem cronológica. */
+export function useLinhaDoTempo(casoId: CasoId, filtro: FiltroLinhaTempo, deslocamento: number, limite: number) {
+  return useQuery({
+    queryKey: [...chaves.conversas(casoId), "linha-do-tempo", filtro, deslocamento, limite],
+    queryFn: () => api.linhaDoTempo(filtro, deslocamento, limite),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useResumoLinhaDoTempo(casoId: CasoId, filtro: FiltroLinhaTempo) {
+  return useQuery({
+    queryKey: [...chaves.conversas(casoId), "linha-do-tempo-resumo", filtro],
+    queryFn: () => api.resumoLinhaDoTempo(filtro),
+    placeholderData: keepPreviousData,
+  });
 }
 
 // ---------- Evidências e relatórios ----------

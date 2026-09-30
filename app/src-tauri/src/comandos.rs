@@ -12,13 +12,14 @@ use sied_armazenamento::agenda::{
     Chamada, ContatoAgenda, FiltroChamadas, FiltroContatos, ResumoChamadas, TotalApp,
 };
 use sied_armazenamento::auditoria::{RegistroAuditoria, VerificacaoAuditoria};
-use sied_armazenamento::busca::{FiltroBusca, ResultadoBusca};
+use sied_armazenamento::busca::{AchadoArtefato, FiltroBusca, ResultadoBusca};
 use sied_armazenamento::conversas::{AppConversas, Conversa, FiltroConversas, PosicaoMensagem};
 use sied_armazenamento::evidencias::{Evidencia, Marcacoes, NovaEvidencia, TextosEvidencia};
 use sied_armazenamento::extracoes::{
     ArquivoExtracao, ArtefatoDetalhe, ArtefatoResumo, ExecucaoParser, Extracao, Pagina,
     TotalCategoria,
 };
+use sied_armazenamento::linha_tempo::{FiltroLinhaTempo, ResumoLinhaTempo};
 use sied_armazenamento::relatorios::RelatorioRegistrado;
 use sied_armazenamento::resumo::{Identificador, ResumoCaso};
 use sied_armazenamento::CasoCatalogado;
@@ -455,6 +456,30 @@ pub async fn listar_chamadas(
 pub async fn resumo_chamadas(app_handle: AppHandle) -> ResultadoApp<ResumoChamadas> {
     em_segundo_plano(app_handle, move |estado| {
         estado.com(|s| s.resumo_chamadas())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn linha_do_tempo(
+    app_handle: AppHandle,
+    filtro: FiltroLinhaTempo,
+    deslocamento: i64,
+    limite: i64,
+) -> ResultadoApp<Pagina<AchadoArtefato>> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.linha_do_tempo(&filtro, deslocamento, limite))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn resumo_linha_do_tempo(
+    app_handle: AppHandle,
+    filtro: FiltroLinhaTempo,
+) -> ResultadoApp<ResumoLinhaTempo> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.resumo_linha_do_tempo(&filtro))
     })
     .await
 }
