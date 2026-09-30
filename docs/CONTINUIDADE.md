@@ -256,6 +256,15 @@ explícito** e CI completa verde (Linux e Windows).
   conta) e contato (telefones com tipo e rótulo, e-mails, conta, empresa).
 - Sem migração nova (índices existentes bastam).
 
+**MMS do Android** (branch `claude/contatos-chamadas-android-z7m48s`, reiniciada da `main`
+depois do PR #15)
+- Parser `android_mms` (tabelas `pdu`, `addr` e `part` do `mmssms.db`): uma mensagem por MMS,
+  na mesma conversa dos SMS (`thread_id`), com remetente e destinatários (o próprio aparelho,
+  `insert-address-token`, nunca vira telefone), texto das partes, assunto, primeira mídia como
+  anexo ligado ao arquivo de `app_parts` no inventário, todas as partes nos metadados e cada
+  linha de `addr`/`part` como origem adicional. Data em segundos. MMS não baixado aparece como
+  tal. Entra em conversas, busca, evidências e relatório como qualquer mensagem.
+
 **Busca global** (migração 3)
 - FTS5 em registros e nomes de arquivo, sem diferenciar acentos e maiúsculas, com prefixo.
 - Texto digitado protegido contra sintaxe do FTS (cada palavra vira frase com prefixo).
@@ -301,11 +310,12 @@ REAL infinito. Medições com volume em `tests/desempenho.rs` (ignoradas; ver o 
 
 - **Avilla sem importador**: falta a árvore de uma extração real (ver §10).
 - **Contêineres** (`.tar`, `.zip`, `.ab`) são inventariados com hash, mas não abertos.
-- São interpretados **SMS** (sem MMS), **WhatsApp Android** e, na branch da etapa de 30/09,
-  **agenda e registro de chamadas do Android**. Estes dois foram conferidos só com fixtures
-  sintéticas montadas pela documentação pública (`ContactsContract`, `CallLog.Calls`), não com
-  um banco de aparelho de teste. Fotos dos contatos, `deleted_contacts`, chamadas de apps
-  (WhatsApp etc.) e MMS não são lidos. Contatos repetidos em contas diferentes não são juntados.
+- São interpretados **SMS e MMS**, **WhatsApp Android**, **agenda** e **registro de chamadas**
+  do Android. MMS, agenda e chamadas foram conferidos só com fixtures sintéticas montadas pela
+  documentação pública (`Telephony.Mms`, `ContactsContract`, `CallLog.Calls`), não com um banco
+  de aparelho de teste. Fotos dos contatos, `deleted_contacts`, chamadas de apps (WhatsApp etc.)
+  e RCS não são lidos. Contatos repetidos em contas diferentes não são juntados. No MMS, só a
+  primeira mídia vira anexo; as demais ficam listadas nas partes da mensagem.
 - WhatsApp:
   - conferido só com bancos sintéticos, com nomes da referência pública do app;
   - `.crypt*` não decifrados;

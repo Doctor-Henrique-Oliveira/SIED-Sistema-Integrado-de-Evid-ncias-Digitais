@@ -193,7 +193,12 @@ fn importa_inventaria_e_rastreia_ate_a_origem() {
 
     // Execução do parser.
     let ex = banco.execucoes(x.id).unwrap();
-    assert_eq!(ex.len(), 1);
+    // O mmssms.db vai também ao leitor de MMS; sem tabela pdu, nada a ler e sem aviso.
+    assert_eq!(ex.len(), 2);
+    assert_eq!(ex[1].parser, "android_mms");
+    assert_eq!(ex[1].status, "ok");
+    assert_eq!(ex[1].artefatos, Some(0));
+    assert_eq!(ex[1].avisos, Some(0));
     assert_eq!(ex[0].parser, "android_sms");
     assert_eq!(ex[0].status, "parcial");
     assert_eq!(
@@ -572,7 +577,7 @@ fn resumo_do_caso_e_identificadores_contam_o_que_foi_gravado() {
     );
     assert_eq!(r.conversas, banco.conversas(None, 0, 1).unwrap().total);
     assert_eq!(r.identificadores, 2);
-    assert_eq!(r.execucoes_parser, 1);
+    assert_eq!(r.execucoes_parser, 2); // SMS e MMS do mesmo mmssms.db
     assert_eq!(r.execucoes_com_problema, 0);
     assert_eq!(r.localizacoes, 0);
 

@@ -270,6 +270,7 @@ fn nome_subtipo(s: &str) -> &str {
         "rejeitada" => "Rejeitada",
         "bloqueada" => "Bloqueada",
         "atendida_em_outro_aparelho" => "Atendida em outro aparelho",
+        "mms_nao_baixado" => "MMS não baixado",
         outro => outro,
     }
 }

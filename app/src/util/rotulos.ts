@@ -110,6 +110,7 @@ export const nomeSubtipo: Record<string, string> = {
   rejeitada: "Rejeitada",
   bloqueada: "Bloqueada",
   atendida_em_outro_aparelho: "Atendida em outro aparelho",
+  mms_nao_baixado: "MMS não baixado",
 };
 
 export function rotuloSubtipo(s: string): string {

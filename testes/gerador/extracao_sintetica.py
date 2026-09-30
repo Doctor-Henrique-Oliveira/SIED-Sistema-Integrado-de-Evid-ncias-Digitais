@@ -10,9 +10,10 @@ sintéticas de testes/fixtures/whatsapp (msgstore.db no esquema novo e wa.db), m
 citadas pelas mensagens e um backup .crypt14 inventado. Sem a opção, a saída é a
 mesma de sempre (é a que o teste E2E usa).
 
-Com --android, acrescenta a agenda (contacts2.db) e o registro de chamadas
-(calllog.db) do Android, montados a partir das fixtures sintéticas de
-testes/fixtures/android (esquemas públicos do AOSP; números e nomes inventados).
+Com --android, acrescenta a agenda (contacts2.db), o registro de chamadas
+(calllog.db) e MMS no mmssms.db (tabelas pdu/addr/part, com os arquivos das partes
+em app_parts), montados a partir das fixtures sintéticas de testes/fixtures/android
+(esquemas públicos do AOSP; números, nomes e arquivos inventados).
 
 Com --volume, acrescenta volume para testar as telas com dados em quantidade: uma
 conversa SMS com milhares de mensagens, centenas de conversas curtas e centenas de
@@ -170,6 +171,9 @@ def gerar(destino: str, whatsapp: bool = False, volume: bool = False, android: b
                    "VALUES (?, ?, ?, ?, ?, ?, 1, 1)")
         for (i, t, a, m, tipo, corpo) in MENSAGENS:
             conn.execute(inserir, (i, t, a, BASE_MS + m * MINUTO, tipo, corpo))
+        if android:
+            with open(os.path.join(FIXTURES_ANDROID, "mms.sql"), encoding="utf-8") as f:
+                conn.executescript(f.read())
         if volume:
             conn.execute("BEGIN")
             for (i, t, a, m, tipo, corpo) in mensagens_volume():
@@ -188,6 +192,12 @@ def gerar(destino: str, whatsapp: bool = False, volume: bool = False, android: b
         gerar_whatsapp(destino)
     if android:
         gerar_android(destino)
+        partes = os.path.join(destino, "dados", "com.android.providers.telephony", "app_parts")
+        # Foto e áudio citados pelos MMS; a segunda imagem do MMS 3 fica de fora.
+        os.makedirs(partes, exist_ok=True)
+        with open(os.path.join(partes, "PART_1767232800000_IMG_0002.png"), "wb") as f:
+            f.write(png(96, 72, 7))
+        arquivo(os.path.join(partes, "PART_1767240000000_audio_sintetico.amr"), b"#!AMR\n", 32)
     if volume:
         gerar_imagens(destino)
     print(destino)

@@ -14,13 +14,18 @@
 //! registro de chamadas. Até o Android 6 as chamadas ficavam no próprio `contacts2.db`:
 //! sem `calllog.db` na mesma pasta, o `contacts2.db` também vai para o leitor de
 //! chamadas (que avisa, sem falhar, se a tabela não estiver lá).
+//!
+//! SMS e MMS: o `mmssms.db` vai para o leitor de SMS (tabela `sms`) e para o de MMS
+//! (tabelas `pdu`, `addr`, `part`).
 
 use crate::fonte::CaminhoFonte;
 use crate::fonte::FonteSomenteLeitura;
 use crate::importador::{
     ArquivoParaParser, Deteccao, Importador, PlanoImportacao, Suporte, TarefaParser,
 };
-use crate::parsers::{android_chamadas, android_contatos, android_sms, whatsapp_android};
+use crate::parsers::{
+    android_chamadas, android_contatos, android_mms, android_sms, whatsapp_android,
+};
 use crate::{InfoComponente, Resultado};
 
 pub const ID: &str = "generico";
@@ -95,6 +100,19 @@ impl Importador for ImportadorGenerico {
                         caminho: c.clone(),
                     }],
                 });
+                if n == "mmssms.db" {
+                    plano.observacoes.push(format!(
+                        "{c} → parser {} (MMS do mesmo banco)",
+                        android_mms::ID
+                    ));
+                    plano.tarefas.push(TarefaParser {
+                        parser_id: android_mms::ID.into(),
+                        arquivos: vec![ArquivoParaParser {
+                            papel: android_mms::PAPEL.into(),
+                            caminho: c.clone(),
+                        }],
+                    });
+                }
                 if n == "contacts2.db"
                     && !arquivos
                         .iter()
@@ -240,6 +258,7 @@ mod testes {
                     "android_contatos".into(),
                     vec![par("contacts2", "g/contacts2.db")]
                 ),
+                ("android_mms".into(), vec![par("mmssms", "e/mmssms.db")]),
                 ("android_sms".into(), vec![par("mmssms", "e/mmssms.db")]),
                 (
                     "whatsapp_android".into(),

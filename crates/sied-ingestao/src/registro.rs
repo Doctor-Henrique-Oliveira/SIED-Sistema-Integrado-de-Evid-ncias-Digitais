@@ -7,6 +7,7 @@ use crate::importadores::generico::ImportadorGenerico;
 use crate::parser::Parser;
 use crate::parsers::android_chamadas::ParserChamadasAndroid;
 use crate::parsers::android_contatos::ParserContatosAndroid;
+use crate::parsers::android_mms::ParserMmsAndroid;
 use crate::parsers::android_sms::ParserSmsAndroid;
 use crate::parsers::whatsapp_android::ParserWhatsAppAndroid;
 use crate::Resultado;
@@ -27,6 +28,7 @@ impl Registro {
         r.adicionar_parser(Box::new(ParserWhatsAppAndroid));
         r.adicionar_parser(Box::new(ParserContatosAndroid));
         r.adicionar_parser(Box::new(ParserChamadasAndroid));
+        r.adicionar_parser(Box::new(ParserMmsAndroid));
         r
     }
 

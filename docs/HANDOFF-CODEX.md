@@ -113,14 +113,14 @@ crates/
     src/resumo.rs           painel do caso e identificadores (com vínculo à agenda)
     src/agenda.rs           contatos, chamadas, resumo das chamadas e vínculo pela agenda
     tests/                  persistencia, importacao, whatsapp, volume, evidencias,
-                            hash_registro, agenda_chamadas, desempenho (ignorado)
+                            hash_registro, agenda_chamadas, mms, desempenho (ignorado)
   sied-ingestao/
     src/fonte.rs            CaminhoFonte (endereço seguro), FonteSomenteLeitura
     src/fonte/pasta.rs      PastaSomenteLeitura (não segue links, confere cada parte)
     src/importador.rs       contrato Importador
     src/importadores/       generico.rs (pasta), avilla.rs (só contrato)
     src/parser.rs           contrato Parser e SaidaParser
-    src/parsers/            android_sms.rs, android_contatos.rs, android_chamadas.rs,
+    src/parsers/            android_sms.rs, android_mms.rs, android_contatos.rs, android_chamadas.rs,
                             whatsapp_android/, comum.rs (auxiliares), sqlite.rs (leitura segura)
     src/pipeline.rs         inventário, manifesto, cópias verificadas, execução dos parsers
     src/registro.rs         Registro::padrao() (importadores e parsers conhecidos)
@@ -245,7 +245,7 @@ transforma nome perigoso da listagem em **item ignorado com aviso** (a importaç
 
 | Id | Arquivo | Situação |
 |---|---|---|
-| `generico` | `importadores/generico.rs` | Pasta qualquer. Reconhece `mmssms.db` (SMS), `msgstore.db` + `wa.db` do WhatsApp (pareados pela pasta; `com.whatsapp` e `com.whatsapp.w4b`), `contacts2.db` (agenda; sem `calllog.db` na mesma pasta, também vai ao leitor de chamadas) e `calllog.db` (chamadas); `.crypt*` só inventariados |
+| `generico` | `importadores/generico.rs` | Pasta qualquer. Reconhece `mmssms.db` (SMS e MMS), `msgstore.db` + `wa.db` do WhatsApp (pareados pela pasta; `com.whatsapp` e `com.whatsapp.w4b`), `contacts2.db` (agenda; sem `calllog.db` na mesma pasta, também vai ao leitor de chamadas) e `calllog.db` (chamadas); `.crypt*` só inventariados |
 | `avilla` | `importadores/avilla.rs` | **Só contrato.** `detectar` → `NaoImplementado`; `planejar` → erro `NaoImplementado` |
 
 Pipeline (`pipeline.rs`), nesta ordem, igual para toda ferramenta:
@@ -262,7 +262,8 @@ Artefato: `normalizar()` (−0.0 → 0.0; `app` vazio → ausente) e depois `has
 
 | Id | Papéis | Versão | O que lê |
 |---|---|---|---|
-| `android_sms` | `mmssms` | 1.0.0 | tabela `sms` de `mmssms.db`, inclusive registros só no `-wal` (sem MMS) |
+| `android_sms` | `mmssms` | 1.0.0 | tabela `sms` de `mmssms.db`, inclusive registros só no `-wal` |
+| `android_mms` | `mmssms` | 1.0.0 | tabelas `pdu`, `addr`, `part` do mesmo `mmssms.db`; §10.2 |
 | `whatsapp_android` | `msgstore`, `wa` | 1.0.0 | §11 |
 | `android_contatos` | `contacts2` | 1.0.0 | agenda (`raw_contacts`, `data`, `mimetypes`, `accounts`, `contacts`); §10.1 |
 | `android_chamadas` | `chamadas` | 1.0.0 | tabela `calls` de `calllog.db` (ou de `contacts2.db` antigo); §10.1 |
@@ -288,6 +289,19 @@ Fora disso ficam só no valor original. Regra geral: **"não sei" é melhor que 
   chamada, `data4` do telefone). Calculado na consulta; nada é gravado. Vale para chamadas e para
   identificadores das conversas que são telefone.
 - Conferidos só com fixtures sintéticas (`testes/fixtures/android`), pela documentação pública.
+
+### 10.2 MMS (Android)
+
+- Um artefato `mensagem` (app `sms`) por linha de `pdu`, na **mesma conversa** (`thread_id`)
+  dos SMS. `date` em **segundos** (`FormatoData::UnixSegundos`).
+- `addr`: 137 de, 151 para, 130 cópia, 129 cópia oculta; `insert-address-token` (o próprio
+  aparelho) nunca vira telefone. `part`: texto das partes `text/plain` na ordem de `seq` (sem
+  texto, o assunto); a primeira mídia vira o anexo (`_data` em `app_parts`, ligado ao inventário
+  pelo final do caminho); todas as partes em `metadados.partes`, e a contagem das mídias além da
+  primeira em `outras_midias`. Cada linha de `addr` e `part` é origem adicional.
+- `m_type` 130 (notificação de MMS não baixado) → subtipo `mms_nao_baixado`. Partes/endereços
+  sem `pdu` correspondente geram aviso. Banco sem `pdu`: nada a ler, sem aviso.
+- O importador genérico entrega todo `mmssms.db` aos dois leitores (SMS e MMS).
 
 ## 11. WhatsApp (Android)
 
@@ -448,9 +462,10 @@ Testes de UI com virtualização: jsdom precisa de `offsetHeight`, `offsetWidth`
 
 Funcionais:
 - Avilla sem importador (§26). Contêineres (`.tar`, `.zip`, `.ab`) só inventariados.
-- Só SMS (sem MMS), WhatsApp Android e (na branch de 30/09) agenda e chamadas do Android. Sem
-  fotos de contato, `deleted_contacts`, chamadas de apps nem junção de contatos repetidos.
-- WhatsApp, agenda e chamadas conferidos só com bancos sintéticos (§10.1, §11).
+- Interpretados: SMS e MMS, WhatsApp Android, agenda e chamadas do Android. Sem fotos de
+  contato, `deleted_contacts`, chamadas de apps nem junção de contatos repetidos. MMS: só a
+  primeira mídia vira anexo (as demais ficam listadas nas partes); RCS não é lido.
+- WhatsApp, MMS, agenda e chamadas conferidos só com bancos sintéticos (§10.1, §10.2, §11).
 - Hash numa única thread; sem retomada de importação interrompida; sem exclusão de extração
   (de propósito); sem verificação do "hash declarado" do laudo de aquisição.
 - Miniaturas: sem HEIC, vídeo e áudio. Mídias e Arquivos mostram uma extração por vez; listas de

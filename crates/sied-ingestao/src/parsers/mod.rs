@@ -2,6 +2,7 @@
 
 pub mod android_chamadas;
 pub mod android_contatos;
+pub mod android_mms;
 pub mod android_sms;
 pub(crate) mod comum;
 mod sqlite;
