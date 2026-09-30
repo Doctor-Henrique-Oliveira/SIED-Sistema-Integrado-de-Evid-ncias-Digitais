@@ -10,7 +10,8 @@ o **console de importação em tempo real** (§14.1) e o **importador IPED** (li
 no PR #16 (merge `b6da666`; checkpoints `2026-09-30-mms-android.md`,
 `2026-09-30-linha-do-tempo.md`, `2026-09-30-console-importacao.md` e
 `2026-09-30-importador-iped.md`). Depois, o **importador ADB**: leitura de backup `.ab` e de `.tar`
-sem extrair para o disco (checkpoint `2026-09-30-importador-adb.md`).
+sem extrair para o disco (PR #17, checkpoint `2026-09-30-importador-adb.md`), e o **importador
+ALEAPP/iLEAPP** (exportações TSV do relatório; checkpoint `2026-09-30-importador-leapp.md`).
 
 Estado em 29/09/2026: a fase 1 fecha o ciclo **importar → analisar → selecionar → relatar**. Na
 `main` estão a interface para volume real (PR #9, merge `24791ff`), as **evidências selecionadas
@@ -97,7 +98,8 @@ release, execução manual ou PR que muda o build (opção "Só tags", PR #4).
 | `claude/project-thread-dycfuw` | `24e44fe` | #14 | mesclado (`132a8d5`): design system global e casca do workspace |
 | `claude/contatos-chamadas-android-z7m48s` | `c9762ec` | #15 | mesclado (`9dd1947`): agenda e chamadas do Android |
 | `claude/contatos-chamadas-android-z7m48s` (reiniciada da `main`) | `0c19bca` | #16 | mesclado (`b6da666`): MMS do Android, linha do tempo unificada, console de importação e importador IPED |
-| `claude/contatos-chamadas-android-z7m48s` (reiniciada da `main`) | — | novo PR | importador ADB (backup `.ab` e `.tar`) |
+| `claude/contatos-chamadas-android-z7m48s` (reiniciada da `main`) | `6dfadb6` | #17 | mesclado (`bcdcd0c`): importador ADB (backup `.ab` e `.tar`) |
+| `claude/contatos-chamadas-android-z7m48s` (reiniciada da `main`) | — | novo PR | importador ALEAPP/iLEAPP |
 
 As branches mescladas **não foram apagadas**. Podem ser removidas depois que a `main` for
 confirmada íntegra e com CI verde, com aval do usuário.
@@ -312,6 +314,16 @@ depois do PR #15)
   os mesmos leitores da pasta genérica. Backup cifrado (`AES-256`) é inventariado com hash, mas
   não aberto. A pasta genérica também passa a abrir `.tar` e `.ab`. Sem migração.
 
+**Importador ALEAPP/iLEAPP** (mesma branch; formato conferido no código-fonte público dos dois)
+- Reconhece a pasta do relatório pelo `_lava_data.lava` (nome e versão da ferramenta), `_HTML`,
+  `_lava_artifacts.db`, `_Timeline` e a pasta `_TSV Exports`.
+- Um parser por ferramenta (`aleapp_tsv`, `ileapp_tsv`, `xleapp_tsv`): cada linha de cada
+  `_TSV Exports/<artefato>.tsv` vira um registro "outro" com o nome do artefato, um resumo
+  "coluna: valor" (busca e listas), a linha inteira em `valores_brutos`, a data (primeira
+  coluna, ou a primeira com "date"/"time" no nome) convertida só com fuso explícito, e
+  latitude/longitude pelas colunas `Latitude`/`Longitude`. O banco LAVA, o HTML e as cópias da
+  evidência em `data/` e `media/` entram só no inventário. Sem migração.
+
 **Busca global** (migração 3)
 - FTS5 em registros e nomes de arquivo, sem diferenciar acentos e maiúsculas, com prefixo.
 - Texto digitado protegido contra sintaxe do FTS (cada palavra vira frase com prefixo).
@@ -323,7 +335,7 @@ depois do PR #15)
 
 | Conjunto | Quantidade | Resultado |
 |---|---|---|
-| Rust (`cargo test --workspace`, soma de todos os `test result`) | 257 + 3 medições ignoradas com o importador ADB (248 com o PR #16; 222 com o PR #15; 201 após a auditoria) | todos passam |
+| Rust (`cargo test --workspace`, soma de todos os `test result`) | 265 + 3 medições ignoradas com o importador ALEAPP/iLEAPP (257 com o ADB; 248 com o PR #16; 222 com o PR #15; 201 após a auditoria) | todos passam |
 | `cargo clippy -D warnings` e `cargo fmt --check` | — | limpos |
 | Interface (`vitest`) | 56 com a linha do tempo e o console (50 com o PR #15; 43 após a auditoria) | todos passam |
 | Build da interface (`npm run build`) e do app (`tauri build --debug --no-bundle`) | — | ok |
@@ -360,6 +372,9 @@ REAL infinito. Medições com volume em `tests/desempenho.rs` (ignoradas; ver o 
   inventariados com hash. Backup `.ab` cifrado não é aberto (exige a senha). Ler itens fora de
   ordem num contêiner grande comprimido é lento (a leitura recomeça do início).
 - **ADB**: conferido só com backup sintético; `apps/<pacote>/f/` e `sp/` só inventariados.
+- **ALEAPP/iLEAPP**: só as exportações TSV (relatório gerado sem TSV não tem registros); cada
+  linha fica como "outro registro", sem virar mensagem, contato ou chamada do SIED; datas sem
+  fuso ficam só no original. Conferido só com relatórios sintéticos.
 - **IPED**: só a lista de itens exportada em CSV é lida (o índice Lucene e os bancos internos
   não); conferido só com um caso sintético montado pelo código-fonte público. Fuso ambíguo
   (ex.: `CET`) fica só no valor original, com aviso.
@@ -542,15 +557,15 @@ Detalhes no `README.md`.
 `2026-09-29-fase1-evidencias-relatorio.md`. A auditoria pré-produção (PR #11) está em
 `2026-09-29-auditoria-hardening.md`; a passagem para outro agente, em `docs/HANDOFF-CODEX.md`.
 Depois vieram, em construção contínua, a agenda e as chamadas (PR #15), os MMS, a linha do
-tempo unificada, o console de importação, o importador IPED (PR #16) e o importador ADB
-(checkpoints de 30/09/2026).
+tempo unificada, o console de importação, o importador IPED (PR #16), o importador ADB (PR #17) e o importador
+ALEAPP/iLEAPP (checkpoints de 30/09/2026).
 
 A seguir (ordem da construção contínua):
 1. importador Avilla (quando a árvore chegar, §10);
-2. importadores ALEAPP e iLEAPP pelo formato público dos relatórios;
-3. conferência do WhatsApp, SMS/MMS, agenda, chamadas, da lista do IPED e do backup ADB com dados de teste
+2. conferência do WhatsApp, SMS/MMS, agenda, chamadas, da lista do IPED, do backup ADB e dos
+   relatórios ALEAPP/iLEAPP com dados de teste
    (não de investigação);
-4. itens de dívida técnica medidos (HANDOFF §25).
+3. itens de dívida técnica medidos (HANDOFF §25).
 
 ---
 

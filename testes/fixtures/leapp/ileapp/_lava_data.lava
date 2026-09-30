@@ -1,0 +1,23 @@
+{
+    "lava_schema_version": "SINTETICO",
+    "parser_info": {
+        "leapp_name": "iLEAPP",
+        "leapp_version": "2026.3.1",
+        "leapp_mode": "CLI",
+        "package": "Source code",
+        "OS": "SINTETICO",
+        "start_timestamp": 1767358800
+    },
+    "param_input": "/sintetico/backup-itunes-SINTETICO",
+    "param_output": "/sintetico/saida",
+    "param_type": "itunes",
+    "param_profile": null,
+    "profile_used": false,
+    "processing_status": "Complete",
+    "lava_db_name": "_lava_artifacts.db",
+    "modules": [],
+    "artifacts": {},
+    "meta": {
+        "modules": []
+    }
+}

@@ -1,0 +1,5 @@
+﻿Date	Date Sent	Type	Address	Body	MSG ID	Thread ID	Contact ID	Read	Service Center	Error Code
+2026-01-02 13:00:00+00:00	2026-01-02 12:59:58+00:00	Received	+5561900000001	Mensagem sintética 1	1	1		1		0
+2026-01-02 13:05:00.250000+00:00		Sent	+5561900000001	"Com	tab, ""aspas"" e
+duas linhas"	2	1		1		0
+2026-01-03 09:30:00-03:00		Received	+5561900000002	Mensagem sintética 3	3	2		0		0
