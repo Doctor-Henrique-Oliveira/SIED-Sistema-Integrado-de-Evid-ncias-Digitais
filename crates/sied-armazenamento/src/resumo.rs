@@ -9,6 +9,7 @@ use rusqlite::{params, Connection};
 use serde::Serialize;
 use ts_rs::TS;
 
+use crate::agenda::{agenda_de_identificadores, ContatoVinculado};
 use crate::extracoes::{Pagina, TotalCategoria};
 use crate::Resultado;
 
@@ -129,6 +130,9 @@ pub struct Identificador {
     /// extrações diferentes tiverem nomes diferentes, vale o primeiro em ordem
     /// alfabética; todos continuam nos registros).
     pub nome: Option<String>,
+    /// Contatos da agenda do Android com exatamente o mesmo número, nas extrações em
+    /// que o identificador aparece (só identificadores que são telefone).
+    pub agenda: Vec<ContatoVinculado>,
 }
 
 /// Identificadores das conversas, dos com mais mensagens para os com menos.
@@ -162,7 +166,7 @@ pub fn identificadores(
          ORDER BY SUM(x.mensagens) DESC, x.identificador
          LIMIT ?2 OFFSET ?3"
     ))?;
-    let itens = stmt
+    let mut itens: Vec<Identificador> = stmt
         .query_map(params![texto, limite, deslocamento], |r| {
             Ok(Identificador {
                 identificador: r.get(0)?,
@@ -172,8 +176,19 @@ pub fn identificadores(
                 primeira_ms: r.get(4)?,
                 ultima_ms: r.get(5)?,
                 nome: r.get(6)?,
+                agenda: Vec::new(),
             })
         })?
         .collect::<Result<_, _>>()?;
+    let pares: Vec<(String, String)> = itens
+        .iter()
+        .map(|i| (i.app.clone(), i.identificador.clone()))
+        .collect();
+    for (i, agenda) in itens
+        .iter_mut()
+        .zip(agenda_de_identificadores(conn, &pares)?)
+    {
+        i.agenda = agenda;
+    }
     Ok(Pagina { total, itens })
 }

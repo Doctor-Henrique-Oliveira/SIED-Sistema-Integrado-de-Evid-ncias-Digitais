@@ -9,6 +9,10 @@ import type { ReferenciaOrigemDetalhe } from "./ReferenciaOrigemDetalhe";
  */
 export type ArtefatoDetalhe = { resumo: ArtefatoResumo, data_hora_original: string | null, formato_data: string | null, id_externo: string | null, 
 /**
+ * Conta do registro no app ou no aparelho (ex.: conta que sincroniza o contato).
+ */
+conta: string | null, 
+/**
  * Caminho do anexo como o app gravou.
  */
 anexo_caminho: string | null, anexo_arquivo: AnexoInventario | null, confianca: string, metadados: Record<string, unknown>, hash_registro: string, extracao_id: ExtracaoId, importador: string, importador_versao: string, origem_caminho: string, hash_manifesto: string | null, parser: string, parser_versao: string, referencias: Array<ReferenciaOrigemDetalhe>, };

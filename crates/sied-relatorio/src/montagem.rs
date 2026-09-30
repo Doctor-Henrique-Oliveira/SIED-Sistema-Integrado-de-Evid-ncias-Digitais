@@ -240,6 +240,8 @@ fn nome_app(app: Option<&str>) -> String {
         Some("whatsapp") => "WhatsApp".into(),
         Some("whatsapp_business") => "WhatsApp Business".into(),
         Some("telegram") => "Telegram".into(),
+        Some("telefone") => "Telefone".into(),
+        Some("contatos_android") => "Agenda (Android)".into(),
         Some(outro) => outro.into(),
         None => "Não informado".into(),
     }
@@ -261,6 +263,13 @@ fn nome_subtipo(s: &str) -> &str {
         "sistema" => "Mensagem do sistema",
         "apagada" => "Apagada",
         "desconhecido" => "Tipo desconhecido",
+        "recebida" => "Recebida",
+        "efetuada" => "Efetuada",
+        "perdida" => "Perdida",
+        "correio_de_voz" => "Correio de voz",
+        "rejeitada" => "Rejeitada",
+        "bloqueada" => "Bloqueada",
+        "atendida_em_outro_aparelho" => "Atendida em outro aparelho",
         outro => outro,
     }
 }
@@ -596,7 +605,137 @@ fn mensagem(
     }
 }
 
-fn campos_registro(ctx: &Contexto, m: &ArtefatoResumo) -> Vec<Campo> {
+/// Duração em segundos como "1 min 05 s" (ou "42 s").
+fn duracao(s: i64) -> String {
+    match (s / 3600, (s % 3600) / 60, s % 60) {
+        (0, 0, seg) => format!("{seg} s"),
+        (0, min, seg) => format!("{min} min {seg:02} s"),
+        (h, min, seg) => format!("{h} h {min:02} min {seg:02} s"),
+    }
+}
+
+fn meta_texto(meta: &serde_json::Value, chave: &str) -> Option<String> {
+    meta.get(chave)
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string)
+}
+
+/// Número de uma chamada: quem ligou (recebida) ou para quem se ligou (efetuada).
+fn numero_chamada(m: &ArtefatoResumo) -> Option<String> {
+    m.remetente
+        .clone()
+        .or_else(|| m.destinatarios.first().cloned())
+}
+
+fn campos_chamada(ctx: &Contexto, m: &ArtefatoResumo, meta: &serde_json::Value) -> Vec<Campo> {
+    let mut c = Vec::new();
+    c.push(Campo::novo(
+        "Tipo",
+        format!(
+            "Chamada · {}",
+            nome_subtipo(m.subtipo.as_deref().unwrap_or("desconhecido"))
+        ),
+    ));
+    c.push(Campo::novo(
+        "Número",
+        numero_chamada(m).unwrap_or_else(|| "(não apresentado)".into()),
+    ));
+    opt(
+        &mut c,
+        "Nome gravado com a chamada",
+        meta_texto(meta, "nome_no_registro"),
+    );
+    c.push(Campo::novo(
+        "Data e hora",
+        format!("{} ({})", ctx.quando_ms(m.data_hora_ms), ctx.fuso.name()),
+    ));
+    opt(
+        &mut c,
+        "Duração",
+        meta.get("duracao_s")
+            .and_then(serde_json::Value::as_i64)
+            .map(duracao),
+    );
+    opt(
+        &mut c,
+        "Apresentação do número",
+        meta_texto(meta, "apresentacao").filter(|a| a != "permitido"),
+    );
+    opt(
+        &mut c,
+        "Conta telefônica",
+        meta_texto(meta, "conta_telefonica"),
+    );
+    if let Some(r) = meta.get("recursos").and_then(serde_json::Value::as_array) {
+        let r: Vec<&str> = r.iter().filter_map(serde_json::Value::as_str).collect();
+        if !r.is_empty() {
+            c.push(Campo::novo("Recursos", r.join(", ")));
+        }
+    }
+    c.push(Campo::novo(
+        "Estado do registro",
+        nome_estado(&m.estado_registro),
+    ));
+    c
+}
+
+fn campos_contato(d: &ArtefatoDetalhe) -> Vec<Campo> {
+    let (m, meta) = (&d.resumo, &d.metadados);
+    let mut c = vec![Campo::novo(
+        "Tipo",
+        format!("Contato · {}", nome_app(m.app.as_deref())),
+    )];
+    c.push(Campo::novo(
+        "Nome",
+        m.conteudo.clone().unwrap_or_else(|| "(sem nome)".into()),
+    ));
+    let lista = |chave: &str, campo: &str| -> Vec<String> {
+        meta.get(chave)
+            .and_then(serde_json::Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|t| {
+                let valor = t.get(campo)?.as_str()?;
+                let tipo = t
+                    .get("rotulo")
+                    .or_else(|| t.get("tipo_nome"))
+                    .and_then(serde_json::Value::as_str);
+                Some(match tipo {
+                    Some(tp) => format!("{valor} ({})", tp.replace('_', " ")),
+                    None => valor.to_string(),
+                })
+            })
+            .collect()
+    };
+    let mut telefones = lista("telefones", "numero");
+    if telefones.is_empty() {
+        telefones.extend(meta_texto(meta, "numero"));
+    }
+    if !telefones.is_empty() {
+        c.push(Campo::novo("Telefones", telefones.join("; ")));
+    }
+    let emails = lista("emails", "endereco");
+    if !emails.is_empty() {
+        c.push(Campo::novo("E-mails", emails.join("; ")));
+    }
+    opt(&mut c, "Empresa", meta_texto(meta, "empresa"));
+    opt(&mut c, "Conta", d.conta.clone());
+    opt(&mut c, "Tipo da conta", meta_texto(meta, "tipo_conta"));
+    opt(&mut c, "Identificador no app", m.id_externo.clone());
+    c.push(Campo::novo(
+        "Estado do registro",
+        nome_estado(&m.estado_registro),
+    ));
+    c
+}
+
+fn campos_registro(ctx: &Contexto, d: &ArtefatoDetalhe) -> Vec<Campo> {
+    let m = &d.resumo;
+    match m.tipo.as_str() {
+        "chamada" => return campos_chamada(ctx, m, &d.metadados),
+        "contato" => return campos_contato(d),
+        _ => {}
+    }
     let mut c = Vec::new();
     let tipo = match &m.subtipo {
         Some(s) => format!("{} · {}", nome_tipo_artefato(&m.tipo), nome_subtipo(s)),
@@ -990,7 +1129,7 @@ fn evidencia(ctx: &mut Contexto, e: &Evidencia) -> Resultado<(EvidenciaDoc, Conf
                 }
             } else {
                 ConteudoDoc::Registro {
-                    campos: campos_registro(ctx, r),
+                    campos: campos_registro(ctx, &det),
                 }
             };
             origem.push(origem_registro(ctx, format!("Registro {}", r.id), &det));
@@ -1000,6 +1139,23 @@ fn evidencia(ctx: &mut Contexto, e: &Evidencia) -> Resultado<(EvidenciaDoc, Conf
                     nome_app(r.app.as_deref()),
                     ctx.quando_ms(r.data_hora_ms)
                 ),
+                "chamada" => {
+                    let numero =
+                        numero_chamada(r).unwrap_or_else(|| "número não apresentado".into());
+                    let quando = ctx.quando_ms(r.data_hora_ms);
+                    match r.subtipo.as_deref() {
+                        Some("efetuada") => format!("Chamada efetuada para {numero} em {quando}"),
+                        Some(s @ ("recebida" | "perdida" | "rejeitada" | "bloqueada")) => format!(
+                            "Chamada {} de {numero} em {quando}",
+                            nome_subtipo(s).to_lowercase()
+                        ),
+                        _ => format!("Chamada ({numero}) em {quando}"),
+                    }
+                }
+                "contato" => match &r.conteudo {
+                    Some(n) => format!("Contato: {n}"),
+                    None => "Contato sem nome".to_string(),
+                },
                 t => nome_tipo_artefato(t).to_string(),
             };
             (

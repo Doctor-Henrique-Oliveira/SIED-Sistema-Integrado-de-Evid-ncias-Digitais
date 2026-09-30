@@ -35,9 +35,12 @@ Visão integral e permanente: `docs/VISAO.md`. Arquitetura aprovada (com ajustes
   evidências e relatório PDF (Typst embutido), e o hardening desta auditoria.
 - **Importador Avilla: só o contrato.** Responde `NaoImplementado`. Aguarda a árvore de uma
   extração real (§26).
-- Testes: 201 Rust (+3 medições ignoradas), 43 de interface (vitest), 1 roteiro E2E no app real.
+- Testes: 222 Rust (+3 medições ignoradas), 50 de interface (vitest), 1 roteiro E2E no app real
+  (contagem da branch de agenda e chamadas; na `main` após a auditoria eram 201 e 43).
   CI Linux e Windows.
-- Nenhuma fase nova foi iniciada. Próximos passos em §27.
+- Depois do handoff: design system global (PR #14, merge `132a8d5`) e, na branch
+  `claude/contatos-chamadas-android-z7m48s`, a **agenda e o registro de chamadas do Android**
+  (§10.1), aguardando o merge. Próximos passos em §27.
 
 ## 3. Arquitetura
 
@@ -107,16 +110,18 @@ crates/
     src/evidencias.rs       evidências (registro, trecho, arquivo), hash_do_trecho
     src/relatorios.rs       tabela relatorio
     src/auditoria.rs        trilha encadeada por hash, verificar, conferir_ancoras
-    src/resumo.rs           painel do caso
+    src/resumo.rs           painel do caso e identificadores (com vínculo à agenda)
+    src/agenda.rs           contatos, chamadas, resumo das chamadas e vínculo pela agenda
     tests/                  persistencia, importacao, whatsapp, volume, evidencias,
-                            hash_registro, desempenho (ignorado)
+                            hash_registro, agenda_chamadas, desempenho (ignorado)
   sied-ingestao/
     src/fonte.rs            CaminhoFonte (endereço seguro), FonteSomenteLeitura
     src/fonte/pasta.rs      PastaSomenteLeitura (não segue links, confere cada parte)
     src/importador.rs       contrato Importador
     src/importadores/       generico.rs (pasta), avilla.rs (só contrato)
     src/parser.rs           contrato Parser e SaidaParser
-    src/parsers/            android_sms.rs, whatsapp_android/, sqlite.rs (leitura segura)
+    src/parsers/            android_sms.rs, android_contatos.rs, android_chamadas.rs,
+                            whatsapp_android/, comum.rs (auxiliares), sqlite.rs (leitura segura)
     src/pipeline.rs         inventário, manifesto, cópias verificadas, execução dos parsers
     src/registro.rs         Registro::padrao() (importadores e parsers conhecidos)
     tests/                  contratos, pipeline
@@ -135,8 +140,8 @@ app/
   src-tauri/tauri.conf.json CSP e empacotamento
 testes/
   e2e/                      roteiro ponta a ponta no app real (WebDriver)
-  fixtures/                 fixtures SINTÉTICAS (WhatsApp em SQL, imagem)
-  gerador/                  extracao_sintetica.py (--whatsapp, --volume)
+  fixtures/                 fixtures SINTÉTICAS (WhatsApp e Android em SQL, imagem)
+  gerador/                  extracao_sintetica.py (--whatsapp, --android, --volume)
   rust/caso_sintetico.rs    caso sintético compartilhado pelos testes Rust (#[path])
 docs/                       VISAO, ARQUITETURA, CONTINUIDADE, PREPARACAO-AVILLA-WHATSAPP,
                             checkpoints/ (um por etapa), este HANDOFF
@@ -240,7 +245,7 @@ transforma nome perigoso da listagem em **item ignorado com aviso** (a importaç
 
 | Id | Arquivo | Situação |
 |---|---|---|
-| `generico` | `importadores/generico.rs` | Pasta qualquer. Reconhece `mmssms.db` (SMS) e `msgstore.db` + `wa.db` do WhatsApp (pareados pela pasta; `com.whatsapp` e `com.whatsapp.w4b`); `.crypt*` só inventariados |
+| `generico` | `importadores/generico.rs` | Pasta qualquer. Reconhece `mmssms.db` (SMS), `msgstore.db` + `wa.db` do WhatsApp (pareados pela pasta; `com.whatsapp` e `com.whatsapp.w4b`), `contacts2.db` (agenda; sem `calllog.db` na mesma pasta, também vai ao leitor de chamadas) e `calllog.db` (chamadas); `.crypt*` só inventariados |
 | `avilla` | `importadores/avilla.rs` | **Só contrato.** `detectar` → `NaoImplementado`; `planejar` → erro `NaoImplementado` |
 
 Pipeline (`pipeline.rs`), nesta ordem, igual para toda ferramenta:
@@ -259,12 +264,30 @@ Artefato: `normalizar()` (−0.0 → 0.0; `app` vazio → ausente) e depois `has
 |---|---|---|---|
 | `android_sms` | `mmssms` | 1.0.0 | tabela `sms` de `mmssms.db`, inclusive registros só no `-wal` (sem MMS) |
 | `whatsapp_android` | `msgstore`, `wa` | 1.0.0 | §11 |
+| `android_contatos` | `contacts2` | 1.0.0 | agenda (`raw_contacts`, `data`, `mimetypes`, `accounts`, `contacts`); §10.1 |
+| `android_chamadas` | `chamadas` | 1.0.0 | tabela `calls` de `calllog.db` (ou de `contacts2.db` antigo); §10.1 |
 
 `parsers/sqlite.rs`: abre a **cópia** com `SQLITE_OPEN_READ_ONLY` e lê valores brutos. REAL não
 finito vira `{"real_nao_finito": "inf"|"-inf"|"nan"}` (JSON não tem infinito).
 
 Datas: só viram `utc_ms` se `DataHora::ms_plausivel` (0 < ms ≤ 31/12/9999 23:59:59.999 UTC).
 Fora disso ficam só no valor original. Regra geral: **"não sei" é melhor que inventar**.
+
+### 10.1 Agenda e chamadas (Android)
+
+- Contato: um artefato `contato` (app `contatos_android`) por **contato bruto**; o agrupamento
+  do Android (`contacts`) não é refeito (`contato_id` nos metadados). Telefones em
+  `metadados.telefones` (`numero`, `tipo`, `rotulo`, `normalizado`, `registro`), conta em `conta`.
+  Cada linha de `data`, a conta e o contato agrupado são origens adicionais; a foto não é copiada
+  (só `foto_registro`). Linha de `data` órfã ou mimetype desconhecido geram aviso.
+- Chamada: artefato `chamada` (app `telefone`), subtipo pelo `type`; `de_mim` só na efetuada;
+  número em `remetente` (ou `destinatarios` na efetuada). Códigos antigos `-1`…`-4` ficam em
+  `metadados.numero_especial`, nunca como telefone. `deleted=1` → estado "apagado".
+- Vínculo com a agenda (`sied-armazenamento/src/agenda.rs`): mesma extração e igualdade exata dos
+  dígitos (`sied_digitos`) do número ou do normalizado do aparelho (`normalized_number` da
+  chamada, `data4` do telefone). Calculado na consulta; nada é gravado. Vale para chamadas e para
+  identificadores das conversas que são telefone.
+- Conferidos só com fixtures sintéticas (`testes/fixtures/android`), pela documentação pública.
 
 ## 11. WhatsApp (Android)
 
@@ -301,7 +324,8 @@ Fora disso ficam só no valor original. Regra geral: **"não sei" é melhor que 
 
 - FTS5 `unicode61 remove_diacritics 2` em registros e nomes de arquivo.
 - Texto digitado é neutralizado: cada palavra vira `"palavra"*` (sintaxe do FTS não passa).
-- Telefone (6+ dígitos, com separadores): `instr` nos dígitos de remetente e destinatários.
+- Telefone (6+ dígitos, com separadores): `instr` nos dígitos de remetente e destinatários (e,
+  para contatos, também nos telefones da agenda e no normalizado).
 - Trecho destacado com marcadores `\u0001`/`\u0002` (ver B6 em §22).
 
 ## 14. Mídia e miniaturas
@@ -328,6 +352,7 @@ Fora disso ficam só no valor original. Regra geral: **"não sei" é melhor que 
 - `sied-relatorio::gerar`: modelo `padrao-v1`, 10 seções escolhidas na tela (capa, procedimento,
   dispositivos, aquisição e importação, metodologia, evidências, observações, conclusão,
   apêndice técnico com origem e valores brutos, integridade e cadeia de custódia).
+- Chamada e contato entram com campos próprios (tipo e duração; telefones, conta, empresa).
 - **Conferência na geração**, por evidência:
   - registro e cada mensagem do trecho: o artefato é **remontado das colunas e origens
     gravadas** e o `hash_registro` é **recalculado** (`extracoes::conferir_registro`); nunca
@@ -404,8 +429,8 @@ não capturado.
 
 | Conjunto | Onde | Quantidade |
 |---|---|---|
-| Rust | `crates/*/src` (unitários) e `crates/*/tests` | 201 + 3 medições `#[ignore]` |
-| Interface | `app/src/**/*.test.ts(x)` | 43 |
+| Rust | `crates/*/src` (unitários, inclusive os que exportam os tipos TS) e `crates/*/tests` | 222 + 3 medições `#[ignore]` |
+| Interface | `app/src/**/*.test.ts(x)` | 50 |
 | E2E | `testes/e2e/executar.sh` + `persistencia.mjs` | 1 roteiro (cria caso, importa, analisa, reabre; confere que a extração não mudou: hash e datas antes/depois) |
 
 Medições (não rodam na bateria normal):
@@ -423,8 +448,9 @@ Testes de UI com virtualização: jsdom precisa de `offsetHeight`, `offsetWidth`
 
 Funcionais:
 - Avilla sem importador (§26). Contêineres (`.tar`, `.zip`, `.ab`) só inventariados.
-- Só SMS (sem MMS) e WhatsApp Android. Agenda e chamadas do Android ainda não.
-- WhatsApp conferido só com bancos sintéticos (§11).
+- Só SMS (sem MMS), WhatsApp Android e (na branch de 30/09) agenda e chamadas do Android. Sem
+  fotos de contato, `deleted_contacts`, chamadas de apps nem junção de contatos repetidos.
+- WhatsApp, agenda e chamadas conferidos só com bancos sintéticos (§10.1, §11).
 - Hash numa única thread; sem retomada de importação interrompida; sem exclusão de extração
   (de propósito); sem verificação do "hash declarado" do laudo de aquisição.
 - Miniaturas: sem HEIC, vídeo e áudio. Mídias e Arquivos mostram uma extração por vez; listas de
@@ -519,8 +545,10 @@ plano e pasta intacta, e importação completa no app real. Roteiro em
 Nenhuma fase nova foi iniciada. Ordem sugerida (cada uma com aval do usuário):
 
 1. **Importador Avilla**, quando a árvore real chegar (§26).
-2. **Conferência do WhatsApp** com um banco de aparelho de teste (não de investigação).
-3. **Agenda de contatos e chamadas** do Android (parsers novos; o resto do ciclo já serve).
+2. **Conferência do WhatsApp, da agenda e das chamadas** com bancos de aparelho de teste (não de
+   investigação).
+3. Agenda e chamadas do Android: feitas na branch `claude/contatos-chamadas-android-z7m48s`;
+   falta o merge com aval.
 4. **Console de importação em tempo real** (`docs/CONTINUIDADE.md` §14.1), depois que o fluxo real
    estabilizar.
 5. Itens F1–F9 (§25), conforme a necessidade medida.
@@ -558,7 +586,7 @@ testes/e2e/executar.sh target/debug/sied-desktop
 #   Linux: xvfb-run, openbox, wmctrl, tauri-driver (cargo install), WebKitWebDriver
 
 # extração sintética para testar à mão
-python3 testes/gerador/extracao_sintetica.py --whatsapp --volume <pasta>
+python3 testes/gerador/extracao_sintetica.py --whatsapp --android --volume <pasta>
 ```
 
 Variáveis: `SIED_PASTA_DADOS`, `SIED_PASTA_CASOS`, `SIED_LOG`.

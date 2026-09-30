@@ -2,6 +2,9 @@
 //! Os comandos Tauri apenas travam o estado e chamam estes métodos.
 
 use serde::Serialize;
+use sied_armazenamento::agenda::{
+    Chamada, ContatoAgenda, FiltroChamadas, FiltroContatos, ResumoChamadas, TotalApp,
+};
 use sied_armazenamento::auditoria::{RegistroAuditoria, VerificacaoAuditoria};
 use sied_armazenamento::busca::{FiltroBusca, ResultadoBusca};
 use sied_armazenamento::caso::{nome_pasta_sugerido, NOME_ARQUIVO_CASO};
@@ -541,6 +544,38 @@ impl Servico {
             deslocamento.max(0),
             limite.clamp(1, 500),
         )?)
+    }
+
+    // ------------------------------------------------------------ agenda e chamadas
+
+    pub fn listar_contatos(
+        &mut self,
+        filtro: &FiltroContatos,
+        deslocamento: i64,
+        limite: i64,
+    ) -> ResultadoApp<Pagina<ContatoAgenda>> {
+        Ok(self
+            .banco()?
+            .contatos(filtro, deslocamento.max(0), limite.clamp(1, 500))?)
+    }
+
+    pub fn apps_dos_contatos(&mut self) -> ResultadoApp<Vec<TotalApp>> {
+        Ok(self.banco()?.apps_contatos()?)
+    }
+
+    pub fn listar_chamadas(
+        &mut self,
+        filtro: &FiltroChamadas,
+        deslocamento: i64,
+        limite: i64,
+    ) -> ResultadoApp<Pagina<Chamada>> {
+        Ok(self
+            .banco()?
+            .chamadas(filtro, deslocamento.max(0), limite.clamp(1, 500))?)
+    }
+
+    pub fn resumo_chamadas(&mut self) -> ResultadoApp<ResumoChamadas> {
+        Ok(self.banco()?.resumo_chamadas()?)
     }
 
     // ------------------------------------------------------------ evidências

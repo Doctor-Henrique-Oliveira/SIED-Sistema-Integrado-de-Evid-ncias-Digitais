@@ -186,7 +186,9 @@ function Busca({ caso }: { caso: Caso }) {
                     const destino =
                       a.conversa_id != null
                         ? `/casos/${caso.id}/conversas/${a.conversa_id}?registro=${reg.id}`
-                        : `/casos/${caso.id}/extracoes/${a.extracao_id}`;
+                        : reg.tipo === "chamada" || reg.tipo === "contato"
+                          ? `/casos/${caso.id}/contatos?aba=${reg.tipo === "chamada" ? "chamadas" : "agenda"}&registro=${reg.id}`
+                          : `/casos/${caso.id}/extracoes/${a.extracao_id}`;
                     return (
                       <li key={reg.id}>
                         <Link to={destino} className="group block px-4 py-2.5 transition-colors hover:bg-sup-2" data-teste="achado">
@@ -197,7 +199,11 @@ function Busca({ caso }: { caso: Caso }) {
                             <span>{reg.de_mim == null ? "" : reg.de_mim ? "Enviada" : "Recebida"}</span>
                             <span className="font-mono">{reg.remetente ?? (reg.destinatarios.join(", ") || (reg.tipo !== "mensagem" ? reg.id_externo : ""))}</span>
                             <span className="ml-auto text-ouro-claro opacity-0 transition-opacity group-hover:opacity-100">
-                              {a.conversa_id != null ? "abrir na conversa →" : "abrir na extração →"}
+                              {a.conversa_id != null
+                                ? "abrir na conversa →"
+                                : reg.tipo === "chamada" || reg.tipo === "contato"
+                                  ? "abrir em Contatos →"
+                                  : "abrir na extração →"}
                             </span>
                           </div>
                           <p className="mt-0.5 text-sm text-texto">

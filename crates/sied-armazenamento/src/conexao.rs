@@ -48,10 +48,30 @@ pub fn normalizar_busca(t: &str) -> String {
         .collect()
 }
 
-/// `sied_normal(x)`: [`normalizar_busca`] nas consultas. Usada só em consultas, nunca
-/// no esquema (gatilhos, índices, visões): o banco do caso continua legível por
-/// qualquer ferramenta SQLite.
+/// Só os dígitos ASCII de um texto (telefone com ou sem máscara). Vazio vira `None`.
+pub fn so_digitos(t: &str) -> Option<String> {
+    let d: String = t.chars().filter(char::is_ascii_digit).collect();
+    (!d.is_empty()).then_some(d)
+}
+
+/// Funções usadas só em consultas, nunca no esquema (gatilhos, índices, visões): o
+/// banco do caso continua legível por qualquer ferramenta SQLite.
+///
+/// - `sied_normal(x)`: [`normalizar_busca`];
+/// - `sied_digitos(x)`: [`so_digitos`] (NULL quando não há dígitos).
 fn registrar_funcoes(conn: &Connection) -> rusqlite::Result<()> {
+    conn.create_scalar_function(
+        "sied_digitos",
+        1,
+        FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC,
+        |ctx| {
+            Ok(match ctx.get_raw(0) {
+                rusqlite::types::ValueRef::Text(t) => so_digitos(&String::from_utf8_lossy(t)),
+                rusqlite::types::ValueRef::Integer(i) => so_digitos(&i.to_string()),
+                _ => None,
+            })
+        },
+    )?;
     conn.create_scalar_function(
         "sied_normal",
         1,
@@ -120,7 +140,16 @@ pub(crate) fn abrir(caminho: &Path, tipo: &TipoBanco, abertura: Abertura) -> Res
 
 #[cfg(test)]
 mod testes {
-    use super::normalizar_busca;
+    use super::{normalizar_busca, so_digitos};
+
+    #[test]
+    fn so_os_digitos() {
+        assert_eq!(
+            so_digitos("+55 (11) 90000-0011").as_deref(),
+            Some("5511900000011")
+        );
+        assert_eq!(so_digitos("sem número"), None);
+    }
 
     #[test]
     fn minusculas_sem_acento() {

@@ -9,20 +9,33 @@
 //! (é assim que o app grava os dois). Um `wa.db` sozinho vira tarefa só de contatos.
 //! Backups cifrados (`msgstore*.db.crypt*`) são inventariados e anotados, mas não
 //! interpretados: exigem a chave do aparelho.
+//!
+//! Agenda e chamadas do Android: `contacts2.db` vai para a agenda; `calllog.db`, para o
+//! registro de chamadas. Até o Android 6 as chamadas ficavam no próprio `contacts2.db`:
+//! sem `calllog.db` na mesma pasta, o `contacts2.db` também vai para o leitor de
+//! chamadas (que avisa, sem falhar, se a tabela não estiver lá).
 
 use crate::fonte::CaminhoFonte;
 use crate::fonte::FonteSomenteLeitura;
 use crate::importador::{
     ArquivoParaParser, Deteccao, Importador, PlanoImportacao, Suporte, TarefaParser,
 };
-use crate::parsers::{android_sms, whatsapp_android};
+use crate::parsers::{android_chamadas, android_contatos, android_sms, whatsapp_android};
 use crate::{InfoComponente, Resultado};
 
 pub const ID: &str = "generico";
 
 /// Nome de arquivo → (parser, papel). Nomes definidos pelo próprio Android (AOSP),
 /// não por uma ferramenta de extração.
-const CONHECIDOS: &[(&str, &str, &str)] = &[("mmssms.db", android_sms::ID, android_sms::PAPEL)];
+const CONHECIDOS: &[(&str, &str, &str)] = &[
+    ("mmssms.db", android_sms::ID, android_sms::PAPEL),
+    (
+        "contacts2.db",
+        android_contatos::ID,
+        android_contatos::PAPEL,
+    ),
+    ("calllog.db", android_chamadas::ID, android_chamadas::PAPEL),
+];
 
 pub struct ImportadorGenerico;
 
@@ -44,7 +57,7 @@ impl Importador for ImportadorGenerico {
                 "aceita qualquer pasta: inventário, classificação e SHA-256 de todos os arquivos"
                     .into(),
                 "interpreta apenas bancos com nome padrão do Android e do WhatsApp \
-                 (mmssms.db, msgstore.db, wa.db)"
+                 (mmssms.db, contacts2.db, calllog.db, msgstore.db, wa.db)"
                     .into(),
             ],
         })
@@ -82,6 +95,24 @@ impl Importador for ImportadorGenerico {
                         caminho: c.clone(),
                     }],
                 });
+                if n == "contacts2.db"
+                    && !arquivos
+                        .iter()
+                        .any(|o| nome(o) == "calllog.db" && pasta(o) == pasta(c))
+                {
+                    plano.observacoes.push(format!(
+                        "{c} → parser {} (sem calllog.db na mesma pasta: até o Android 6 \
+                         as chamadas ficavam no contacts2.db)",
+                        android_chamadas::ID
+                    ));
+                    plano.tarefas.push(TarefaParser {
+                        parser_id: android_chamadas::ID.into(),
+                        arquivos: vec![ArquivoParaParser {
+                            papel: android_chamadas::PAPEL.into(),
+                            caminho: c.clone(),
+                        }],
+                    });
+                }
             } else if n == "msgstore.db" {
                 let wa = arquivos
                     .iter()
@@ -159,6 +190,9 @@ mod testes {
             "c/wa.db",
             "d/Databases/msgstore-2026-01-01.1.db.crypt14",
             "e/mmssms.db",
+            "f/com.android.providers.contacts/databases/contacts2.db",
+            "f/com.android.providers.contacts/databases/calllog.db",
+            "g/contacts2.db",
         ] {
             fs::create_dir_all(r.join(p).parent().unwrap()).unwrap();
             fs::write(r.join(p), b"sintetico").unwrap();
@@ -183,6 +217,29 @@ mod testes {
         assert_eq!(
             tarefas,
             vec![
+                (
+                    "android_chamadas".into(),
+                    vec![par(
+                        "chamadas",
+                        "f/com.android.providers.contacts/databases/calllog.db"
+                    )]
+                ),
+                // Sem calllog.db na pasta: chamadas procuradas no próprio contacts2.db.
+                (
+                    "android_chamadas".into(),
+                    vec![par("chamadas", "g/contacts2.db")]
+                ),
+                (
+                    "android_contatos".into(),
+                    vec![par(
+                        "contacts2",
+                        "f/com.android.providers.contacts/databases/contacts2.db"
+                    )]
+                ),
+                (
+                    "android_contatos".into(),
+                    vec![par("contacts2", "g/contacts2.db")]
+                ),
                 ("android_sms".into(), vec![par("mmssms", "e/mmssms.db")]),
                 (
                     "whatsapp_android".into(),

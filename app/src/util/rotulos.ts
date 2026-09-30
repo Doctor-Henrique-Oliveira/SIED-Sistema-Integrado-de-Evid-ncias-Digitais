@@ -60,6 +60,8 @@ export const nomeApp: Record<string, string> = {
   whatsapp: "WhatsApp",
   whatsapp_business: "WhatsApp Business",
   telegram: "Telegram",
+  telefone: "Telefone",
+  contatos_android: "Agenda (Android)",
 };
 
 export function rotuloApp(app: string | null | undefined): string {
@@ -101,6 +103,13 @@ export const nomeSubtipo: Record<string, string> = {
   desconhecido: "Tipo desconhecido",
   individual: "Individual",
   grupo: "Grupo",
+  recebida: "Recebida",
+  efetuada: "Efetuada",
+  perdida: "Perdida",
+  correio_de_voz: "Correio de voz",
+  rejeitada: "Rejeitada",
+  bloqueada: "Bloqueada",
+  atendida_em_outro_aparelho: "Atendida em outro aparelho",
 };
 
 export function rotuloSubtipo(s: string): string {
@@ -124,4 +133,56 @@ export const nomeVinculoAnexo: Record<string, string> = {
   ambiguo: "Mais de um arquivo possível: nenhum foi ligado",
   tamanho_diferente: "Arquivo com o mesmo nome, mas tamanho diferente: não ligado",
   nao_encontrado: "Não encontrado na extração",
+};
+
+/** Como o número foi apresentado na chamada (`presentation` do Android). */
+export const nomeApresentacao: Record<string, string> = {
+  permitido: "Número apresentado",
+  restrito: "Número restrito (privado)",
+  desconhecido: "Número desconhecido",
+  telefone_publico: "Telefone público",
+};
+
+/** Códigos gravados no lugar do número pelas versões antigas do Android. */
+export const nomeNumeroEspecial: Record<string, string> = {
+  "-1": "Número desconhecido (código -1)",
+  "-2": "Número privado (código -2)",
+  "-3": "Telefone público (código -3)",
+  "-4": "Número pago (código -4)",
+};
+
+/** Recursos da chamada (bits de `features`). */
+export const nomeRecurso: Record<string, string> = {
+  video: "Vídeo",
+  transferida_de_outro_aparelho: "Transferida de outro aparelho",
+  hd: "HD",
+  wifi: "Wi-Fi",
+  discagem_assistida: "Discagem assistida",
+  rtt: "Texto em tempo real (RTT)",
+  volte: "VoLTE",
+};
+
+/** Tipo do telefone na agenda (`Phone.TYPE_*`). */
+export const nomeTipoTelefone: Record<string, string> = {
+  personalizado: "Personalizado",
+  residencial: "Residencial",
+  celular: "Celular",
+  trabalho: "Trabalho",
+  fax_trabalho: "Fax do trabalho",
+  fax_residencial: "Fax residencial",
+  pager: "Pager",
+  outro: "Outro",
+  retorno: "Retorno",
+  carro: "Carro",
+  empresa_principal: "Principal da empresa",
+  isdn: "ISDN",
+  principal: "Principal",
+  outro_fax: "Outro fax",
+  radio: "Rádio",
+  telex: "Telex",
+  tty_tdd: "TTY/TDD",
+  celular_trabalho: "Celular do trabalho",
+  pager_trabalho: "Pager do trabalho",
+  assistente: "Assistente",
+  mms: "MMS",
 };

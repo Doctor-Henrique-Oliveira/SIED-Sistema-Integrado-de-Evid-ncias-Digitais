@@ -9,6 +9,8 @@ import {
   type DispositivoId,
   type ExtracaoId,
   type FiltroBusca,
+  type FiltroChamadas,
+  type FiltroContatos,
   type FiltroConversas,
   type NovoCaso,
   type NovoDispositivo,
@@ -295,6 +297,32 @@ export function useIdentificadores(casoId: CasoId, texto: string | null, desloca
     queryFn: () => api.listarIdentificadores(texto, deslocamento, limite),
     placeholderData: keepPreviousData,
   });
+}
+
+/** Contatos (agenda do aparelho e contatos dos apps). Derivam das importações. */
+export function useContatos(casoId: CasoId, filtro: FiltroContatos, deslocamento: number, limite: number) {
+  return useQuery({
+    queryKey: [...chaves.conversas(casoId), "contatos", filtro, deslocamento, limite],
+    queryFn: () => api.listarContatos(filtro, deslocamento, limite),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useAppsDosContatos(casoId: CasoId) {
+  return useQuery({ queryKey: [...chaves.conversas(casoId), "contatos-apps"], queryFn: api.appsDosContatos });
+}
+
+/** Registro de chamadas do caso, com o vínculo à agenda pelo mesmo número. */
+export function useChamadas(casoId: CasoId, filtro: FiltroChamadas, deslocamento: number, limite: number) {
+  return useQuery({
+    queryKey: [...chaves.conversas(casoId), "chamadas", filtro, deslocamento, limite],
+    queryFn: () => api.listarChamadas(filtro, deslocamento, limite),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useResumoChamadas(casoId: CasoId) {
+  return useQuery({ queryKey: [...chaves.conversas(casoId), "chamadas-resumo"], queryFn: api.resumoChamadas });
 }
 
 // ---------- Evidências e relatórios ----------

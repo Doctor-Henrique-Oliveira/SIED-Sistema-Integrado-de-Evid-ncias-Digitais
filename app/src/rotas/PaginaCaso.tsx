@@ -7,6 +7,7 @@ import { Aviso, Cartao, Carregando, FaixaIndicadores, Indicador, Selo } from "..
 import { Icone, type NomeIcone } from "../componentes/Icone";
 import { SecaoAtividades, SecaoDispositivos, SecaoExtracoes } from "../componentes/SecoesCaso";
 import { dataHora, identificacaoCaso, numero, tamanho } from "../util/formatar";
+import { nomeTipoArtefato } from "../util/rotulos";
 
 export function PaginaCaso() {
   return <ComCasoAberto>{(caso, pasta) => <PainelCaso caso={caso} pasta={pasta} />}</ComCasoAberto>;
@@ -141,8 +142,8 @@ function Indicadores({ caso, r }: { caso: Caso; r: ResumoCaso | undefined }) {
   const base = `/casos/${caso.id}`;
   const midias = r?.arquivos_por_categoria.filter((c) => CATEGORIAS_MIDIA.includes(c.categoria)).reduce((s, c) => s + c.arquivos, 0);
   const principais = r?.registros_por_tipo
-    .slice(0, 2)
-    .map((t) => `${t.tipo}: ${numero(t.total)}`)
+    .slice(0, 3)
+    .map((t) => `${(nomeTipoArtefato[t.tipo] ?? t.tipo).toLowerCase()}: ${numero(t.total)}`)
     .join(" · ");
   const n = (v: number | undefined) => (v == null ? null : numero(v));
   return (

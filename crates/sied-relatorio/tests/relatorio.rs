@@ -515,3 +515,130 @@ fn textos_hostis_viram_texto_literal_dentro_da_pagina() {
         "relatorio-textos-hostis.pdf",
     );
 }
+
+/// Chamada e contato da agenda do Android como evidência: campos próprios (número,
+/// duração, nome gravado com a chamada, telefones do contato) e PDF gerado.
+#[test]
+fn chamada_e_contato_da_agenda_entram_com_campos_proprios() {
+    use sied_armazenamento::agenda::{FiltroChamadas, FiltroContatos};
+    use sied_dominio::{NovoDispositivo, SistemaOperacional};
+
+    let (raiz, _origem, mut banco, _x) = preparado();
+    // Segunda extração SINTÉTICA, só com a agenda e o registro de chamadas.
+    let android = raiz.path().join("Extracao-SINTETICA-Android");
+    let pasta = android.join("dados/data/com.android.providers.contacts/databases");
+    fs::create_dir_all(&pasta).unwrap();
+    for (sql, nome) in [
+        (
+            include_str!("../../../testes/fixtures/android/contacts2.sql"),
+            "contacts2.db",
+        ),
+        (
+            include_str!("../../../testes/fixtures/android/calllog.sql"),
+            "calllog.db",
+        ),
+    ] {
+        Connection::open(pasta.join(nome))
+            .unwrap()
+            .execute_batch(sql)
+            .unwrap();
+    }
+    let d = banco
+        .cadastrar_dispositivo(NovoDispositivo {
+            apelido: "Celular sintético 2".into(),
+            sistema: SistemaOperacional::Android,
+            ..Default::default()
+        })
+        .unwrap();
+    let x = importar(&banco, &d, &android);
+    assert_eq!(x.status, "concluida", "{:?}", x.erro);
+
+    let chamada = banco
+        .chamadas(
+            &FiltroChamadas {
+                texto: Some("(11) 90000-0012".into()),
+                ..Default::default()
+            },
+            0,
+            10,
+        )
+        .unwrap()
+        .itens
+        .remove(0);
+    let contato = banco
+        .contatos(
+            &FiltroContatos {
+                texto: Some("Bruno".into()),
+                app: Some("contatos_android".into()),
+                ..Default::default()
+            },
+            0,
+            10,
+        )
+        .unwrap()
+        .itens
+        .remove(0);
+    for id in [chamada.id, contato.id] {
+        banco
+            .adicionar_evidencia(NovaEvidencia {
+                artefato_id: Some(id),
+                ..Default::default()
+            })
+            .unwrap();
+    }
+
+    let auditoria = banco.verificar_auditoria().unwrap();
+    let m = montagem::montar(&banco, &PedidoRelatorio::default(), Utc::now(), &auditoria).unwrap();
+    assert!(m.conferencias.iter().all(|c| c.situacao == "conferida"));
+    let json = serde_json::to_value(&m.documento).unwrap();
+    let e = &json["evidencias"];
+    let campos = |i: usize| -> Vec<(String, String)> {
+        e[i]["conteudo"]["campos"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| {
+                (
+                    c["rotulo"].as_str().unwrap().to_string(),
+                    c["valor"].as_str().unwrap().to_string(),
+                )
+            })
+            .collect()
+    };
+    let valor = |c: &[(String, String)], r: &str| {
+        c.iter()
+            .find(|(k, _)| k == r)
+            .map(|(_, v)| v.clone())
+            .unwrap_or_else(|| panic!("{r} ausente em {c:?}"))
+    };
+
+    assert!(
+        e[0]["titulo"]
+            .as_str()
+            .unwrap()
+            .starts_with("Chamada efetuada para (11) 90000-0012 em "),
+        "{}",
+        e[0]["titulo"]
+    );
+    let c = campos(0);
+    assert_eq!(valor(&c, "Tipo"), "Chamada · Efetuada");
+    assert_eq!(valor(&c, "Número"), "(11) 90000-0012");
+    assert_eq!(valor(&c, "Duração"), "42 s");
+    assert_eq!(valor(&c, "Nome gravado com a chamada"), "Bruno Sintético");
+    assert_eq!(valor(&c, "Recursos"), "video, wifi");
+
+    assert_eq!(e[1]["titulo"], "Contato: Bruno Sintético");
+    let c = campos(1);
+    assert_eq!(valor(&c, "Tipo"), "Contato · Agenda (Android)");
+    assert_eq!(
+        valor(&c, "Telefones"),
+        "11 90000-0012 (trabalho); +55 11 3000-0012 (Escritório sintético)"
+    );
+    assert_eq!(valor(&c, "Conta"), "analista.sintetico@example.com");
+
+    // O modelo Typst aceita os campos novos.
+    let r = sied_relatorio::gerar(&mut banco, PedidoRelatorio::default()).unwrap();
+    let pdf = banco.pasta().join(&r.caminho);
+    assert!(fs::read(&pdf).unwrap().starts_with(b"%PDF-"));
+    guardar(&pdf, "relatorio-chamada-contato.pdf");
+}

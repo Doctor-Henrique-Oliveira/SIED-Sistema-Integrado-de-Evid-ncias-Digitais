@@ -10,11 +10,15 @@ sintéticas de testes/fixtures/whatsapp (msgstore.db no esquema novo e wa.db), m
 citadas pelas mensagens e um backup .crypt14 inventado. Sem a opção, a saída é a
 mesma de sempre (é a que o teste E2E usa).
 
+Com --android, acrescenta a agenda (contacts2.db) e o registro de chamadas
+(calllog.db) do Android, montados a partir das fixtures sintéticas de
+testes/fixtures/android (esquemas públicos do AOSP; números e nomes inventados).
+
 Com --volume, acrescenta volume para testar as telas com dados em quantidade: uma
 conversa SMS com milhares de mensagens, centenas de conversas curtas e centenas de
 imagens PNG desenhadas aqui mesmo (padrões geométricos, sem pessoas nem texto).
 
-Uso: python3 testes/gerador/extracao_sintetica.py [--whatsapp] [--volume] <pasta de destino>
+Uso: python3 testes/gerador/extracao_sintetica.py [--whatsapp] [--android] [--volume] <pasta de destino>
 """
 
 import os
@@ -26,6 +30,7 @@ import tempfile
 import zlib
 
 FIXTURES_WHATSAPP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "fixtures", "whatsapp")
+FIXTURES_ANDROID = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "fixtures", "android")
 
 # 2026-01-01 00:00:00 UTC em milissegundos
 BASE_MS = 1767225600000
@@ -98,8 +103,8 @@ def gerar_imagens(destino: str) -> None:
             f.write(png(largura, altura, n + 1))
 
 
-def banco_de_fixture(sql: str, destino: str) -> None:
-    with open(os.path.join(FIXTURES_WHATSAPP, sql), encoding="utf-8") as f:
+def banco_de_fixture(sql: str, destino: str, pasta: str = FIXTURES_WHATSAPP) -> None:
+    with open(os.path.join(pasta, sql), encoding="utf-8") as f:
         script = f.read()
     conn = sqlite3.connect(destino)
     conn.executescript(script)
@@ -127,7 +132,15 @@ def gerar_whatsapp(destino: str) -> None:
             b"SINTETICO-CIFRADO", 256)
 
 
-def gerar(destino: str, whatsapp: bool = False, volume: bool = False) -> None:
+def gerar_android(destino: str) -> None:
+    """Pasta inventada; só o nome do pacote e dos bancos seguem o Android."""
+    bancos = os.path.join(destino, "dados", "com.android.providers.contacts", "databases")
+    os.makedirs(bancos)
+    banco_de_fixture("contacts2.sql", os.path.join(bancos, "contacts2.db"), FIXTURES_ANDROID)
+    banco_de_fixture("calllog.sql", os.path.join(bancos, "calllog.db"), FIXTURES_ANDROID)
+
+
+def gerar(destino: str, whatsapp: bool = False, volume: bool = False, android: bool = False) -> None:
     if os.path.exists(destino) and os.listdir(destino):
         sys.exit(f"a pasta {destino} já existe e não está vazia")
     os.makedirs(os.path.join(destino, "dados", "com.android.providers.telephony", "databases"))
@@ -173,6 +186,8 @@ def gerar(destino: str, whatsapp: bool = False, volume: bool = False) -> None:
         conn.close()
     if whatsapp:
         gerar_whatsapp(destino)
+    if android:
+        gerar_android(destino)
     if volume:
         gerar_imagens(destino)
     print(destino)
@@ -182,7 +197,8 @@ if __name__ == "__main__":
     args = sys.argv[1:]
     whatsapp = "--whatsapp" in args
     volume = "--volume" in args
-    args = [a for a in args if a not in ("--whatsapp", "--volume")]
+    android = "--android" in args
+    args = [a for a in args if a not in ("--whatsapp", "--volume", "--android")]
     if len(args) != 1:
         sys.exit(__doc__)
-    gerar(args[0], whatsapp, volume)
+    gerar(args[0], whatsapp, volume, android)

@@ -8,11 +8,12 @@
 //!   dispositivos, extrações importadas (inventário, artefatos e origem) e auditoria.
 //!   É autocontido: copiar a pasta do caso leva todos os dados junto.
 
+pub mod agenda;
 pub mod auditoria;
 pub mod busca;
 pub mod caso;
 mod conexao;
-pub use conexao::normalizar_busca;
+pub use conexao::{normalizar_busca, so_digitos};
 pub mod conversas;
 pub mod erro;
 pub mod evidencias;
