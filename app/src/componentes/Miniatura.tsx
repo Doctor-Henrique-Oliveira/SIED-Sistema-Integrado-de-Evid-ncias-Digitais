@@ -44,7 +44,7 @@ export function MiniaturaArquivo({ caso, arquivoId, icone, categoria, ajuste = "
           <Icone nome={icone} className={`size-8 ${m.isPending && pedir != null ? "animate-pulse" : ""}`} />
           {motivo && m.data!.estado !== "sem_suporte" && (
             <span
-              className="absolute inset-x-0 bottom-0 truncate bg-fundo/85 px-1.5 py-0.5 text-center text-[10px] text-atencao"
+              className="absolute inset-x-0 bottom-0 truncate bg-fundo/85 px-1.5 py-0.5 text-center text-3xs text-atencao"
               title={motivo}
             >
               {nomeEstado[m.data!.estado] ?? m.data!.estado}

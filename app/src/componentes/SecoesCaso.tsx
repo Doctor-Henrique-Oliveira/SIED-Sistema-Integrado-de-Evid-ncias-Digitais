@@ -81,11 +81,9 @@ export function SecaoDispositivos({ caso, compacto }: { caso: Caso; compacto?: b
         ) : compacto ? (
           <ul className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3" aria-label="Dispositivos do caso">
             {dispositivos.data.map((d) => (
-              <li key={d.id} className="rounded-lg border border-borda bg-sup-2/60 p-3">
+              <li key={d.id} className="rounded-lg border border-borda bg-sup-2/50 p-3">
                 <div className="flex items-start gap-3">
-                  <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-sup-3 text-texto-2">
-                    <Icone nome="dispositivo" className="size-5" />
-                  </span>
+                  <Icone nome="dispositivo" className="mt-0.5 size-4 shrink-0 text-texto-3" />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
                       <p className="truncate font-medium text-texto">{d.apelido}</p>
@@ -240,7 +238,7 @@ export function SecaoExtracoes({ caso, compacto }: { caso: Caso; compacto?: bool
                       <p className="tabular text-texto">{numero(x.total_artefatos)}</p>
                     </div>
                   </div>
-                  <p className="mt-2 truncate font-mono text-[11px] text-texto-3" title={x.origem_caminho}>
+                  <p className="mt-2 truncate font-mono text-2xs text-texto-3" title={x.origem_caminho}>
                     {x.origem_caminho}
                   </p>
                 </Link>
@@ -270,7 +268,7 @@ export function SecaoExtracoes({ caso, compacto }: { caso: Caso; compacto?: bool
                       <Link to={`/casos/${caso.id}/extracoes/${x.id}`} className="font-medium text-ouro-claro hover:underline">
                         {apelido(x.dispositivo_id)}
                       </Link>
-                      <div className="max-w-xs truncate font-mono text-[11px] text-texto-3" title={x.origem_caminho}>
+                      <div className="max-w-xs truncate font-mono text-2xs text-texto-3" title={x.origem_caminho}>
                         {x.origem_caminho}
                       </div>
                     </td>
@@ -353,12 +351,12 @@ export function SecaoAtividades({ caso }: { caso: Caso }) {
       ) : auditoria.isError ? (
         <Aviso>{auditoria.error.message}</Aviso>
       ) : (
-        <ol className="relative space-y-2.5 border-l border-borda-2 pl-4 text-[13px]" aria-label="Atividades recentes">
+        <ol className="relative space-y-2.5 border-l border-borda-2 pl-4 text-sm" aria-label="Atividades recentes">
           {auditoria.data.map((r) => (
             <li key={r.seq} className="relative">
               <span className="absolute -left-[21px] top-1.5 size-2 rounded-full bg-borda-2 ring-4 ring-sup" aria-hidden />
               <p className="text-texto">{nomeAcao[r.acao] ?? r.acao}</p>
-              <p className="tabular text-[11px] text-texto-3">
+              <p className="tabular text-2xs text-texto-3">
                 {dataHora(r.ts, caso.fuso_horario)} · {r.usuario} · {r.maquina}
               </p>
             </li>

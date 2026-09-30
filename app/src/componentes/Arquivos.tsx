@@ -92,7 +92,7 @@ function DetalheArquivo({ caso, f, parser, fechar }: {
             ajuste="conter"
             className="aspect-[4/3] w-full rounded-md border border-borda"
           />
-          <p className="mt-1.5 text-[11px] leading-snug text-texto-3">
+          <p className="mt-1.5 text-2xs leading-snug text-texto-3">
             <SobreMiniatura caso={caso} arquivoId={f.id} categoria={f.categoria} />
           </p>
         </div>
@@ -292,7 +292,7 @@ function CartaoMidia({ caso, f, ativo, selecionar }: {
       />
       <span className="block w-full px-2 py-1.5">
         <span className="block truncate text-xs text-texto">{nomeArquivo(f.caminho)}</span>
-        <span className="tabular block text-[11px] text-texto-3">
+        <span className="tabular block text-2xs text-texto-3">
           {nomeCategoria[f.categoria] ?? f.categoria} · {tamanho(f.tamanho)}
         </span>
       </span>
@@ -374,7 +374,7 @@ function GradeVirtual({ caso, extracaoId, filtro, primeira, selecionado, selecio
           </li>
         ))}
       </ul>
-      <p className="tabular px-3 pb-2 text-center text-[11px] text-texto-3" role="status">
+      <p className="tabular px-3 pb-2 text-center text-2xs text-texto-3" role="status">
         {numero(primeira.total)} itens · carregados conforme a rolagem
       </p>
     </div>

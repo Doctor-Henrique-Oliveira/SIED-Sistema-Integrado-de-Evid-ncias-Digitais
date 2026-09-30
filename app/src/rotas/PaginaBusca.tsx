@@ -96,11 +96,11 @@ function Busca({ caso }: { caso: Caso }) {
         subtitulo="Mensagens, telefones e nomes de arquivo de todas as extrações do caso."
       />
       <div className="space-y-4">
-        <section aria-label="Formulário de busca" className="rounded-xl border border-borda bg-sup p-4">
+        <section aria-label="Formulário de busca" className="painel p-4">
           <form onSubmit={buscar} className="space-y-3" role="search">
             <div className="flex gap-2">
               <div className="relative flex-1">
-                <Icone nome="busca" className="pointer-events-none absolute left-3.5 top-1/2 size-5 -translate-y-1/2 text-texto-3" />
+                <Icone nome="busca" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-texto-3" />
                 <input
                   id="texto-busca"
                   type="search"
@@ -108,7 +108,7 @@ function Busca({ caso }: { caso: Caso }) {
                   onChange={(e) => setTexto(e.target.value)}
                   placeholder="Palavras, telefone ou nome de arquivo"
                   aria-label="Texto da busca"
-                  className="w-full rounded-lg border border-borda-2 bg-fundo py-2.5 pl-11 pr-3 text-[15px] text-texto outline-none placeholder:text-texto-3 focus:border-ouro/70 focus:ring-2 focus:ring-ouro/20"
+                  className="entrada h-10 w-full pl-10 text-base"
                 />
               </div>
               <Botao type="submit" className="px-5">
@@ -190,7 +190,7 @@ function Busca({ caso }: { caso: Caso }) {
                     return (
                       <li key={reg.id}>
                         <Link to={destino} className="group block px-4 py-2.5 transition-colors hover:bg-sup-2" data-teste="achado">
-                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-texto-3">
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-texto-3">
                             <span className="tabular">{dataHoraMs(reg.data_hora_ms, caso.fuso_horario)}</span>
                             <span className="font-medium uppercase text-texto-2">{rotuloApp(reg.app)}</span>
                             {reg.tipo !== "mensagem" && <Selo tom="info">{nomeTipoArtefato[reg.tipo] ?? reg.tipo}</Selo>}
@@ -200,7 +200,7 @@ function Busca({ caso }: { caso: Caso }) {
                               {a.conversa_id != null ? "abrir na conversa →" : "abrir na extração →"}
                             </span>
                           </div>
-                          <p className="mt-0.5 text-[13px] text-texto">
+                          <p className="mt-0.5 text-sm text-texto">
                             {a.trecho ? (
                               <TrechoDestacado texto={a.trecho} />
                             ) : (

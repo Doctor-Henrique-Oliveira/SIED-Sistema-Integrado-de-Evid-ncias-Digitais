@@ -48,19 +48,19 @@ export const grupos: { titulo: string; modulos: Modulo[] }[] = [
   },
 ];
 
-const configuracoes: Modulo = { rotulo: "Configurações", icone: "config", para: "/configuracoes", exato: true };
+export const configuracoes: Modulo = { rotulo: "Configurações", icone: "config", para: "/configuracoes", exato: true };
 
 function Item({ m, casoId }: { m: Modulo; casoId: string | undefined }) {
   const precisaCaso = m.para.includes(":caso");
-  const base = "group flex items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[13px] transition-colors";
+  const base = "group relative flex h-8 items-center gap-2.5 rounded-md px-2.5 text-sm transition-colors";
   if (precisaCaso && !casoId) {
     return (
       <span
         aria-disabled="true"
         title="Abra um caso para usar este módulo"
-        className={`${base} cursor-not-allowed text-texto-3/60`}
+        className={`${base} cursor-not-allowed text-texto-4`}
       >
-        <Icone nome={m.icone} className="size-[18px]" />
+        <Icone nome={m.icone} className="size-4" />
         {m.rotulo}
       </span>
     );
@@ -72,15 +72,15 @@ function Item({ m, casoId }: { m: Modulo; casoId: string | undefined }) {
       title={m.dica}
       className={({ isActive }) =>
         `${base} ${
-          isActive
-            ? "bg-ouro/12 font-medium text-ouro-claro shadow-[inset_2px_0_0_var(--color-ouro)]"
-            : "text-texto-2 hover:bg-sup-2 hover:text-texto"
+          isActive ? "bg-sup-2 font-medium text-texto" : "text-texto-2 hover:bg-sup/80 hover:text-texto"
         }`
       }
     >
       {({ isActive }) => (
         <>
-          <Icone nome={m.icone} className={`size-[18px] ${isActive ? "text-ouro" : "text-texto-3 group-hover:text-texto-2"}`} />
+          {/* Marca do item ativo: filete dourado rente à borda da barra. */}
+          {isActive && <span className="absolute -left-3 top-1.5 bottom-1.5 w-0.5 rounded-r-sm bg-ouro" aria-hidden />}
+          <Icone nome={m.icone} className={`size-4 ${isActive ? "text-ouro" : "text-texto-3 group-hover:text-texto-2"}`} />
           {m.rotulo}
         </>
       )}
@@ -90,33 +90,33 @@ function Item({ m, casoId }: { m: Modulo; casoId: string | undefined }) {
 
 export function BarraLateral({ caso, info }: { caso: Caso | undefined; info: InfoApp | undefined }) {
   return (
-    <aside className="flex w-56 shrink-0 flex-col border-r border-borda bg-lateral">
-      <div className="flex items-center gap-2.5 px-4 pb-3 pt-4">
-        <span className="grid size-9 place-items-center rounded-lg bg-gradient-to-b from-ouro/25 to-ouro/5 text-ouro ring-1 ring-ouro/40">
-          <Icone nome="escudo" className="size-5" />
+    <aside className="flex w-[232px] shrink-0 flex-col border-r border-borda bg-lateral">
+      <div className="flex h-12 shrink-0 items-center gap-2.5 border-b border-borda px-4">
+        <span className="grid size-7 place-items-center rounded-md border border-ouro/45 text-ouro">
+          <Icone nome="escudo" className="size-4" />
         </span>
-        <div className="min-w-0">
-          <p className="text-[15px] font-semibold leading-tight tracking-[0.12em] text-texto">SIED</p>
-          <p className="truncate text-[10px] leading-tight text-texto-3">Sistema Integrado de Evidências Digitais</p>
+        <div className="min-w-0 leading-none">
+          <p className="text-sm font-semibold tracking-[0.2em] text-texto">SIED</p>
+          <p className="mt-1 truncate text-3xs tracking-wide text-texto-3">Evidências Digitais</p>
         </div>
       </div>
 
-      <div className="mx-3 mb-2 rounded-lg border border-borda bg-sup px-3 py-2">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-texto-3">Caso aberto</p>
+      <div className="border-b border-borda px-4 py-3">
+        <p className="sobrelinha">Caso ativo</p>
         {caso ? (
-          <p className="truncate text-[13px] font-medium text-ouro-claro" title={identificacaoCaso(caso)}>
+          <p className="mt-0.5 truncate text-sm font-medium text-ouro-claro" title={identificacaoCaso(caso)}>
             {identificacaoCaso(caso)}
           </p>
         ) : (
-          <p className="text-[13px] text-texto-3">Nenhum</p>
+          <p className="mt-0.5 text-sm text-texto-3">Nenhum caso aberto</p>
         )}
       </div>
 
-      <nav className="flex-1 space-y-3 overflow-y-auto px-3 py-1" aria-label="Navegação principal">
+      <nav className="flex-1 space-y-4 overflow-y-auto px-3 py-3" aria-label="Navegação principal">
         {grupos.map((g) => (
           <div key={g.titulo}>
-            <p className="px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-texto-3">{g.titulo}</p>
-            <div className="space-y-0.5">
+            <p className="sobrelinha px-2.5 pb-1.5 text-texto-4!">{g.titulo}</p>
+            <div className="space-y-px">
               {g.modulos.map((m) => (
                 <Item key={m.rotulo} m={m} casoId={caso?.id} />
               ))}
@@ -128,12 +128,16 @@ export function BarraLateral({ caso, info }: { caso: Caso | undefined; info: Inf
       <div className="border-t border-borda px-3 py-2">
         <Item m={configuracoes} casoId={caso?.id} />
       </div>
-      <footer className="space-y-1 border-t border-borda px-4 py-3 text-[11px] text-texto-3">
-        <p className="flex items-center gap-1.5">
+      <footer className="flex items-center justify-between gap-2 whitespace-nowrap border-t border-borda px-4 py-2.5 text-2xs text-texto-3">
+        <p className="flex items-center gap-1.5" title="O SIED não usa internet: tudo fica nesta estação">
           <span className="size-1.5 rounded-full bg-ok" aria-hidden />
           <span className="text-texto-2">Offline</span> · dados locais
         </p>
-        {info && <p className="tabular">Versão {info.versao}</p>}
+        {info && (
+          <p className="tabular font-mono text-3xs" title={`Versão ${info.versao}`}>
+            v{info.versao}
+          </p>
+        )}
       </footer>
     </aside>
   );

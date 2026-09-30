@@ -1,7 +1,7 @@
 import { useId, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
 
-const base =
-  "w-full rounded-lg border bg-fundo px-3 py-2 text-[13px] text-texto outline-none transition placeholder:text-texto-3 focus:border-ouro/70 focus:ring-2 focus:ring-ouro/20";
+// Receita `entrada` em estilos.css (borda, foco dourado, desabilitado, inválido).
+const base = "entrada w-full";
 
 function Rotulo({ id, rotulo, obrigatorio, erro, ajuda, children }: {
   id: string;
@@ -12,7 +12,7 @@ function Rotulo({ id, rotulo, obrigatorio, erro, ajuda, children }: {
   children: ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1">
       <label htmlFor={id} className="text-xs font-medium text-texto-2">
         {rotulo}
         {obrigatorio && <span className="ml-0.5 text-ouro" aria-hidden>*</span>}
@@ -37,7 +37,7 @@ export function Campo({ rotulo, erro, ajuda, obrigatorio, ...resto }: Comum & In
         id={id}
         aria-invalid={!!erro}
         aria-describedby={erro ? `${id}-erro` : undefined}
-        className={`${base} ${erro ? "border-erro/70" : "border-borda-2"}`}
+        className={base}
         {...resto}
       />
     </Rotulo>
@@ -52,7 +52,7 @@ export function AreaTexto({ rotulo, erro, ajuda, obrigatorio, ...resto }: Comum 
         id={id}
         rows={3}
         aria-invalid={!!erro}
-        className={`${base} ${erro ? "border-erro/70" : "border-borda-2"}`}
+        className={base}
         {...resto}
       />
     </Rotulo>
@@ -63,7 +63,7 @@ export function Selecao({ rotulo, erro, ajuda, obrigatorio, children, ...resto }
   const id = useId();
   return (
     <Rotulo id={id} rotulo={rotulo} obrigatorio={obrigatorio} erro={erro} ajuda={ajuda}>
-      <select id={id} aria-invalid={!!erro} className={`${base} ${erro ? "border-erro/70" : "border-borda-2"}`} {...resto}>
+      <select id={id} aria-invalid={!!erro} className={base} {...resto}>
         {children}
       </select>
     </Rotulo>

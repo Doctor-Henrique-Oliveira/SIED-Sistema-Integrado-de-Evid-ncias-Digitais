@@ -2,7 +2,8 @@ import { useEffect, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { Caso, Extracao, ResumoCaso } from "../api/cliente";
 import { useAbrirCaso, useCasoAtual, useExtracoes, useResumoCaso } from "../api/consultas";
-import { Aviso, Cartao, Carregando, Indicador, Selo } from "../componentes/Estrutura";
+import { classeBotao } from "../componentes/Botao";
+import { Aviso, Cartao, Carregando, FaixaIndicadores, Indicador, Selo } from "../componentes/Estrutura";
 import { Icone, type NomeIcone } from "../componentes/Icone";
 import { SecaoAtividades, SecaoDispositivos, SecaoExtracoes } from "../componentes/SecoesCaso";
 import { dataHora, identificacaoCaso, numero, tamanho } from "../util/formatar";
@@ -73,24 +74,17 @@ function CabecalhoCaso({ caso, pasta }: { caso: Caso; pasta: string }) {
     ["Criado em", dataHora(caso.criado_em, fuso)],
   ];
   return (
-    <section
-      aria-label="Identificação do caso"
-      className="overflow-hidden rounded-xl border border-borda bg-gradient-to-br from-sup-2 via-sup to-sup"
-    >
-      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-borda px-5 pb-3.5 pt-4">
-        <div className="flex min-w-0 items-start gap-3.5">
-          <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-ouro/12 text-ouro ring-1 ring-ouro/35">
-            <Icone nome="casos" className="size-6" />
-          </span>
-          <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-ouro">
-              {caso.procedimento ?? "Procedimento não informado"}
-            </p>
-            <h1 className="truncate text-2xl font-semibold tracking-tight text-texto">{identificacaoCaso(caso)}</h1>
-            <p className="mt-0.5 truncate font-mono text-[11px] text-texto-3" title="Pasta do caso">
-              {pasta}
-            </p>
-          </div>
+    <section aria-label="Identificação do caso" className="border-b border-borda pb-4">
+      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+        <div className="min-w-0">
+          <p className="sobrelinha flex items-center gap-1.5 text-ouro!">
+            <Icone nome="casos" className="size-3.5" />
+            {caso.procedimento ?? "Procedimento não informado"}
+          </p>
+          <h1 className="mt-1 truncate text-2xl font-semibold tracking-[-0.015em] text-texto">{identificacaoCaso(caso)}</h1>
+          <p className="mt-0.5 truncate font-mono text-2xs text-texto-3" title="Pasta do caso">
+            {pasta}
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Selo tom="ok" titulo="O banco deste caso está aberto nesta estação">
@@ -101,19 +95,17 @@ function CabecalhoCaso({ caso, pasta }: { caso: Caso; pasta: string }) {
           </Selo>
         </div>
       </div>
-      <dl className="grid grid-cols-2 gap-x-6 gap-y-3 px-5 py-3.5 md:grid-cols-4 2xl:grid-cols-8">
+      <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-4 2xl:grid-cols-8">
         {campos.map(([rotulo, valor]) => (
-          <div key={rotulo} className="min-w-0">
-            <dt className="text-[11px] font-medium uppercase tracking-wider text-texto-3">{rotulo}</dt>
-            <dd className="mt-0.5 truncate text-[13px] text-texto" title={typeof valor === "string" ? valor : undefined}>
+          <div key={rotulo} className="min-w-0 border-l border-borda-2 pl-3">
+            <dt className="sobrelinha truncate">{rotulo}</dt>
+            <dd className="mt-0.5 truncate text-sm text-texto" title={typeof valor === "string" ? valor : undefined}>
               {valor ?? "—"}
             </dd>
           </div>
         ))}
       </dl>
-      {caso.observacoes && (
-        <p className="whitespace-pre-wrap border-t border-borda px-5 py-3 text-[13px] text-texto-2">{caso.observacoes}</p>
-      )}
+      {caso.observacoes && <p className="mt-3 whitespace-pre-wrap text-sm text-texto-2">{caso.observacoes}</p>}
     </section>
   );
 }
@@ -128,16 +120,12 @@ function Atalhos({ caso }: { caso: Caso }) {
     ["Relatórios", "relatorios", "relatorios"],
   ];
   return (
-    <nav aria-label="Atalhos do caso" className="flex flex-wrap gap-2">
+    <nav aria-label="Atalhos do caso" className="flex flex-wrap gap-1.5">
       {itens.map(([rotulo, icone, rota]) => (
         <Link
           key={rota}
           to={`/casos/${caso.id}/${rota}`}
-          className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-[13px] font-medium transition-colors ${
-            rota === "busca"
-              ? "border-ouro/50 bg-ouro text-[#1a1305] hover:bg-ouro-claro"
-              : "border-borda-2 bg-sup text-texto hover:bg-sup-2"
-          }`}
+          className={classeBotao(rota === "busca" ? "primario" : "secundario")}
         >
           <Icone nome={icone} className="size-4" />
           {rotulo}
@@ -158,7 +146,7 @@ function Indicadores({ caso, r }: { caso: Caso; r: ResumoCaso | undefined }) {
     .join(" · ");
   const n = (v: number | undefined) => (v == null ? null : numero(v));
   return (
-    <section aria-label="Indicadores do caso" className="grid grid-cols-2 gap-3 md:grid-cols-4 2xl:grid-cols-8">
+    <FaixaIndicadores rotulo="Indicadores do caso" className="grid-cols-2 md:grid-cols-4 2xl:grid-cols-8">
       <Indicador rotulo="Dispositivos" icone="dispositivo" valor={n(r?.dispositivos)} para={`${base}/dispositivos`} />
       <Indicador
         rotulo="Extrações"
@@ -185,7 +173,7 @@ function Indicadores({ caso, r }: { caso: Caso; r: ResumoCaso | undefined }) {
         detalhe="registros com coordenadas"
         para={`${base}/localizacoes`}
       />
-    </section>
+    </FaixaIndicadores>
   );
 }
 
@@ -223,12 +211,12 @@ function Alertas({ caso, r }: { caso: Caso; r: ResumoCaso | undefined }) {
       {extracoes.isPending ? (
         <Carregando />
       ) : alertas.length === 0 ? (
-        <p className="flex items-center gap-2 text-[13px] text-texto-2">
+        <p className="flex items-center gap-2 text-sm text-texto-2">
           <Icone nome="check" className="size-4 text-ok" />
           Nenhum alerta nas importações deste caso.
         </p>
       ) : (
-        <ul className="space-y-2 text-[13px]" aria-label="Alertas do caso">
+        <ul className="space-y-2 text-sm" aria-label="Alertas do caso">
           {alertas.map((a, i) => (
             <li key={i} className="flex items-start gap-2">
               <Icone nome={a.tom === "info" ? "info" : "alerta"} className={`mt-0.5 size-4 ${cor[a.tom]}`} />

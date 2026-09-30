@@ -109,7 +109,7 @@ export function PaginaConfiguracoes() {
             />
           </Cartao>
           <Cartao titulo="Segurança e rede" icone="cadeado">
-            <ul className="space-y-2 text-[13px] text-texto-2">
+            <ul className="space-y-2 text-sm text-texto-2">
               <li className="flex items-center gap-2">
                 <Selo tom="ok">Offline</Selo> O SIED não usa internet; nada sai desta estação.
               </li>

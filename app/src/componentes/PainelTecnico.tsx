@@ -22,7 +22,7 @@ export function PainelTecnico({ caso, artefatoId, className = "" }: { caso: Caso
   if (artefatoId == null)
     return (
       <Cartao titulo="Detalhes técnicos" icone="banco" className={className}>
-        <p className="text-[13px] text-texto-2">Selecione um registro para ver a origem exata do dado.</p>
+        <p className="text-sm text-texto-2">Selecione um registro para ver a origem exata do dado.</p>
       </Cartao>
     );
   if (d.isPending)
@@ -48,7 +48,7 @@ export function PainelTecnico({ caso, artefatoId, className = "" }: { caso: Caso
     >
       <div aria-label="Detalhes técnicos do registro">
         <div className="border-b border-borda px-4 py-3">
-          <p className="tabular text-[13px] text-texto">{dataHoraMs(a.resumo.data_hora_ms, caso.fuso_horario)}</p>
+          <p className="tabular text-sm text-texto">{dataHoraMs(a.resumo.data_hora_ms, caso.fuso_horario)}</p>
           <p className="text-xs text-texto-3">
             {rotuloApp(a.resumo.app ?? a.resumo.tipo)} · {nomeTipoArtefato[a.resumo.tipo] ?? a.resumo.tipo}
             {a.resumo.subtipo ? ` · ${rotuloSubtipo(a.resumo.subtipo)}` : ""} · registro nº {a.resumo.id}
@@ -79,7 +79,7 @@ export function PainelTecnico({ caso, artefatoId, className = "" }: { caso: Caso
                 {r.consulta ?? "—"}
               </Linha>
             </dl>
-            <p className="mb-1 mt-2 text-[11px] font-medium uppercase tracking-wider text-texto-3">Valores brutos</p>
+            <p className="sobrelinha mb-1 mt-2">Valores brutos</p>
             <div className="overflow-x-auto rounded-md border border-borda bg-fundo">
               <table className="w-full text-xs" aria-label="Valores brutos">
                 <tbody className="divide-y divide-borda">

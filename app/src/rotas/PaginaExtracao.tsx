@@ -66,8 +66,8 @@ function DetalheExtracao({ caso, extracaoId }: { caso: Caso; extracaoId: string 
 
 function Bloco({ titulo, icone, children, className = "" }: { titulo: string; icone: NomeIcone; children: ReactNode; className?: string }) {
   return (
-    <section aria-label={titulo} className={`min-w-0 rounded-xl border border-borda bg-sup p-3.5 ${className}`}>
-      <h2 className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-texto-3">
+    <section aria-label={titulo} className={`min-w-0 painel p-3.5 ${className}`}>
+      <h2 className="sobrelinha mb-2 flex items-center gap-2">
         <Icone nome={icone} className="size-3.5" />
         {titulo}
       </h2>
@@ -78,7 +78,7 @@ function Bloco({ titulo, icone, children, className = "" }: { titulo: string; ic
 
 function Par({ rotulo, children, mono }: { rotulo: string; children: ReactNode; mono?: boolean }) {
   return (
-    <div className="flex items-baseline justify-between gap-3 text-[13px]">
+    <div className="flex items-baseline justify-between gap-3 text-sm">
       <dt className="shrink-0 text-texto-2">{rotulo}</dt>
       <dd className={`min-w-0 break-words text-right text-texto ${mono ? "break-all font-mono text-xs" : "tabular"}`}>{children ?? "—"}</dd>
     </div>
@@ -121,14 +121,14 @@ function BlocosTecnicos({ caso, x, disp, parsers }: { caso: Caso; x: Extracao; d
       </div>
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <Bloco titulo="Origem (somente leitura)" icone="cadeado">
-          <div className="text-[13px]">
+          <div className="text-sm">
             <dt className="text-texto-2">Pasta de origem</dt>
             <dd className="mt-0.5 break-all font-mono text-xs text-texto">{x.origem_caminho}</dd>
           </div>
           <Par rotulo="Versão do SIED">{x.sied_versao}</Par>
         </Bloco>
         <Bloco titulo="Integridade" icone="integridade">
-          <div className="text-[13px]">
+          <div className="text-sm">
             <dt className="text-texto-2">SHA-256 do manifesto</dt>
             <dd className="mt-0.5" data-teste="hash-manifesto">
               <Hash valor={x.hash_manifesto} />
@@ -144,7 +144,7 @@ function BlocosTecnicos({ caso, x, disp, parsers }: { caso: Caso; x: Extracao; d
       </div>
       {x.erro && x.status !== "concluida" && <Aviso tipo={x.status === "falhou" ? "erro" : "atencao"}>{x.erro}</Aviso>}
       {x.observacoes.length > 0 && (
-        <details className="group rounded-xl border border-borda bg-sup text-[13px]">
+        <details className="group painel text-sm">
           <summary className="flex cursor-pointer list-none items-center gap-2 px-3.5 py-2.5 text-texto-2 hover:text-texto">
             <Icone nome="direita" className="size-3.5 transition-transform group-open:rotate-90" />
             Observações da importação ({x.observacoes.length})

@@ -1,41 +1,236 @@
 @import "tailwindcss";
 
 /*
- * Identidade visual do SIED: tema escuro técnico.
- * - Superfícies em azul-quase-preto, cada nível um pouco mais claro.
- * - Dourado/âmbar para o que é institucional ou prioritário (marca, item ativo, ação principal).
- * - Verde só para estado positivo, azul para informação, laranja para atenção, vermelho só para erro.
- * Fontes do sistema: nada é baixado da internet (o SIED funciona 100% offline).
+ * Design system do SIED: tema escuro técnico, navy/preto com dourado.
+ *
+ * Princípios:
+ * - Superfícies em azul-quase-preto; cada nível só um pouco mais claro. Hierarquia por
+ *   tipografia, alinhamento e linhas finas, não por cartões, sombras ou brilho.
+ * - Dourado é raro: marca, item ativo, ação principal e foco. Nunca decoração.
+ * - Verde só para estado positivo, azul para informação, laranja para atenção,
+ *   vermelho só para erro.
+ * - Cantos pequenos e precisos; números sempre tabulares; hashes e caminhos em mono.
+ * - Fontes do sistema: nada é baixado da internet (o SIED funciona 100% offline).
+ *
+ * Todas as telas usam só estes tokens (classes bg-sup, text-texto-2, rounded-md...)
+ * e as receitas abaixo (botao, entrada, sobrelinha...). Nada de cor solta nas páginas.
  */
 @theme {
   --font-sans: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
   --font-mono: "Cascadia Mono", "Cascadia Code", Consolas, ui-monospace, "DejaVu Sans Mono", monospace;
 
-  /* Superfícies */
-  --color-fundo: #090d14;
-  --color-lateral: #0b111a;
-  --color-sup: #101824;
-  --color-sup-2: #152030;
-  --color-sup-3: #1b283b;
-  --color-borda: #1f2b3d;
-  --color-borda-2: #2c3b52;
+  /* Escala tipográfica (px fixos: a estação é desktop, 1366 a 1920 de largura). */
+  --text-3xs: 10px;
+  --text-3xs--line-height: 14px;
+  --text-2xs: 11px;
+  --text-2xs--line-height: 16px;
+  --text-xs: 12px;
+  --text-xs--line-height: 17px;
+  --text-sm: 13px;
+  --text-sm--line-height: 19px;
+  --text-base: 14px;
+  --text-base--line-height: 21px;
+  --text-lg: 16px;
+  --text-lg--line-height: 23px;
+  --text-xl: 19px;
+  --text-xl--line-height: 26px;
+  --text-2xl: 22px;
+  --text-2xl--line-height: 29px;
+
+  /* Espaçamento entre letras das sobrelinhas (rótulos em caixa alta). */
+  --tracking-sobre: 0.09em;
+
+  /* Cantos: pequenos e precisos. As bolhas de conversa usam 2xl. */
+  --radius-sm: 3px;
+  --radius-md: 4px;
+  --radius-lg: 5px;
+  --radius-xl: 6px;
+  --radius-2xl: 12px;
+
+  /* Superfícies (do fundo para cima) */
+  --color-fundo: #07090e;
+  --color-lateral: #090c13;
+  --color-sup: #0d121b;
+  --color-sup-2: #121925;
+  --color-sup-3: #192232;
+  --color-borda: #192130;
+  --color-borda-2: #253045;
 
   /* Texto */
-  --color-texto: #e6ebf2;
-  --color-texto-2: #a7b2c2;
-  --color-texto-3: #6f7d92;
+  --color-texto: #e8ebf1;
+  --color-texto-2: #a1abbb;
+  --color-texto-3: #677387;
+  --color-texto-4: #465062;
 
   /* Acento institucional */
-  --color-ouro: #d5a64c;
-  --color-ouro-claro: #e8c27a;
-  --color-ouro-escuro: #a57b2c;
+  --color-ouro: #c9a257;
+  --color-ouro-claro: #e2c381;
+  --color-ouro-escuro: #8e6f31;
+  /* Texto sobre fundo dourado. */
+  --color-ouro-tinta: #15100a;
 
-  /* Semântica */
-  --color-ok: #3cb88a;
-  --color-info: #4e9de6;
-  --color-atencao: #e3923b;
-  --color-erro: #e5534b;
+  /* Semântica (cor do sinal e cor do texto dentro de um aviso) */
+  --color-ok: #3faf86;
+  --color-ok-claro: #a6dcc6;
+  --color-info: #5a9bd9;
+  --color-info-claro: #bcd6f1;
+  --color-atencao: #da903e;
+  --color-atencao-claro: #f0cc9f;
+  --color-erro: #e0564e;
+  --color-erro-claro: #f1b3ae;
 }
+
+/* ---------- Receitas (utilitários do design system) ---------- */
+
+/* Rótulo técnico em caixa alta (cabeçalhos de tabela, grupos, campos de definição). */
+@utility sobrelinha {
+  font-size: var(--text-3xs);
+  line-height: var(--text-3xs--line-height);
+  font-weight: 600;
+  letter-spacing: var(--tracking-sobre);
+  text-transform: uppercase;
+  color: var(--color-texto-3);
+}
+
+/* Botões: altura fixa, canto pequeno, um único dourado por tela. */
+@utility botao {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 2rem;
+  padding-inline: 0.75rem;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  font-size: var(--text-sm);
+  line-height: 1;
+  font-weight: 500;
+  white-space: nowrap;
+  transition:
+    background-color 120ms,
+    border-color 120ms,
+    color 120ms;
+  &:disabled,
+  &[aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+}
+
+@utility botao-p {
+  height: 1.625rem;
+  padding-inline: 0.5rem;
+  gap: 0.375rem;
+  font-size: var(--text-xs);
+}
+
+@utility botao-primario {
+  background-color: var(--color-ouro);
+  border-color: var(--color-ouro);
+  color: var(--color-ouro-tinta);
+  font-weight: 600;
+  &:hover:not(:disabled) {
+    background-color: var(--color-ouro-claro);
+    border-color: var(--color-ouro-claro);
+  }
+  &:disabled {
+    background-color: var(--color-sup-3);
+    border-color: var(--color-sup-3);
+    color: var(--color-texto-4);
+  }
+}
+
+@utility botao-secundario {
+  background-color: var(--color-sup-2);
+  border-color: var(--color-borda-2);
+  color: var(--color-texto);
+  &:hover:not(:disabled) {
+    background-color: var(--color-sup-3);
+    border-color: color-mix(in srgb, var(--color-texto-3) 55%, var(--color-borda-2));
+  }
+  &:disabled {
+    color: var(--color-texto-4);
+    border-color: var(--color-borda);
+  }
+}
+
+@utility botao-fantasma {
+  background-color: transparent;
+  color: var(--color-texto-2);
+  &:hover:not(:disabled) {
+    background-color: var(--color-sup-2);
+    color: var(--color-texto);
+  }
+  &:disabled {
+    color: var(--color-texto-4);
+  }
+}
+
+@utility botao-perigo {
+  background-color: color-mix(in srgb, var(--color-erro) 9%, transparent);
+  border-color: color-mix(in srgb, var(--color-erro) 40%, transparent);
+  color: var(--color-erro);
+  &:hover:not(:disabled) {
+    background-color: color-mix(in srgb, var(--color-erro) 17%, transparent);
+  }
+  &:disabled {
+    opacity: 0.5;
+  }
+}
+
+/* Campos de entrada (texto, seleção, área de texto). */
+@utility entrada {
+  min-height: 2rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-borda-2);
+  background-color: var(--color-fundo);
+  padding: 0.375rem 0.625rem;
+  font-size: var(--text-sm);
+  line-height: var(--text-sm--line-height);
+  color: var(--color-texto);
+  outline: none;
+  transition:
+    border-color 120ms,
+    box-shadow 120ms;
+  &::placeholder {
+    color: var(--color-texto-3);
+  }
+  &:hover:not(:disabled):not(:focus) {
+    border-color: color-mix(in srgb, var(--color-texto-3) 50%, var(--color-borda-2));
+  }
+  &:focus {
+    border-color: color-mix(in srgb, var(--color-ouro) 75%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-ouro) 16%, transparent);
+  }
+  &:disabled {
+    cursor: not-allowed;
+    color: var(--color-texto-3);
+    background-color: var(--color-sup);
+  }
+  &[aria-invalid="true"] {
+    border-color: color-mix(in srgb, var(--color-erro) 70%, transparent);
+  }
+}
+
+/* Painel: superfície com borda fina. Base de Cartao e dos blocos das páginas. */
+@utility painel {
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-borda);
+  background-color: var(--color-sup);
+}
+
+/* Tecla de atalho. */
+@utility tecla {
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-borda-2);
+  background-color: var(--color-sup);
+  padding: 0 0.3rem;
+  font-family: var(--font-mono);
+  font-size: var(--text-3xs);
+  line-height: 1rem;
+  color: var(--color-texto-3);
+}
+
+/* ---------- Base ---------- */
 
 html,
 body,
@@ -50,7 +245,15 @@ html {
 body {
   @apply bg-fundo text-texto antialiased;
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: var(--text-base);
+  line-height: var(--text-base--line-height);
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3 {
+  text-wrap: balance;
 }
 
 ::selection {
@@ -58,10 +261,16 @@ body {
   color: var(--color-texto);
 }
 
-/* Foco visível e consistente em tudo que é interativo. */
+/* Foco visível e consistente em tudo que é interativo (os campos têm o próprio anel). */
 :focus-visible {
   outline: 2px solid var(--color-ouro);
   outline-offset: 2px;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
 }
 
 /* Barras de rolagem discretas no tema escuro. */
@@ -94,11 +303,11 @@ body {
 /* Listas de seleção com a mesma cara dos campos (o WebView desenharia o controle nativo claro). */
 select {
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236f7d92' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23677387' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right 0.55rem center;
-  background-size: 1rem;
-  padding-right: 2rem !important;
+  background-position: right 0.5rem center;
+  background-size: 0.9rem;
+  padding-right: 1.75rem !important;
 }
 
 select option {
