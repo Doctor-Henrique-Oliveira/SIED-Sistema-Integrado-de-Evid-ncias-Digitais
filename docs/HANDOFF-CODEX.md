@@ -35,12 +35,13 @@ Visão integral e permanente: `docs/VISAO.md`. Arquitetura aprovada (com ajustes
   evidências e relatório PDF (Typst embutido), e o hardening desta auditoria.
 - **Importador Avilla: só o contrato.** Responde `NaoImplementado`. Aguarda a árvore de uma
   extração real (§26).
-- Testes: 232 Rust (+3 medições ignoradas), 54 de interface (vitest), 1 roteiro E2E no app real
-  (com MMS e linha do tempo; 222 e 50 com o PR #15; 201 e 43 após a auditoria).
+- Testes: 239 Rust (+3 medições ignoradas), 56 de interface (vitest), 1 roteiro E2E no app real
+  (com MMS, linha do tempo e console; 222 e 50 com o PR #15; 201 e 43 após a auditoria).
   CI Linux e Windows.
 - Depois do handoff: design system global (PR #14, merge `132a8d5`), **agenda e registro de
   chamadas do Android** (PR #15, merge `<MERGE15>`, §10.1) e, em construção contínua, **MMS do
-  Android** (§10.2) e **linha do tempo unificada** (§13.1). Próximos passos em §27.
+  Android** (§10.2), **linha do tempo unificada** (§13.1) e **console de importação em tempo
+  real** (§9.1). Próximos passos em §27.
 
 ## 3. Arquitetura
 
@@ -114,7 +115,8 @@ crates/
     src/agenda.rs           contatos, chamadas, resumo das chamadas e vínculo pela agenda
     src/linha_tempo.rs      linha do tempo do caso (registros com data) e resumo
     tests/                  persistencia, importacao, whatsapp, volume, evidencias,
-                            hash_registro, agenda_chamadas, mms, linha_tempo, desempenho (ignorado)
+                            hash_registro, agenda_chamadas, mms, linha_tempo, console,
+                            desempenho (ignorado)
   sied-ingestao/
     src/fonte.rs            CaminhoFonte (endereço seguro), FonteSomenteLeitura
     src/fonte/pasta.rs      PastaSomenteLeitura (não segue links, confere cada parte)
@@ -124,6 +126,7 @@ crates/
     src/parsers/            android_sms.rs, android_mms.rs, android_contatos.rs, android_chamadas.rs,
                             whatsapp_android/, comum.rs (auxiliares), sqlite.rs (leitura segura)
     src/pipeline.rs         inventário, manifesto, cópias verificadas, execução dos parsers
+    src/eventos.rs          eventos do console da importação (fila e releitura do log)
     src/registro.rs         Registro::padrao() (importadores e parsers conhecidos)
     tests/                  contratos, pipeline
   sied-midia/               miniaturas e imagens do relatório (SHA-256 conferido antes)
@@ -258,6 +261,17 @@ Pipeline (`pipeline.rs`), nesta ordem, igual para toda ferramenta:
    `-wal`/`-journal` ilegível gera **aviso** e execução parcial; parser; gravação em lote (500).
 
 Artefato: `normalizar()` (−0.0 → 0.0; `app` vazio → ausente) e depois `hash_registro()`.
+
+### 9.1 Console da importação
+
+- Cada passo real do pipeline chama `Log::anunciar`: vai à fila do `Controle` (`eventos.rs`, até
+  5.000 em memória, consulta pela sequência) e ao `log-importacao.jsonl` com `mensagem` e `tom`.
+- Limites: 30 bancos SQLite e 20 avisos por parser anunciados um a um; gravação a cada 5.000
+  registros. O banco do caso continua com tudo (inventário, avisos, execuções).
+- Comandos `eventos_importacao(desde)` (importação em curso) e `eventos_da_extracao(id)` (relê o
+  log; `BancoCaso::eventos_da_importacao`). As duas linhas do fim (gravação do resultado) são só
+  ao vivo. Interface: `app/src/componentes/ConsoleEventos.tsx`.
+- Mensagem nova de console = texto em pt-BR, frase completa, sem inventar dado.
 
 ## 10. Parsers
 
@@ -454,8 +468,8 @@ não capturado.
 
 | Conjunto | Onde | Quantidade |
 |---|---|---|
-| Rust | `crates/*/src` (unitários, inclusive os que exportam os tipos TS) e `crates/*/tests` | 232 + 3 medições `#[ignore]` |
-| Interface | `app/src/**/*.test.ts(x)` | 54 |
+| Rust | `crates/*/src` (unitários, inclusive os que exportam os tipos TS) e `crates/*/tests` | 239 + 3 medições `#[ignore]` |
+| Interface | `app/src/**/*.test.ts(x)` | 56 |
 | E2E | `testes/e2e/executar.sh` + `persistencia.mjs` | 1 roteiro (cria caso, importa, analisa, reabre; confere que a extração não mudou: hash e datas antes/depois) |
 
 Medições (não rodam na bateria normal):
@@ -570,14 +584,14 @@ plano e pasta intacta, e importação completa no app real. Roteiro em
 ## 27. Próximos passos recomendados
 
 Construção contínua (regra do usuário de 30/09/2026): cada fase vai para a `main` com a CI
-verde. Feitas: agenda e chamadas (PR #15), MMS e linha do tempo. Ordem seguinte:
+verde. Feitas: agenda e chamadas (PR #15), MMS, linha do tempo e console de importação. Ordem
+seguinte:
 
-1. **Console de importação em tempo real** (`docs/CONTINUIDADE.md` §14.1).
-2. **Importador IPED** com fixtures sintéticas pelo formato público.
-3. **Importador Avilla**, quando a árvore real chegar (§26).
-4. **Conferência do WhatsApp, SMS/MMS, agenda e chamadas** com bancos de aparelho de teste (não
+1. **Importador IPED** com fixtures sintéticas pelo formato público.
+2. **Importador Avilla**, quando a árvore real chegar (§26).
+3. **Conferência do WhatsApp, SMS/MMS, agenda e chamadas** com bancos de aparelho de teste (não
    de investigação).
-5. Itens F1–F9 (§25), conforme a necessidade medida.
+4. Itens F1–F9 (§25), conforme a necessidade medida.
 
 ## 28. Arquivos para ler primeiro
 

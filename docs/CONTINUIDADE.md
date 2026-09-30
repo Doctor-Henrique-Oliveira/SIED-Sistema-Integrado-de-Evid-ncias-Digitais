@@ -5,9 +5,10 @@ Estado em 30/09/2026: depois da auditoria, a `main` recebeu o saneamento dos doc
 contatos e registro de chamadas do Android** (PR #15, merge `<MERGE15>`; checkpoint
 `docs/checkpoints/2026-09-30-contatos-chamadas-android.md`). Desde a regra de construção contínua
 do usuário (30/09, 17:27), cada fase vai para a `main` quando a CI Linux e Windows está verde. Em
-seguida vieram os **MMS do Android** e a **linha do tempo unificada** (Consultas e Localizações),
-na branch `claude/contatos-chamadas-android-z7m48s` reiniciada da `main` (checkpoints
-`2026-09-30-mms-android.md` e `2026-09-30-linha-do-tempo.md`).
+seguida vieram os **MMS do Android**, a **linha do tempo unificada** (Consultas e Localizações) e
+o **console de importação em tempo real** (§14.1), na branch `claude/contatos-chamadas-android-z7m48s`
+reiniciada da `main` (checkpoints `2026-09-30-mms-android.md`, `2026-09-30-linha-do-tempo.md` e
+`2026-09-30-console-importacao.md`).
 
 Estado em 29/09/2026: a fase 1 fecha o ciclo **importar → analisar → selecionar → relatar**. Na
 `main` estão a interface para volume real (PR #9, merge `24791ff`), as **evidências selecionadas
@@ -93,7 +94,7 @@ release, execução manual ou PR que muda o build (opção "Só tags", PR #4).
 | — | `951365e` | #13 | mesclado (`6f5d5c1`): saneamento dos documentos do handoff |
 | `claude/project-thread-dycfuw` | `24e44fe` | #14 | mesclado (`132a8d5`): design system global e casca do workspace |
 | `claude/contatos-chamadas-android-z7m48s` | `c9762ec` | #15 | mesclado (`<MERGE15>`): agenda e chamadas do Android |
-| `claude/contatos-chamadas-android-z7m48s` (reiniciada da `main`) | — | novo PR | MMS do Android e linha do tempo unificada |
+| `claude/contatos-chamadas-android-z7m48s` (reiniciada da `main`) | — | novo PR | MMS do Android, linha do tempo unificada e console de importação |
 
 As branches mescladas **não foram apagadas**. Podem ser removidas depois que a `main` for
 confirmada íntegra e com CI verde, com aval do usuário.
@@ -283,6 +284,13 @@ depois do PR #15)
   ou a extração. Localizações usa a mesma lista só com coordenadas (latitude e longitude como
   lidas); o mapa offline continua indisponível. Sem migração.
 
+**Console de importação em tempo real** (§14.1; mesma branch)
+- O pipeline anuncia cada passo real (contagem, SHA-256 e inventário, bancos localizados,
+  manifesto, plano, cópia conferida, parser iniciado e concluído, gravação, avisos, erros, fim)
+  numa fila em memória consultada pela sequência e no `log-importacao.jsonl` com a mesma mensagem.
+- Console sob a barra de progresso (horário no fuso do caso, decorrido, nível, recolhível, "ao
+  vivo"), fechado no resultado e reaberto na aba Processamento da extração a partir do log.
+
 **Busca global** (migração 3)
 - FTS5 em registros e nomes de arquivo, sem diferenciar acentos e maiúsculas, com prefixo.
 - Texto digitado protegido contra sintaxe do FTS (cada palavra vira frase com prefixo).
@@ -294,9 +302,9 @@ depois do PR #15)
 
 | Conjunto | Quantidade | Resultado |
 |---|---|---|
-| Rust (`cargo test --workspace`, soma de todos os `test result`) | 232 + 3 medições ignoradas com MMS e linha do tempo (222 com o PR #15; 201 após a auditoria) | todos passam |
+| Rust (`cargo test --workspace`, soma de todos os `test result`) | 239 + 3 medições ignoradas com MMS, linha do tempo e console (222 com o PR #15; 201 após a auditoria) | todos passam |
 | `cargo clippy -D warnings` e `cargo fmt --check` | — | limpos |
-| Interface (`vitest`) | 54 com a linha do tempo (50 com o PR #15; 43 após a auditoria) | todos passam |
+| Interface (`vitest`) | 56 com a linha do tempo e o console (50 com o PR #15; 43 após a auditoria) | todos passam |
 | Build da interface (`npm run build`) e do app (`tauri build --debug --no-bundle`) | — | ok |
 | Typecheck TypeScript | — | limpo |
 | Tipos gerados (ts-rs) atualizados | — | conferido pela CI |
@@ -506,14 +514,13 @@ Detalhes no `README.md`.
 (PR #10) estão descritos no §4 e nos checkpoints `2026-09-28-fase1-visual-volume.md` e
 `2026-09-29-fase1-evidencias-relatorio.md`. A auditoria pré-produção (PR #11) está em
 `2026-09-29-auditoria-hardening.md`; a passagem para outro agente, em `docs/HANDOFF-CODEX.md`.
-Depois vieram, em construção contínua, a agenda e as chamadas (PR #15), os MMS e a linha do
-tempo unificada (checkpoints de 30/09/2026).
+Depois vieram, em construção contínua, a agenda e as chamadas (PR #15), os MMS, a linha do
+tempo unificada e o console de importação (checkpoints de 30/09/2026).
 
 A seguir (ordem da construção contínua):
-1. console de importação em tempo real (§14.1);
-2. importador IPED com fixtures sintéticas pelo formato público;
-3. importador Avilla (quando a árvore chegar, §10);
-4. conferência do WhatsApp, SMS/MMS, agenda e chamadas com bancos de aparelho de teste.
+1. importador IPED com fixtures sintéticas pelo formato público;
+2. importador Avilla (quando a árvore chegar, §10);
+3. conferência do WhatsApp, SMS/MMS, agenda e chamadas com bancos de aparelho de teste.
 
 ---
 
@@ -522,6 +529,9 @@ A seguir (ordem da construção contínua):
 Itens pedidos pelo usuário para depois. **Não implementar antes do momento indicado.**
 
 ### 14.1 Console de importação em tempo real
+
+**Feito em 30/09/2026** (checkpoint `2026-09-30-console-importacao.md`). O registro original
+segue abaixo como referência.
 
 **Quando:** depois que o fluxo real de importação estiver estabilizado (importador Avilla e
 parsers principais funcionando com extrações reais). Registrado em 28/09/2026.
