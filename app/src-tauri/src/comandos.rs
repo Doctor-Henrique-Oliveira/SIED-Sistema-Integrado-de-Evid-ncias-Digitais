@@ -24,6 +24,7 @@ use sied_armazenamento::relatorios::RelatorioRegistrado;
 use sied_armazenamento::resumo::{Identificador, ResumoCaso};
 use sied_armazenamento::CasoCatalogado;
 use sied_dominio::{CasoId, Dispositivo, DispositivoId, ExtracaoId, NovoCaso, NovoDispositivo};
+use sied_ingestao::eventos::EventoImportacao;
 use sied_ingestao::importador::Deteccao;
 use sied_midia::Miniatura;
 use sied_relatorio::PedidoRelatorio;
@@ -187,6 +188,28 @@ pub async fn iniciar_importacao(
 pub async fn estado_importacao(app_handle: AppHandle) -> ResultadoApp<Option<EstadoImportacao>> {
     em_segundo_plano(app_handle, move |estado| {
         estado.com(|s| Ok(s.estado_importacao()))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn eventos_importacao(
+    app_handle: AppHandle,
+    desde: u64,
+) -> ResultadoApp<Vec<EventoImportacao>> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| Ok(s.eventos_importacao(desde)))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn eventos_da_extracao(
+    app_handle: AppHandle,
+    id: ExtracaoId,
+) -> ResultadoApp<Vec<EventoImportacao>> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.eventos_da_extracao(id))
     })
     .await
 }

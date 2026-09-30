@@ -92,6 +92,8 @@ pub fn executar() {
             comandos::iniciar_importacao,
             comandos::estado_importacao,
             comandos::cancelar_importacao,
+            comandos::eventos_importacao,
+            comandos::eventos_da_extracao,
             comandos::listar_extracoes,
             comandos::obter_extracao,
             comandos::totais_por_categoria,

@@ -17,6 +17,7 @@
 //! sem mudar o restante do pipeline.
 
 pub mod erro;
+pub mod eventos;
 pub mod fonte;
 pub mod importador;
 pub mod importadores;

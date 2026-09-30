@@ -2,14 +2,14 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api, normalizarErro, type Caso, type Deteccao, type Dispositivo, type EstadoImportacao } from "../api/cliente";
-import { useCancelarImportacao, useIniciarImportacao } from "../api/consultas";
+import { useCancelarImportacao, useEventosImportacao, useIniciarImportacao } from "../api/consultas";
 import { numero, tamanho } from "../util/formatar";
 import { duracaoMs, fracaoCopia, fracaoDaEtapa, PASSOS, passoDaEtapa, ritmoInventario, useAgora } from "../util/progresso";
 import { nomeEtapa, nomeStatusExtracao, nomeSuporte, tomStatus } from "../util/rotulos";
 import { Botao, classeBotao } from "./Botao";
+import { ConsoleEventos } from "./ConsoleEventos";
 import { Selecao } from "./Campo";
 import { Aviso, BarraProgresso, Selo } from "./Estrutura";
-import { Icone } from "./Icone";
 
 /** Escolha do dispositivo, da pasta e do importador. */
 export function AssistenteImportacao({ caso, dispositivos, aoFechar }: {
@@ -177,6 +177,7 @@ export function PainelImportacao({ caso, estado, aoDispensar }: {
   const passo = passoDaEtapa(p.etapa);
   const copia = fracaoCopia(p);
   const ritmo = ritmoInventario(p, agora);
+  const eventos = useEventosImportacao(estado.extracao_id, estado.terminada);
 
   if (estado.terminada) {
     return (
@@ -206,6 +207,9 @@ export function PainelImportacao({ caso, estado, aoDispensar }: {
         )}
         {x?.erro && x.status !== "cancelada" && <p className="mt-2 text-sm text-erro">{x.erro}</p>}
         {estado.erro && <p className="mt-2 text-sm text-erro">{estado.erro}</p>}
+        <div className="mt-3">
+          <ConsoleEventos eventos={eventos} fuso={caso.fuso_horario} aberto={x?.status !== "concluida" || !!estado.erro} />
+        </div>
       </div>
     );
   }
@@ -264,7 +268,7 @@ export function PainelImportacao({ caso, estado, aoDispensar }: {
           {p.item_atual}
         </p>
       )}
-      <ConsoleImportacao progresso={p} />
+      <ConsoleEventos eventos={eventos} fuso={caso.fuso_horario} aoVivo />
     </div>
   );
 }
@@ -302,38 +306,5 @@ function Passos({ atual }: { atual: number | null }) {
         );
       })}
     </ol>
-  );
-}
-
-/**
- * Espaço do console técnico da importação (roadmap, CONTINUIDADE.md §14). Hoje mostra só
- * o estado real que o backend já informa a cada consulta; o registro contínuo de eventos
- * (hash, cópia verificada, parsers, gravação, indexação) virá do backend, sem simulação.
- */
-export function ConsoleImportacao({ progresso: p }: { progresso: EstadoImportacao["progresso"] }) {
-  const linhas: [string, string][] = [
-    ["etapa", p.etapa],
-    ["arquivos", `${numero(p.arquivos_feitos)}/${numero(p.arquivos_total)}`],
-    ["bytes", `${tamanho(p.bytes_feitos)}/${tamanho(p.bytes_total)}`],
-    ["bancos", `${numero(p.tarefas_feitas)}/${numero(p.tarefas_total)}`],
-    ["registros", numero(p.artefatos)],
-    ["avisos", numero(p.avisos)],
-  ];
-  if (p.fase_tarefa) linhas.push(["tarefa", p.fase_tarefa]);
-  if (p.copia_bytes_total != null) linhas.push(["copia", `${tamanho(p.copia_bytes_feitos ?? 0)}/${tamanho(p.copia_bytes_total)}`]);
-  if (p.item_atual) linhas.push(["item", p.item_atual]);
-  if (p.mensagem) linhas.push(["mensagem", p.mensagem]);
-  return (
-    <details className="group rounded-md border border-borda bg-fundo">
-      <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-1.5 text-xs text-texto-2 hover:text-texto">
-        <Icone nome="direita" className="size-3.5 transition-transform group-open:rotate-90" />
-        <Icone nome="terminal" className="size-3.5" />
-        Console técnico
-        <span className="text-texto-3">· estado atual informado pelo backend</span>
-      </summary>
-      <pre className="overflow-x-auto border-t border-borda px-3 py-2 font-mono text-2xs leading-relaxed text-texto-2" aria-label="Estado técnico da importação">
-        {linhas.map(([k, v]) => `${k.padEnd(10)}${v}`).join("\n")}
-      </pre>
-    </details>
   );
 }

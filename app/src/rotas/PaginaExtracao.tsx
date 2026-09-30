@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
 import type { Caso, Dispositivo, Extracao } from "../api/cliente";
-import { useArtefatos, useDispositivos, useExecucoes, useExtracao } from "../api/consultas";
+import { useArtefatos, useDispositivos, useEventosDaExtracao, useExecucoes, useExtracao } from "../api/consultas";
+import { ConsoleEventos } from "../componentes/ConsoleEventos";
 import { InventarioArquivos } from "../componentes/Arquivos";
 import { Abas, Aviso, Cabecalho, Cartao, Carregando, Hash, Paginacao, Selo, tabela, Vazio } from "../componentes/Estrutura";
 import { Icone, type NomeIcone } from "../componentes/Icone";
@@ -237,6 +238,22 @@ function AbaArtefatos({ caso, x }: { caso: Caso; x: Extracao }) {
 }
 
 function AbaProcessamento({ caso, x }: { caso: Caso; x: Extracao }) {
+  return (
+    <div className="space-y-3">
+      <Execucoes caso={caso} x={x} />
+      <ConsoleDaExtracao caso={caso} x={x} />
+    </div>
+  );
+}
+
+/** Console da importação relido do log gravado na pasta do caso. */
+function ConsoleDaExtracao({ caso, x }: { caso: Caso; x: Extracao }) {
+  const eventos = useEventosDaExtracao(x.id, true);
+  if (eventos.isError) return <Aviso>{eventos.error.message}</Aviso>;
+  return <ConsoleEventos eventos={eventos.data ?? []} fuso={caso.fuso_horario} aberto={false} carregando={eventos.isPending} />;
+}
+
+function Execucoes({ caso, x }: { caso: Caso; x: Extracao }) {
   const execucoes = useExecucoes(x.id);
   if (execucoes.isPending) return <Carregando />;
   if (execucoes.isError) return <Aviso>{execucoes.error.message}</Aviso>;

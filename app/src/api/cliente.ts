@@ -50,7 +50,9 @@ import type { ContatoAgenda } from "./tipos/ContatoAgenda";
 import type { ContatoVinculado } from "./tipos/ContatoVinculado";
 import type { FiltroChamadas } from "./tipos/FiltroChamadas";
 import type { FiltroContatos } from "./tipos/FiltroContatos";
+import type { EventoImportacao } from "./tipos/EventoImportacao";
 import type { FiltroLinhaTempo } from "./tipos/FiltroLinhaTempo";
+import type { NivelEvento } from "./tipos/NivelEvento";
 import type { ResumoLinhaTempo } from "./tipos/ResumoLinhaTempo";
 import type { ResumoChamadas } from "./tipos/ResumoChamadas";
 import type { TelefoneContato } from "./tipos/TelefoneContato";
@@ -58,6 +60,8 @@ import type { TotalApp } from "./tipos/TotalApp";
 
 export type {
   Chamada,
+  EventoImportacao,
+  NivelEvento,
   FiltroLinhaTempo,
   ResumoLinhaTempo,
   ContatoAgenda,
@@ -167,6 +171,8 @@ export const api = {
     chamar<EstadoImportacao>("iniciar_importacao", { dispositivoId, pasta, importador }),
   estadoImportacao: () => chamar<EstadoImportacao | null>("estado_importacao"),
   cancelarImportacao: () => chamar<null>("cancelar_importacao"),
+  eventosImportacao: (desde: number) => chamar<EventoImportacao[]>("eventos_importacao", { desde }),
+  eventosDaExtracao: (id: ExtracaoId) => chamar<EventoImportacao[]>("eventos_da_extracao", { id }),
   listarExtracoes: () => chamar<Extracao[]>("listar_extracoes"),
   obterExtracao: (extracaoId: ExtracaoId) => chamar<Extracao>("obter_extracao", { extracaoId }),
   totaisPorCategoria: (extracaoId: ExtracaoId) =>

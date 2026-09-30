@@ -21,6 +21,7 @@ use sied_armazenamento::{BancoCaso, CasoCatalogado, CatalogoGlobal, Sessao};
 use sied_dominio::{
     Caso, CasoId, Dispositivo, DispositivoId, ExtracaoId, NovoCaso, NovoDispositivo,
 };
+use sied_ingestao::eventos::{EventoImportacao, NivelEvento};
 use sied_ingestao::fonte::pasta::PastaSomenteLeitura;
 use sied_ingestao::importador::{Deteccao, Suporte};
 use sied_ingestao::pipeline::{self, Controle, Progresso};
@@ -349,10 +350,24 @@ impl Servico {
                         p.mensagem = Some(e.to_string());
                     }),
                 }
+                c.anunciar(
+                    NivelEvento::Info,
+                    "Gravando o resultado da extração no caso e na trilha de auditoria...",
+                );
                 let final_ = gravador.finalizar(&r).map_err(|e| {
                     tracing::error!(erro = %e, "falha ao gravar o fim da importação");
                     e.to_string()
                 });
+                match &final_ {
+                    Ok(x) => c.anunciar(
+                        NivelEvento::Ok,
+                        format!("Extração registrada com status \"{}\".", x.status),
+                    ),
+                    Err(e) => c.anunciar(
+                        NivelEvento::Erro,
+                        format!("Falha ao gravar o resultado da extração: {e}"),
+                    ),
+                };
                 if let Ok(mut f) = f.lock() {
                     *f = Some(final_);
                 }
@@ -377,6 +392,19 @@ impl Servico {
 
     pub fn estado_importacao(&self) -> Option<EstadoImportacao> {
         self.importacao.as_ref().map(TarefaImportacao::estado)
+    }
+
+    /// Eventos do console da importação em curso (ou da última) depois de `desde`.
+    pub fn eventos_importacao(&self, desde: u64) -> Vec<EventoImportacao> {
+        self.importacao
+            .as_ref()
+            .map(|t| t.controle.eventos_desde(desde))
+            .unwrap_or_default()
+    }
+
+    /// Console de uma importação já terminada, relido do log gravado no caso.
+    pub fn eventos_da_extracao(&mut self, id: ExtracaoId) -> ResultadoApp<Vec<EventoImportacao>> {
+        Ok(self.banco()?.eventos_da_importacao(id)?)
     }
 
     pub fn cancelar_importacao(&self) {

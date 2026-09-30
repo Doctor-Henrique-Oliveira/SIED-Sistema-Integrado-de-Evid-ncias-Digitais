@@ -24,6 +24,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use ts_rs::TS;
 
+use crate::eventos::{numero_br, tamanho_br, EventoImportacao, NivelEvento, RegistroEventos};
 use crate::fonte::{CaminhoFonte, FonteSomenteLeitura};
 use crate::importador::{Importador, PlanoImportacao, TarefaParser};
 use crate::inventario::{self, ArquivoInventariado};
@@ -36,6 +37,12 @@ pub const NOME_MANIFESTO: &str = "manifesto.sha256";
 pub const NOME_LOG: &str = "log-importacao.jsonl";
 const LOTE: usize = 500;
 const MAX_OBSERVACOES: usize = 50;
+/// Bancos SQLite anunciados um a um no console durante o inventário.
+const MAX_BANCOS_ANUNCIADOS: u64 = 30;
+/// Avisos de cada parser anunciados um a um no console (todos ficam no banco do caso).
+const MAX_AVISOS_ANUNCIADOS: u64 = 20;
+/// Intervalo, em registros gravados, dos anúncios de gravação de cada parser.
+const ANUNCIO_REGISTROS: u64 = 5_000;
 
 // ---------- Progresso e cancelamento ----------
 
@@ -125,6 +132,7 @@ impl Progresso {
 pub struct Controle {
     cancelar: AtomicBool,
     progresso: Mutex<Progresso>,
+    eventos: Mutex<RegistroEventos>,
 }
 
 impl Controle {
@@ -144,6 +152,29 @@ impl Controle {
         if let Ok(mut p) = self.progresso.lock() {
             f(&mut p);
         }
+    }
+
+    /// Acrescenta um evento ao console da importação (só em memória; o pipeline também
+    /// o grava no log da importação).
+    pub fn anunciar(&self, nivel: NivelEvento, mensagem: impl Into<String>) -> EventoImportacao {
+        let mensagem = mensagem.into();
+        match self.eventos.lock() {
+            Ok(mut e) => e.adicionar(agora_ms(), nivel, mensagem),
+            Err(_) => EventoImportacao {
+                seq: 0,
+                ts_ms: agora_ms(),
+                nivel,
+                mensagem,
+            },
+        }
+    }
+
+    /// Eventos do console depois da sequência `seq`.
+    pub fn eventos_desde(&self, seq: u64) -> Vec<EventoImportacao> {
+        self.eventos
+            .lock()
+            .map(|e| e.desde(seq))
+            .unwrap_or_default()
     }
 
     fn verificar(&self) -> Resultado<()> {
@@ -386,6 +417,31 @@ impl Log {
         // O log detalhado é auxiliar: falha ao escrever não interrompe a importação.
         let _ = writeln!(self.arquivo, "{linha}");
     }
+
+    /// Evento que aparece no console da interface e fica no log com a mesma mensagem.
+    fn anunciar(
+        &mut self,
+        controle: &Controle,
+        nivel: NivelEvento,
+        evento: &str,
+        mensagem: String,
+        dados: serde_json::Value,
+    ) {
+        let e = controle.anunciar(nivel, mensagem);
+        let ts = chrono::DateTime::<Utc>::from_timestamp_millis(e.ts_ms)
+            .unwrap_or_else(Utc::now)
+            .to_rfc3339_opts(SecondsFormat::Millis, true);
+        let nivel_log = match nivel {
+            NivelEvento::Info | NivelEvento::Ok => "info",
+            NivelEvento::Aviso => "aviso",
+            NivelEvento::Erro => "erro",
+        };
+        let linha = json!({
+            "ts": ts, "nivel": nivel_log, "evento": evento, "dados": dados,
+            "mensagem": e.mensagem, "tom": nivel.codigo(),
+        });
+        let _ = writeln!(self.arquivo, "{linha}");
+    }
 }
 
 impl Drop for Log {
@@ -410,17 +466,59 @@ pub fn executar(
     });
     fs::create_dir_all(&ctx.pasta_importacao)?;
     let mut log = Log::criar(&ctx.pasta_importacao)?;
-    log.registrar(
-        "info",
+    let info = importador.info();
+    log.anunciar(
+        controle,
+        NivelEvento::Info,
         "inicio",
-        json!({ "fonte": fonte.descricao(), "importador": importador.info() }),
+        format!(
+            "Iniciando importação com {} {}. Origem aberta somente para leitura: {}",
+            info.nome,
+            info.versao,
+            fonte.descricao()
+        ),
+        json!({ "fonte": fonte.descricao(), "importador": info }),
     );
     let r = executar_etapas(
         fonte, importador, registro, destino, controle, ctx, &mut log,
     );
     match &r {
-        Ok(resumo) => log.registrar("info", "fim", json!(resumo)),
-        Err(e) => log.registrar("erro", "fim", json!({ "erro": e.to_string() })),
+        Ok(resumo) => log.anunciar(
+            controle,
+            if resumo.execucoes_com_falha > 0 || resumo.avisos > 0 {
+                NivelEvento::Aviso
+            } else {
+                NivelEvento::Ok
+            },
+            "fim",
+            format!(
+                "Importação concluída: {} arquivo(s) inventariados, {} registro(s) de {} leitura(s) de banco, {} aviso(s){}.",
+                numero_br(resumo.arquivos),
+                numero_br(resumo.artefatos),
+                numero_br(resumo.execucoes),
+                numero_br(resumo.avisos),
+                if resumo.execucoes_com_falha > 0 {
+                    format!(", {} leitura(s) com falha", numero_br(resumo.execucoes_com_falha))
+                } else {
+                    String::new()
+                }
+            ),
+            json!(resumo),
+        ),
+        Err(ErroIngestao::Cancelado) => log.anunciar(
+            controle,
+            NivelEvento::Aviso,
+            "fim",
+            "Importação cancelada pelo usuário. O que já foi gravado continua no caso, marcado como cancelado.".into(),
+            json!({ "erro": ErroIngestao::Cancelado.to_string() }),
+        ),
+        Err(e) => log.anunciar(
+            controle,
+            NivelEvento::Erro,
+            "fim",
+            format!("Importação interrompida: {e}"),
+            json!({ "erro": e.to_string() }),
+        ),
     }
     r
 }
@@ -450,11 +548,28 @@ fn executar_etapas(
         }
     }
     controle.atualizar(|p| (p.arquivos_total, p.bytes_total) = (n, bytes));
-    log.registrar("info", "contagem", json!({ "arquivos": n, "bytes": bytes }));
+    log.anunciar(
+        controle,
+        NivelEvento::Info,
+        "contagem",
+        format!(
+            "{} arquivo(s) encontrados, {} no total.",
+            numero_br(n),
+            tamanho_br(bytes)
+        ),
+        json!({ "arquivos": n, "bytes": bytes }),
+    );
 
     // 2. Inventariar + manifesto
     controle.atualizar(|p| p.entrar(Etapa::Inventariando));
-    inventariar(fonte, destino, controle, ctx, log, &mut resumo)?;
+    log.anunciar(
+        controle,
+        NivelEvento::Info,
+        "inventario_inicio",
+        "Calculando o SHA-256 de cada arquivo e montando o inventário...".into(),
+        json!({}),
+    );
+    inventariar(fonte, destino, controle, ctx, log, &mut resumo, n)?;
 
     // 3. Planejar
     controle.atualizar(|p| {
@@ -463,6 +578,20 @@ fn executar_etapas(
     });
     let plano = importador.planejar(fonte)?;
     log.registrar("info", "plano", json!(plano));
+    log.anunciar(
+        controle,
+        NivelEvento::Info,
+        "plano_resumo",
+        if plano.tarefas.is_empty() {
+            "Nenhum banco de aplicativo reconhecido para interpretar nesta extração.".into()
+        } else {
+            format!(
+                "Plano do importador: {} leitura(s) de banco por parser.",
+                numero_br(plano.tarefas.len() as u64)
+            )
+        },
+        json!({ "tarefas": plano.tarefas.len() }),
+    );
     let PlanoImportacao {
         ferramenta_versao,
         tipo_extracao,
@@ -519,8 +648,12 @@ fn inventariar(
     ctx: &ContextoImportacao,
     log: &mut Log,
     resumo: &mut ResumoImportacao,
+    total: u64,
 ) -> Resultado<()> {
     let caminho_manifesto = ctx.pasta_importacao.join(NOME_MANIFESTO);
+    let mut bancos = 0u64;
+    // Marco de progresso a cada 10% dos arquivos (ao menos a cada arquivo).
+    let passo = (total / 10).max(1);
     let mut manifesto = BufWriter::new(File::create(&caminho_manifesto)?);
     let mut lote: Vec<ArquivoInventariado> = Vec::with_capacity(LOTE);
 
@@ -530,9 +663,11 @@ fn inventariar(
             Ok(e) => e,
             Err(ErroIngestao::ItemIgnorado { caminho, motivo }) => {
                 resumo.ignorados += 1;
-                log.registrar(
-                    "aviso",
+                log.anunciar(
+                    controle,
+                    NivelEvento::Aviso,
                     "item_ignorado",
+                    format!("Item não inventariado: {caminho} ({motivo})."),
                     json!({ "caminho": caminho, "motivo": motivo }),
                 );
                 observar(resumo, format!("ignorado: {caminho} — {motivo}"));
@@ -572,9 +707,14 @@ fn inventariar(
             Err(ErroIngestao::Cancelado) => return Err(ErroIngestao::Cancelado),
             Err(e) => {
                 resumo.ilegiveis += 1;
-                log.registrar(
-                    "erro",
+                log.anunciar(
+                    controle,
+                    NivelEvento::Erro,
                     "leitura",
+                    format!(
+                        "Não foi possível ler {}: {e}. O arquivo fica no inventário sem hash.",
+                        entrada.caminho
+                    ),
                     json!({ "caminho": entrada.caminho, "erro": e.to_string() }),
                 );
                 observar(
@@ -593,8 +733,34 @@ fn inventariar(
             }
         };
         resumo.arquivos += 1;
+        if arq.categoria == inventario::Categoria::BancoSqlite {
+            bancos += 1;
+            if bancos <= MAX_BANCOS_ANUNCIADOS {
+                log.anunciar(
+                    controle,
+                    NivelEvento::Info,
+                    "banco_localizado",
+                    format!("Banco SQLite localizado: {}", arq.entrada.caminho),
+                    json!({ "caminho": arq.entrada.caminho, "sha256": arq.sha256 }),
+                );
+            }
+        }
         lote.push(arq);
         controle.atualizar(|p| p.arquivos_feitos += 1);
+        if resumo.arquivos.is_multiple_of(passo) && resumo.arquivos < total {
+            log.anunciar(
+                controle,
+                NivelEvento::Info,
+                "inventario_progresso",
+                format!(
+                    "{} de {} arquivo(s) inventariados ({}%).",
+                    numero_br(resumo.arquivos),
+                    numero_br(total),
+                    resumo.arquivos * 100 / total.max(1)
+                ),
+                json!({ "feitos": resumo.arquivos, "total": total }),
+            );
+        }
         if lote.len() >= LOTE {
             destino.gravar_arquivos(&lote)?;
             lote.clear();
@@ -609,9 +775,30 @@ fn inventariar(
 
     let mut f = File::open(&caminho_manifesto)?;
     resumo.hash_manifesto = inventario::ler_com_hash(&mut f, None, |_| true)?.sha256;
-    log.registrar(
-        "info",
+    if bancos > MAX_BANCOS_ANUNCIADOS {
+        log.anunciar(
+            controle,
+            NivelEvento::Info,
+            "bancos_localizados",
+            format!(
+                "… e mais {} banco(s) SQLite (todos no inventário).",
+                numero_br(bancos - MAX_BANCOS_ANUNCIADOS)
+            ),
+            json!({ "bancos": bancos }),
+        );
+    }
+    log.anunciar(
+        controle,
+        if resumo.ilegiveis > 0 { NivelEvento::Aviso } else { NivelEvento::Ok },
         "manifesto",
+        format!(
+            "Inventário concluído: {} arquivo(s), {} ({} ilegível(is), {} ignorado(s)). Manifesto gravado, SHA-256 {}.",
+            numero_br(resumo.arquivos),
+            tamanho_br(resumo.bytes),
+            numero_br(resumo.ilegiveis),
+            numero_br(resumo.ignorados),
+            resumo.hash_manifesto
+        ),
         json!({ "arquivo": caminho_manifesto, "sha256": resumo.hash_manifesto }),
     );
     Ok(())
@@ -664,6 +851,7 @@ fn preparar_entrada(
     destino: &mut dyn Destino,
     controle: &Controle,
     ctx: &ContextoImportacao,
+    log: &mut Log,
     tarefa: &TarefaParser,
 ) -> Resultado<(Vec<ArquivoDeTrabalho>, PorPapel, Vec<AvisoParser>)> {
     let mut arquivos = Vec::new();
@@ -681,7 +869,25 @@ fn preparar_entrada(
             mensagem: format!("{} não pôde ser lido no inventário", a.caminho),
         })?;
         let pasta = ctx.pasta_copias.join(reg.id.to_string());
+        log.anunciar(
+            controle,
+            NivelEvento::Info,
+            "copia_inicio",
+            format!(
+                "Copiando {} para a área de trabalho do caso ({}).",
+                a.caminho,
+                tamanho_br(reg.tamanho)
+            ),
+            json!({ "caminho": a.caminho }),
+        );
         let copia = copiar_verificado(fonte, controle, &a.caminho, &sha, &pasta)?;
+        log.anunciar(
+            controle,
+            NivelEvento::Ok,
+            "copia_conferida",
+            format!("Cópia conferida: SHA-256 igual ao do inventário ({sha})."),
+            json!({ "caminho": a.caminho, "sha256": sha }),
+        );
         for sufixo in AUXILIARES_SQLITE {
             let aux = CaminhoFonte::novo(&format!("{}{sufixo}", a.caminho))?;
             match destino.arquivo(&aux)? {
@@ -689,6 +895,13 @@ fn preparar_entrada(
                     sha256: Some(s), ..
                 }) => {
                     copiar_verificado(fonte, controle, &aux, &s, &pasta)?;
+                    log.anunciar(
+                        controle,
+                        NivelEvento::Ok,
+                        "copia_conferida",
+                        format!("Arquivo auxiliar {aux} copiado junto e conferido pelo SHA-256."),
+                        json!({ "caminho": aux, "sha256": s }),
+                    );
                 }
                 // Consta na extração mas não pôde ser lido no inventário: o banco é
                 // interpretado sem ele, e isso tem de aparecer (registros recentes que
@@ -729,9 +942,11 @@ fn processar_tarefa(
 ) -> Resultado<()> {
     let Some(parser) = registro.parser(&tarefa.parser_id) else {
         let msg = format!("parser '{}' não disponível nesta versão", tarefa.parser_id);
-        log.registrar(
-            "aviso",
+        log.anunciar(
+            controle,
+            NivelEvento::Aviso,
             "parser_ausente",
+            format!("Leitura não executada: {msg}."),
             json!({ "tarefa": tarefa, "mensagem": msg }),
         );
         observar(resumo, msg);
@@ -747,7 +962,7 @@ fn processar_tarefa(
     resumo.execucoes += 1;
 
     let (arquivos, por_papel, avisos_entrada) =
-        match preparar_entrada(fonte, destino, controle, ctx, tarefa) {
+        match preparar_entrada(fonte, destino, controle, ctx, log, tarefa) {
             Ok(x) => x,
             Err(ErroIngestao::Cancelado) => return Err(ErroIngestao::Cancelado),
             Err(e) => {
@@ -764,9 +979,11 @@ fn processar_tarefa(
                     Some(&e.to_string()),
                 )?;
                 resumo.execucoes_com_falha += 1;
-                log.registrar(
-                    "erro",
+                log.anunciar(
+                    controle,
+                    NivelEvento::Erro,
                     "copia_de_trabalho",
+                    format!("{} não foi executado: {e}", info.nome),
                     json!({ "parser": info, "erro": e.to_string() }),
                 );
                 observar(resumo, format!("{}: {e}", info.nome));
@@ -781,9 +998,19 @@ fn processar_tarefa(
         principal.as_ref().map(|p| p.0),
         principal.as_ref().map(|p| p.1.as_str()),
     )?;
-    log.registrar(
-        "info",
+    log.anunciar(
+        controle,
+        NivelEvento::Info,
         "parser_inicio",
+        format!(
+            "Executando {} {} sobre a cópia verificada de {}.",
+            info.nome,
+            info.versao,
+            arquivos
+                .first()
+                .map(|a| a.origem.to_string())
+                .unwrap_or_default()
+        ),
         json!({ "parser": info, "execucao": exec, "arquivos": arquivos }),
     );
 
@@ -799,6 +1026,8 @@ fn processar_tarefa(
     let mut coletor = Coletor {
         destino,
         controle,
+        log: &mut *log,
+        parser_nome: info.nome.clone(),
         execucao: exec,
         por_papel: &por_papel,
         lote: Vec::with_capacity(LOTE),
@@ -844,9 +1073,20 @@ fn processar_tarefa(
                 EstadoExecucao::Ok
             };
             destino.concluir_execucao(exec, estado, &contagem, None)?;
-            log.registrar(
-                "info",
+            log.anunciar(
+                controle,
+                if avisos > 0 {
+                    NivelEvento::Aviso
+                } else {
+                    NivelEvento::Ok
+                },
                 "parser_fim",
+                format!(
+                    "{} concluído: {} registro(s) gravados e indexados, {} aviso(s).",
+                    info.nome,
+                    numero_br(emitidos),
+                    numero_br(avisos)
+                ),
                 json!({ "execucao": exec, "estado": estado, "resumo": contagem }),
             );
             Ok(())
@@ -872,9 +1112,15 @@ fn processar_tarefa(
                 Some(&e.to_string()),
             )?;
             resumo.execucoes_com_falha += 1;
-            log.registrar(
-                "erro",
+            log.anunciar(
+                controle,
+                NivelEvento::Erro,
                 "parser_fim",
+                format!(
+                    "{} terminou com falha depois de {} registro(s): {e}",
+                    info.nome,
+                    numero_br(emitidos)
+                ),
                 json!({ "execucao": exec, "erro": e.to_string() }),
             );
             observar(resumo, format!("{}: {e}", info.nome));
@@ -895,6 +1141,8 @@ pub fn texto_do_panico(p: &(dyn std::any::Any + Send)) -> String {
 struct Coletor<'a> {
     destino: &'a mut dyn Destino,
     controle: &'a Controle,
+    log: &'a mut Log,
+    parser_nome: String,
     execucao: i64,
     por_papel: &'a PorPapel,
     lote: Vec<ArtefatoParaGravar>,
@@ -942,6 +1190,20 @@ impl Coletor<'_> {
             let n = self.lote.len() as u64;
             self.controle.atualizar(|p| p.artefatos += n);
             self.lote.clear();
+            // `emitidos` já conta o lote gravado agora.
+            if self.emitidos / ANUNCIO_REGISTROS > (self.emitidos - n) / ANUNCIO_REGISTROS {
+                self.log.anunciar(
+                    self.controle,
+                    NivelEvento::Info,
+                    "gravacao",
+                    format!(
+                        "{}: {} registro(s) gravados e indexados até agora.",
+                        self.parser_nome,
+                        numero_br(self.emitidos)
+                    ),
+                    json!({ "execucao": self.execucao, "registros": self.emitidos }),
+                );
+            }
         }
         Ok(())
     }
@@ -997,6 +1259,31 @@ impl SaidaParser for Coletor<'_> {
     fn avisar(&mut self, aviso: AvisoParser) {
         self.avisos += 1;
         self.controle.atualizar(|p| p.avisos += 1);
+        if self.avisos <= MAX_AVISOS_ANUNCIADOS {
+            let onde = aviso
+                .id_registro
+                .as_deref()
+                .map(|r| format!(" (registro {r})"))
+                .unwrap_or_default();
+            self.log.anunciar(
+                self.controle,
+                NivelEvento::Aviso,
+                "aviso",
+                format!("{}{onde}: {}", self.parser_nome, aviso.mensagem),
+                json!({ "execucao": self.execucao, "aviso": aviso }),
+            );
+        } else if self.avisos == MAX_AVISOS_ANUNCIADOS + 1 {
+            self.log.anunciar(
+                self.controle,
+                NivelEvento::Aviso,
+                "aviso",
+                format!(
+                    "{}: demais avisos só na lista de avisos da extração (total no fim da leitura).",
+                    self.parser_nome
+                ),
+                json!({ "execucao": self.execucao }),
+            );
+        }
         if let Err(e) = self.destino.gravar_aviso(self.execucao, &aviso) {
             self.falha_gravacao.get_or_insert(e);
         }

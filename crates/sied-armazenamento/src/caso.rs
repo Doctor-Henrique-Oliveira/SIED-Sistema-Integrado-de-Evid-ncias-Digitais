@@ -18,6 +18,8 @@ use sied_dominio::{
     Caso, CasoId, Dispositivo, DispositivoId, ExtracaoId, NovoCaso, NovoDispositivo,
     SistemaOperacional,
 };
+use sied_ingestao::eventos::{self, EventoImportacao};
+use sied_ingestao::pipeline::NOME_LOG;
 use sied_ingestao::InfoComponente;
 use std::path::{Path, PathBuf};
 
@@ -34,7 +36,7 @@ use crate::extracoes::{
     self, ArquivoComOrigem, ArquivoExtracao, ArtefatoDetalhe, ArtefatoResumo, ExecucaoParser,
     Extracao, Pagina, TotalCategoria,
 };
-use crate::importacao::Importacao;
+use crate::importacao::{Importacao, PASTA_IMPORTACOES};
 use crate::linha_tempo::{self, FiltroLinhaTempo, ResumoLinhaTempo};
 use crate::migracoes::{self, BANCO_CASO};
 use crate::relatorios::{self, NovoRelatorio, RelatorioRegistrado};
@@ -282,6 +284,22 @@ impl BancoCaso {
 
     pub fn extracao(&self, id: ExtracaoId) -> Resultado<Extracao> {
         extracoes::obter(&self.conn, id)
+    }
+
+    /// Console de uma importação já feita, relido do `log-importacao.jsonl` da pasta
+    /// do caso (vazio se o log não existir, por exemplo numa cópia parcial do caso).
+    pub fn eventos_da_importacao(&self, id: ExtracaoId) -> Resultado<Vec<EventoImportacao>> {
+        self.extracao(id)?;
+        let log = self
+            .pasta
+            .join(PASTA_IMPORTACOES)
+            .join(id.to_string())
+            .join(NOME_LOG);
+        match eventos::ler_log(&log) {
+            Ok(v) => Ok(v),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+            Err(e) => Err(e.into()),
+        }
     }
 
     pub fn totais_por_categoria(&self, id: ExtracaoId) -> Resultado<Vec<TotalCategoria>> {
