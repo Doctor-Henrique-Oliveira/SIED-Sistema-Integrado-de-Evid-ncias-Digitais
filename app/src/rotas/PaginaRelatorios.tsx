@@ -121,7 +121,7 @@ function ItemEvidencia({ caso, e, total }: { caso: Caso; e: Evidencia; total: nu
   return (
     <li className="px-4 py-3" aria-label={`Evidência ${ref}`}>
       <div className="flex items-start gap-3">
-        <span className="tabular mt-0.5 w-11 shrink-0 font-mono text-[13px] font-semibold text-ouro-claro">{ref}</span>
+        <span className="tabular mt-0.5 w-11 shrink-0 font-mono text-sm font-semibold text-ouro-claro">{ref}</span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
             <p className="min-w-0 truncate font-medium text-texto">{e.titulo ?? tituloPadrao(e)}</p>
@@ -136,7 +136,7 @@ function ItemEvidencia({ caso, e, total }: { caso: Caso; e: Evidencia; total: nu
               {e.observacao}
             </p>
           )}
-          <p className="mt-1 text-[11px] text-texto-3">
+          <p className="mt-1 text-2xs text-texto-3">
             Marcada por {e.criada_por} em {dataHora(e.criada_em, caso.fuso_horario)} · hash na seleção <HashCurto valor={e.hash_no_momento} />
           </p>
         </div>
@@ -226,7 +226,7 @@ function EditarEvidencia({ caso, e, fechar }: { caso: Caso; e: Evidencia; fechar
         <Botao variante="fantasma" onClick={fechar}>
           Cancelar
         </Botao>
-        <p className="self-center text-[11px] text-texto-3">O alvo e o hash não mudam; a alteração vai para a trilha de auditoria.</p>
+        <p className="self-center text-2xs text-texto-3">O alvo e o hash não mudam; a alteração vai para a trilha de auditoria.</p>
       </div>
     </form>
   );
@@ -351,7 +351,7 @@ function GerarRelatorio({ caso, pasta }: { caso: Caso; pasta: string }) {
           <Botao type="submit" icone="relatorios" carregando={gerar.isPending}>
             Gerar PDF
           </Botao>
-          <span className="text-[11px] text-texto-3">
+          <span className="text-2xs text-texto-3">
             {gerar.isPending
               ? "Conferindo hashes, relendo arquivos na extração e diagramando…"
               : `${numero(evidencias.data?.length ?? 0)} evidências na ordem da lista.`}
@@ -377,7 +377,7 @@ function GerarRelatorio({ caso, pasta }: { caso: Caso; pasta: string }) {
           </Aviso>
         </div>
       )}
-      <p className="mt-3 text-[11px] leading-snug text-texto-3">
+      <p className="mt-3 text-2xs leading-snug text-texto-3">
         O PDF e o arquivo .sha256 ficam na pasta do caso, em “relatorios”. A geração relê os arquivos marcados na pasta da extração, somente
         leitura, e fica registrada na trilha de auditoria. Se a trilha não conferir, o relatório não é gerado.
       </p>
@@ -398,7 +398,7 @@ function RelatoriosGerados({ caso, pasta }: { caso: Caso; pasta: string }) {
           <Aviso>{lista.error.message}</Aviso>
         </div>
       ) : lista.data.length === 0 ? (
-        <p className="px-4 py-3 text-[13px] text-texto-2">Nenhum relatório gerado neste caso.</p>
+        <p className="px-4 py-3 text-sm text-texto-2">Nenhum relatório gerado neste caso.</p>
       ) : (
         <ul className="divide-y divide-borda">
           {lista.data.map((r) => (

@@ -1,6 +1,7 @@
 // Casca do aplicativo: barra lateral fixa, cabeçalho e a área útil rolável.
 
-import { Outlet } from "react-router-dom";
+import { useEffect, useRef } from "react";
+import { Outlet, useLocation } from "react-router-dom";
 import { useCasoAtual, useInfoApp } from "../api/consultas";
 import { BarraLateral } from "../componentes/BarraLateral";
 import { BarraSuperior } from "../componentes/BarraSuperior";
@@ -10,6 +11,13 @@ export function Layout() {
   const info = useInfoApp();
   const casoAtual = useCasoAtual();
   const caso = casoAtual.data?.caso;
+  const { pathname } = useLocation();
+  const principal = useRef<HTMLElement>(null);
+
+  // Cada tela começa do topo (a área útil é um único elemento rolável).
+  useEffect(() => {
+    principal.current?.scrollTo?.({ top: 0 });
+  }, [pathname]);
 
   return (
     <div className="flex h-full">
@@ -17,14 +25,14 @@ export function Layout() {
       <button
         type="button"
         onClick={() => document.getElementById("conteudo")?.focus()}
-        className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded-md focus:bg-ouro focus:px-3 focus:py-1.5 focus:text-[#1a1305]"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded-md focus:bg-ouro focus:px-3 focus:py-1.5 focus:text-ouro-tinta"
       >
         Pular para o conteúdo
       </button>
       <BarraLateral caso={caso} info={info.data} />
       <div className="flex min-w-0 flex-1 flex-col">
         <BarraSuperior caso={caso} info={info.data} />
-        <main id="conteudo" tabIndex={-1} className="min-h-0 outline-none flex-1 overflow-y-auto">
+        <main ref={principal} id="conteudo" tabIndex={-1} className="min-h-0 outline-none flex-1 overflow-y-auto">
           <div className="mx-auto max-w-[1680px] px-6 py-5">
             {info.isError ? (
               <Aviso>

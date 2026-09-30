@@ -129,10 +129,10 @@ function Conversas({ caso }: { caso: Caso }) {
           <ListaConversas caso={caso} selecionada={selecionada} />
         </div>
         {selecionada == null ? (
-          <div className="grid place-items-center rounded-xl border border-borda bg-sup">
+          <div className="grid place-items-center painel">
             <div className="max-w-sm text-center">
               <Icone nome="conversas" className="mx-auto size-8 text-texto-3" />
-              <p className="mt-2 text-[13px] text-texto-2">Selecione uma conversa para ver as mensagens.</p>
+              <p className="mt-2 text-sm text-texto-2">Selecione uma conversa para ver as mensagens.</p>
             </div>
           </div>
         ) : (
@@ -193,7 +193,7 @@ function ListaConversas({ caso, selecionada }: { caso: Caso; selecionada: number
 
   const totalApps = apps.data?.reduce((n, a) => n + a.conversas, 0) ?? 0;
   return (
-    <section aria-label="Conversas do caso" className="flex min-h-0 w-full flex-col rounded-xl border border-borda bg-sup">
+    <section aria-label="Conversas do caso" className="flex min-h-0 w-full flex-col painel">
       <div className="space-y-2 border-b border-borda p-2.5">
         <div className="relative">
           <Icone nome="busca" className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-texto-3" />
@@ -252,7 +252,7 @@ function ListaConversas({ caso, selecionada }: { caso: Caso; selecionada: number
             aria-pressed={comAnexo}
             onClick={() => setComAnexo(!comAnexo)}
             className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium ring-1 ring-inset transition-colors ${
-              comAnexo ? "bg-ouro/15 text-ouro-claro ring-ouro/40" : "text-texto-2 ring-borda-2 hover:bg-sup-2 hover:text-texto"
+              comAnexo ? "bg-ouro/12 text-ouro-claro ring-ouro/40" : "text-texto-2 ring-borda-2 hover:bg-sup-2 hover:text-texto"
             }`}
           >
             <Icone nome="midias" className="size-3" />
@@ -260,7 +260,7 @@ function ListaConversas({ caso, selecionada }: { caso: Caso; selecionada: number
           </button>
         </div>
         {lista.data && (
-          <p className="tabular flex items-center justify-between text-[11px] text-texto-3" role="status">
+          <p className="tabular flex items-center justify-between text-2xs text-texto-3" role="status">
             <span>
               {numero(lista.data.total)} {lista.data.total === 1 ? "conversa" : "conversas"}
               {filtrando ? " com os filtros" : ""}
@@ -321,13 +321,13 @@ function ItemConversa({ caso, c, ativa }: { caso: Caso; c: Conversa; ativa: bool
       <Avatar c={c} />
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-2">
-          <span className={`truncate text-[13px] font-medium ${ativa ? "text-ouro-claro" : "text-texto"}`}>{tituloConversa(c)}</span>
-          <span className="tabular shrink-0 text-[11px] text-texto-3">
+          <span className={`truncate text-sm font-medium ${ativa ? "text-ouro-claro" : "text-texto"}`}>{tituloConversa(c)}</span>
+          <span className="tabular shrink-0 text-2xs text-texto-3">
             {c.ultima_ms == null ? "—" : dataHoraMs(c.ultima_ms, caso.fuso_horario).slice(0, 10)}
           </span>
         </div>
         <p className="truncate text-xs text-texto-2">{c.ultima_mensagem ?? "—"}</p>
-        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-texto-3">
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs text-texto-3">
           <span className="tabular whitespace-nowrap">{numero(c.total_mensagens)} mensagens · {rotuloApp(c.app)}</span>
           {eGrupo(c) && <Selo tom="info">Grupo</Selo>}
           {c.com_anexo > 0 && (
@@ -442,7 +442,7 @@ function Chat({
 
   if (conversa.isPending)
     return (
-      <div className="rounded-xl border border-borda bg-sup px-4">
+      <div className="painel px-4">
         <Carregando />
       </div>
     );
@@ -457,7 +457,7 @@ function Chat({
       aria-pressed={tecnica === valor}
       onClick={() => setTecnica(valor)}
       className={`px-2.5 py-1 text-xs font-medium first:rounded-l-md last:rounded-r-md ${
-        tecnica === valor ? "bg-ouro/15 text-ouro-claro" : "text-texto-2 hover:bg-sup-2 hover:text-texto"
+        tecnica === valor ? "bg-ouro/12 text-ouro-claro" : "text-texto-2 hover:bg-sup-2 hover:text-texto"
       }`}
     >
       {rotulo}
@@ -474,11 +474,11 @@ function Chat({
 
   return (
     <MarcasContexto.Provider value={marcas}>
-      <section aria-label="Chat" className="flex min-h-0 min-w-0 flex-col rounded-xl border border-borda bg-sup">
+      <section aria-label="Chat" className="flex min-h-0 min-w-0 flex-col painel">
         <div className="flex flex-wrap items-center gap-3 border-b border-borda px-3.5 py-2.5">
           <Avatar c={c} grande />
           <div className="min-w-0 flex-1">
-            <h2 className="truncate text-[14px] font-semibold text-texto">{tituloConversa(c)}</h2>
+            <h2 className="truncate text-base font-semibold text-texto">{tituloConversa(c)}</h2>
             <p className="tabular truncate text-xs text-texto-2">
               {rotuloApp(c.app)} · {numero(c.total_mensagens)} mensagens ({numero(c.enviadas)} enviadas) ·{" "}
               {dataHoraMs(c.primeira_ms, caso.fuso_horario)} a {dataHoraMs(c.ultima_ms, caso.fuso_horario)}
@@ -518,7 +518,7 @@ function Chat({
             className="min-w-0 flex-1 bg-transparent text-xs text-texto outline-none placeholder:text-texto-3"
           />
           {termo && (
-            <span className="tabular text-[11px] text-texto-3" role="status">
+            <span className="tabular text-2xs text-texto-3" role="status">
               {longa && (termo !== termoAdiado || noBanco.isFetching)
                 ? "procurando…"
                 : nAchados
@@ -620,7 +620,7 @@ const diaDe = (m: ArtefatoResumo, fuso: string) => (m.data_hora_ms == null ? "Se
 function SeparadorDia({ d, fixo }: { d: string; fixo?: boolean }) {
   return (
     <div className={`${fixo ? "sticky top-0 z-10" : ""} py-2 text-center`}>
-      <span className="rounded-full border border-borda bg-sup-2 px-3 py-0.5 text-[11px] text-texto-2 shadow-sm">{d}</span>
+      <span className="rounded-full border border-borda bg-sup-2 px-3 py-0.5 text-2xs text-texto-2 shadow-sm">{d}</span>
     </div>
   );
 }
@@ -668,12 +668,12 @@ function Bolha({
           onClick={() => selecionar(m.id)}
           aria-pressed={ativo}
           data-teste="mensagem"
-          className={`max-w-[min(85%,40rem)] rounded-full border border-borda bg-fundo/60 px-3 py-1 text-center text-[12px] text-texto-2 hover:bg-sup-2 ${
+          className={`max-w-[min(85%,40rem)] rounded-full border border-borda bg-fundo/60 px-3 py-1 text-center text-xs text-texto-2 hover:bg-sup-2 ${
             ativo ? "outline-2 outline-offset-2 outline-ouro" : ""
           } ${daBusca || (achado && atual) ? "ring-2 ring-ouro/70" : ""}`}
         >
           {m.conteudo != null ? <ComDestaque texto={m.conteudo} termo={termo} /> : rotuloSubtipo("sistema")}
-          <span className="tabular ml-2 text-[11px] text-texto-3">{m.data_hora_ms == null ? "—" : hora(m.data_hora_ms, caso.fuso_horario)}</span>
+          <span className="tabular ml-2 text-2xs text-texto-3">{m.data_hora_ms == null ? "—" : hora(m.data_hora_ms, caso.fuso_horario)}</span>
           {evidencias && (
             <span className="ml-2">
               <SeloEvidencia numeros={evidencias} />
@@ -689,12 +689,12 @@ function Bolha({
         onClick={() => selecionar(m.id)}
         aria-pressed={ativo}
         data-teste="mensagem"
-        className={`max-w-[min(75%,40rem)] rounded-2xl border px-3 py-2 text-left text-[13px] transition-colors ${
+        className={`max-w-[min(75%,40rem)] rounded-2xl border px-3 py-2 text-left text-sm transition-colors ${
           enviada ? "rounded-br-sm border-info/25 bg-info/12 hover:bg-info/18" : "rounded-bl-sm border-borda-2 bg-sup-2 hover:bg-sup-3"
         } ${ativo ? "outline-2 outline-offset-2 outline-ouro" : ""} ${daBusca || (achado && atual) ? "ring-2 ring-ouro/70" : achado ? "ring-1 ring-ouro/35" : ""}`}
       >
         {!enviada && m.remetente && (
-          <p className="mb-0.5 flex min-w-0 items-baseline gap-1.5 text-[11px]">
+          <p className="mb-0.5 flex min-w-0 items-baseline gap-1.5 text-2xs">
             {nomes.has(m.remetente) && (
               <span className={`truncate font-medium ${grupo ? "text-ouro-claro" : "text-texto-2"}`}>{nomes.get(m.remetente)}</span>
             )}
@@ -723,7 +723,7 @@ function Bolha({
             )}
           </p>
         )}
-        <p className="mt-1 flex items-center justify-end gap-2 text-[11px] text-texto-3">
+        <p className="mt-1 flex items-center justify-end gap-2 text-2xs text-texto-3">
           {daBusca && <span className="text-ouro-claro">resultado da busca</span>}
           <SeloEvidencia numeros={evidencias} />
           {m.estado_registro !== "ativo" && <Selo tom="atencao">{nomeEstadoRegistro[m.estado_registro] ?? m.estado_registro}</Selo>}
@@ -766,7 +766,7 @@ function Mensagens({
   let diaAnterior: string | null = null;
   return (
     <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-4 py-3" aria-label="Mensagens da conversa">
-      {itens.length === 0 && <p className="py-6 text-center text-[13px] text-texto-2">Nenhuma mensagem nesta conversa.</p>}
+      {itens.length === 0 && <p className="py-6 text-center text-sm text-texto-2">Nenhuma mensagem nesta conversa.</p>}
       {itens.map((m) => {
         const d = diaDe(m, caso.fuso_horario);
         const separador = d !== diaAnterior;
@@ -861,7 +861,7 @@ function MensagensLongas({
     <div className="relative flex min-h-0 flex-1 flex-col">
       {diaTopo && (
         <div className="pointer-events-none absolute inset-x-0 top-1 z-10 text-center">
-          <span className="rounded-full border border-borda bg-sup-2 px-3 py-0.5 text-[11px] text-texto-2 shadow-sm">{diaDe(diaTopo, caso.fuso_horario)}</span>
+          <span className="rounded-full border border-borda bg-sup-2 px-3 py-0.5 text-2xs text-texto-2 shadow-sm">{diaDe(diaTopo, caso.fuso_horario)}</span>
         </div>
       )}
       <div ref={rolagem} className="min-h-0 flex-1 overflow-y-auto px-4 py-3" aria-label="Mensagens da conversa">
@@ -905,7 +905,7 @@ function MensagensLongas({
           })}
         </div>
       </div>
-      <div className="flex items-center justify-between gap-2 border-t border-borda px-3.5 py-1 text-[11px] text-texto-3">
+      <div className="flex items-center justify-between gap-2 border-t border-borda px-3.5 py-1 text-2xs text-texto-3">
         <span className="tabular" role="status">
           {numero(primeira.total)} mensagens · carregadas conforme a rolagem
         </span>
@@ -967,7 +967,7 @@ function Anexo({ caso, m }: { caso: Caso; m: ArtefatoResumo }) {
           <p className="truncate text-xs text-texto" title={m.nome_arquivo ?? undefined}>
             {m.nome_arquivo ?? "Arquivo sem nome"}
           </p>
-          <p className="tabular truncate text-[11px] text-texto-3">
+          <p className="tabular truncate text-2xs text-texto-3">
             {[m.mime, m.tamanho != null ? tamanho(m.tamanho) : null].filter(Boolean).join(" · ") || "Tipo e tamanho não informados"}
           </p>
         </div>
@@ -997,8 +997,8 @@ function PainelContexto({ caso, c, selecionada, abrirOrigem, abrirRegistro }: {
     </div>
   );
   return (
-    <aside aria-label="Contexto da conversa" className="hidden min-h-0 flex-col overflow-y-auto rounded-xl border border-borda bg-sup xl:flex">
-      <p className="border-b border-borda px-4 py-2.5 text-[13px] font-semibold text-texto">Contexto da conversa</p>
+    <aside aria-label="Contexto da conversa" className="hidden min-h-0 flex-col overflow-y-auto painel xl:flex">
+      <p className="border-b border-borda px-4 py-2.5 text-sm font-semibold text-texto">Contexto da conversa</p>
       <SecaoRecolhivel titulo="Conversa" icone="conversas">
         <dl>
           {par("App", rotuloApp(c.app))}
@@ -1033,7 +1033,7 @@ function PainelContexto({ caso, c, selecionada, abrirOrigem, abrirRegistro }: {
             <li key={p.identificador} className="flex items-baseline justify-between gap-2">
               <span className="min-w-0">
                 {p.nome && <span className="block truncate text-texto">{p.nome}</span>}
-                <span className={`block truncate font-mono ${p.nome ? "text-[11px] text-texto-3" : "text-texto"}`} title={p.identificador}>
+                <span className={`block truncate font-mono ${p.nome ? "text-2xs text-texto-3" : "text-texto"}`} title={p.identificador}>
                   {p.identificador}
                 </span>
               </span>
@@ -1041,7 +1041,7 @@ function PainelContexto({ caso, c, selecionada, abrirOrigem, abrirRegistro }: {
             </li>
           ))}
         </ul>
-        <p className="mt-2 text-[11px] text-texto-3">
+        <p className="mt-2 text-2xs text-texto-3">
           {comNomes && "Nomes como gravados nos contatos do próprio app nesta extração. "}
           Identificadores exatamente como o parser leu; o SIED não deduz a quem pertencem.
         </p>

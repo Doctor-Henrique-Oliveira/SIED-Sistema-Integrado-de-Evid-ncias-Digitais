@@ -1,18 +1,20 @@
-// Blocos visuais reutilizados por todas as telas do SIED (tema escuro técnico).
-// Cores vêm dos tokens em estilos.css: nada de cor solta nas páginas.
+// Blocos visuais reutilizados por todas as telas do SIED (design system).
+// Cores, tipografia e cantos vêm dos tokens e receitas de estilos.css: nada de cor
+// solta nas páginas. Hierarquia por tipografia e linhas finas, não por cartões.
 
 import { useId, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { classeBotao } from "./Botao";
 import { Icone, type NomeIcone } from "./Icone";
 
 /** Classes das tabelas densas (cabeçalho fixo em caixa alta, linhas com divisória). */
 export const tabela = {
-  base: "w-full text-left text-[13px]",
-  cabeca: "text-[11px] uppercase tracking-wider text-texto-3",
-  th: "px-3 py-2 font-medium",
+  base: "w-full text-left text-sm",
+  cabeca: "border-b border-borda bg-lateral/40 text-3xs uppercase tracking-[0.05em] text-texto-3",
+  th: "px-3 py-2 font-semibold",
   corpo: "divide-y divide-borda",
-  td: "px-3 py-2 align-top",
-  linha: "hover:bg-sup-2/60",
+  td: "px-3 py-[7px] align-top",
+  linha: "transition-colors hover:bg-sup-2/70",
 };
 
 /** Cabeçalho da página: sobrelinha opcional, título, subtítulo e ações à direita. */
@@ -24,18 +26,14 @@ export function Cabecalho({ titulo, subtitulo, acoes, sobre, icone }: {
   icone?: NomeIcone;
 }) {
   return (
-    <header className="mb-5 flex flex-wrap items-end justify-between gap-4">
-      <div className="flex min-w-0 items-start gap-3">
-        {icone && (
-          <span className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-lg bg-ouro/10 text-ouro ring-1 ring-ouro/25">
-            <Icone nome={icone} className="size-5" />
-          </span>
-        )}
-        <div className="min-w-0">
-          {sobre && <div className="mb-0.5 text-[11px] font-medium uppercase tracking-wider text-texto-3">{sobre}</div>}
-          <h1 className="truncate text-xl font-semibold tracking-tight text-texto">{titulo}</h1>
-          {subtitulo && <div className="mt-0.5 text-[13px] text-texto-2">{subtitulo}</div>}
-        </div>
+    <header className="mb-5 flex flex-wrap items-end justify-between gap-x-6 gap-y-3 border-b border-borda pb-4">
+      <div className="min-w-0">
+        {sobre && <div className="sobrelinha mb-1">{sobre}</div>}
+        <h1 className="flex min-w-0 items-center gap-2.5 text-xl font-semibold tracking-[-0.01em] text-texto">
+          {icone && <Icone nome={icone} className="size-[18px] shrink-0 text-ouro" />}
+          <span className="truncate">{titulo}</span>
+        </h1>
+        {subtitulo && <div className="mt-0.5 text-sm text-texto-2">{subtitulo}</div>}
       </div>
       {acoes && <div className="flex flex-wrap items-center gap-2">{acoes}</div>}
     </header>
@@ -53,11 +51,11 @@ export function Cartao({ titulo, acoes, children, className = "", denso, icone, 
   rotulo?: string;
 }) {
   return (
-    <section aria-label={rotulo} className={`min-w-0 rounded-xl border border-borda bg-sup ${className}`}>
+    <section aria-label={rotulo} className={`painel min-w-0 ${className}`}>
       {(titulo || acoes) && (
-        <div className="flex min-h-11 items-center justify-between gap-3 border-b border-borda px-4 py-2">
+        <div className="flex min-h-10 items-center justify-between gap-3 border-b border-borda px-4 py-1.5">
           {titulo && (
-            <h2 className="flex min-w-0 items-center gap-2 text-[13px] font-semibold text-texto">
+            <h2 className="flex min-w-0 items-center gap-2 text-sm font-semibold text-texto">
               {icone && <Icone nome={icone} className="size-4 text-texto-3" />}
               <span className="truncate">{titulo}</span>
             </h2>
@@ -77,8 +75,8 @@ export function Definicoes({ itens, colunas = 3 }: { itens: [string, ReactNode][
     <dl className={`grid grid-cols-1 gap-x-6 gap-y-3 ${grade}`}>
       {itens.map(([rotulo, valor]) => (
         <div key={rotulo} className="min-w-0">
-          <dt className="text-[11px] font-medium uppercase tracking-wider text-texto-3">{rotulo}</dt>
-          <dd className="mt-0.5 break-words text-[13px] text-texto">{valor ?? "—"}</dd>
+          <dt className="sobrelinha">{rotulo}</dt>
+          <dd className="mt-0.5 break-words text-sm text-texto">{valor ?? "—"}</dd>
         </div>
       ))}
     </dl>
@@ -88,16 +86,16 @@ export function Definicoes({ itens, colunas = 3 }: { itens: [string, ReactNode][
 type TipoAviso = "erro" | "info" | "sucesso" | "atencao";
 
 const estiloAviso: Record<TipoAviso, { cor: string; icone: NomeIcone }> = {
-  erro: { cor: "border-erro/40 bg-erro/10 text-[#f3b1ac]", icone: "alerta" },
-  info: { cor: "border-info/35 bg-info/10 text-[#b9d8f5]", icone: "info" },
-  sucesso: { cor: "border-ok/35 bg-ok/10 text-[#a9e2cb]", icone: "check" },
-  atencao: { cor: "border-atencao/40 bg-atencao/10 text-[#f3cc9f]", icone: "alerta" },
+  erro: { cor: "border-erro/35 border-l-erro bg-erro/8 text-erro-claro", icone: "alerta" },
+  info: { cor: "border-info/30 border-l-info bg-info/7 text-info-claro", icone: "info" },
+  sucesso: { cor: "border-ok/30 border-l-ok bg-ok/7 text-ok-claro", icone: "check" },
+  atencao: { cor: "border-atencao/35 border-l-atencao bg-atencao/8 text-atencao-claro", icone: "alerta" },
 };
 
 export function Aviso({ tipo = "erro", children }: { tipo?: TipoAviso; children: ReactNode }) {
   const e = estiloAviso[tipo];
   return (
-    <div role={tipo === "erro" ? "alert" : "status"} className={`flex gap-2.5 rounded-lg border px-3.5 py-2.5 text-[13px] ${e.cor}`}>
+    <div role={tipo === "erro" ? "alert" : "status"} className={`flex gap-2.5 rounded-md border border-l-2 px-3.5 py-2.5 text-sm ${e.cor}`}>
       <Icone nome={e.icone} className="mt-0.5 size-4" />
       <div className="min-w-0 flex-1">{children}</div>
     </div>
@@ -106,8 +104,8 @@ export function Aviso({ tipo = "erro", children }: { tipo?: TipoAviso; children:
 
 export function Carregando({ texto = "Carregando…" }: { texto?: string }) {
   return (
-    <div className="flex items-center gap-2 py-6 text-[13px] text-texto-2" role="status">
-      <span className="size-4 animate-spin rounded-full border-2 border-borda-2 border-r-ouro" aria-hidden />
+    <div className="flex items-center gap-2 py-6 text-sm text-texto-2" role="status">
+      <span className="size-3.5 animate-spin rounded-full border-2 border-borda-2 border-r-ouro" aria-hidden />
       {texto}
     </div>
   );
@@ -121,14 +119,10 @@ export function Vazio({ titulo, children, icone, acao }: {
   acao?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center rounded-xl border border-dashed border-borda-2 px-6 py-9 text-center">
-      {icone && (
-        <span className="mb-3 grid size-10 place-items-center rounded-full bg-sup-2 text-texto-3">
-          <Icone nome={icone} className="size-5" />
-        </span>
-      )}
+    <div className="flex flex-col items-center rounded-xl border border-dashed border-borda-2 px-6 py-8 text-center">
+      {icone && <Icone nome={icone} className="mb-2.5 size-6 text-texto-3" />}
       <p className="font-medium text-texto">{titulo}</p>
-      {children && <div className="mt-1.5 max-w-prose text-[13px] text-texto-2">{children}</div>}
+      {children && <div className="mt-1.5 max-w-prose text-sm text-texto-2">{children}</div>}
       {acao && <div className="mt-4">{acao}</div>}
     </div>
   );
@@ -142,21 +136,19 @@ export function Indisponivel({ titulo, icone, children, previsto }: {
   previsto?: string[];
 }) {
   return (
-    <div className="rounded-xl border border-borda bg-sup p-6" role="status">
-      <div className="flex items-start gap-4">
-        <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-sup-2 text-texto-3 ring-1 ring-borda-2">
-          <Icone nome={icone} className="size-5" />
-        </span>
+    <div className="painel p-5" role="status">
+      <div className="flex items-start gap-3.5">
+        <Icone nome={icone} className="mt-0.5 size-5 shrink-0 text-texto-3" />
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <p className="font-semibold text-texto">{titulo}</p>
             <Selo tom="neutro">Ainda não disponível</Selo>
           </div>
-          <div className="mt-1.5 max-w-3xl text-[13px] leading-relaxed text-texto-2">{children}</div>
+          <div className="mt-1.5 max-w-3xl text-sm leading-relaxed text-texto-2">{children}</div>
           {previsto && previsto.length > 0 && (
             <div className="mt-4">
-              <p className="text-[11px] font-medium uppercase tracking-wider text-texto-3">Estrutura preparada</p>
-              <ul className="mt-2 grid gap-x-6 gap-y-1 text-[13px] text-texto-2 sm:grid-cols-2">
+              <p className="sobrelinha">Estrutura preparada</p>
+              <ul className="mt-2 grid gap-x-6 gap-y-1 text-sm text-texto-2 sm:grid-cols-2">
                 {previsto.map((p) => (
                   <li key={p} className="flex items-center gap-2">
                     <span className="size-1 rounded-full bg-texto-3" aria-hidden />
@@ -175,12 +167,12 @@ export function Indisponivel({ titulo, icone, children, previsto }: {
 export type Tom = "ok" | "atencao" | "erro" | "neutro" | "info" | "ouro";
 
 const corSelo: Record<Tom, string> = {
-  ok: "bg-ok/12 text-ok ring-ok/30",
-  atencao: "bg-atencao/12 text-atencao ring-atencao/30",
-  erro: "bg-erro/12 text-erro ring-erro/35",
-  neutro: "bg-sup-3 text-texto-2 ring-borda-2",
-  info: "bg-info/12 text-info ring-info/30",
-  ouro: "bg-ouro/12 text-ouro-claro ring-ouro/30",
+  ok: "bg-ok/10 text-ok ring-ok/30",
+  atencao: "bg-atencao/10 text-atencao ring-atencao/30",
+  erro: "bg-erro/10 text-erro ring-erro/35",
+  neutro: "bg-sup-2 text-texto-2 ring-borda-2",
+  info: "bg-info/10 text-info ring-info/30",
+  ouro: "bg-ouro/10 text-ouro-claro ring-ouro/35",
 };
 
 /** Selo de situação (StatusBadge). */
@@ -188,7 +180,7 @@ export function Selo({ tom = "neutro", children, titulo }: { tom?: Tom; children
   return (
     <span
       title={titulo}
-      className={`inline-flex items-center gap-1 whitespace-nowrap rounded-md px-1.5 py-0.5 text-[11px] font-medium ring-1 ring-inset ${corSelo[tom]}`}
+      className={`inline-flex h-5 items-center gap-1 whitespace-nowrap rounded-sm px-1.5 text-2xs font-medium ring-1 ring-inset ${corSelo[tom]}`}
     >
       {children}
     </span>
@@ -220,7 +212,7 @@ export function BarraProgresso({ fracao, rotulo }: { fracao: number | null; rotu
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={pct == null ? undefined : Math.round(pct)}
-      className="h-1.5 w-full overflow-hidden rounded-full bg-sup-3"
+      className="h-1 w-full overflow-hidden rounded-full bg-sup-3"
     >
       <div
         className={`h-full rounded-full bg-ouro transition-[width] duration-300 ${pct == null ? "w-1/3 animate-pulse" : ""}`}
@@ -238,8 +230,7 @@ export function Paginacao({ total, deslocamento, limite, mudar }: {
 }) {
   if (total <= limite) return null;
   const fim = Math.min(deslocamento + limite, total);
-  const botao =
-    "rounded-md border border-borda-2 px-2.5 py-1 text-texto-2 hover:bg-sup-2 hover:text-texto disabled:opacity-40 disabled:hover:bg-transparent";
+  const botao = classeBotao("secundario", "p");
   return (
     <div className="flex items-center justify-between gap-3 px-1 py-2 text-xs text-texto-2">
       <span className="tabular">
@@ -257,6 +248,15 @@ export function Paginacao({ total, deslocamento, limite, mudar }: {
   );
 }
 
+/** Faixa de indicadores: células separadas por linhas finas, sem um cartão por número. */
+export function FaixaIndicadores({ rotulo, children, className = "" }: { rotulo: string; children: ReactNode; className?: string }) {
+  return (
+    <section aria-label={rotulo} className={`grid gap-px overflow-hidden rounded-xl border border-borda bg-borda ${className}`}>
+      {children}
+    </section>
+  );
+}
+
 /** Indicador numérico (StatCard). `valor` nulo = indisponível, nunca um número inventado. */
 export function Indicador({ rotulo, valor, detalhe, icone, tom = "neutro", para }: {
   rotulo: string;
@@ -267,30 +267,28 @@ export function Indicador({ rotulo, valor, detalhe, icone, tom = "neutro", para 
   para?: string;
 }) {
   const corIcone = {
-    neutro: "text-texto-3 bg-sup-2",
-    ouro: "text-ouro bg-ouro/10",
-    ok: "text-ok bg-ok/10",
-    atencao: "text-atencao bg-atencao/10",
-    erro: "text-erro bg-erro/10",
-    info: "text-info bg-info/10",
+    neutro: "text-texto-3",
+    ouro: "text-ouro",
+    ok: "text-ok",
+    atencao: "text-atencao",
+    erro: "text-erro",
+    info: "text-info",
   }[tom];
   const conteudo = (
     <>
-      <div className="flex items-start justify-between gap-2">
-        <p className="text-[11px] font-medium uppercase tracking-wider text-texto-3">{rotulo}</p>
-        <span className={`grid size-7 place-items-center rounded-md ${corIcone}`}>
-          <Icone nome={icone} className="size-4" />
-        </span>
-      </div>
-      <p className={`tabular mt-1 text-2xl font-semibold tracking-tight ${valor == null ? "text-texto-3" : "text-texto"}`}>
+      <p className="sobrelinha flex items-center gap-1.5">
+        <Icone nome={icone} className={`size-3.5 ${corIcone}`} />
+        <span className="truncate">{rotulo}</span>
+      </p>
+      <p className={`tabular mt-1.5 text-2xl font-semibold tracking-[-0.02em] ${valor == null ? "text-texto-3" : "text-texto"}`}>
         {valor ?? "—"}
       </p>
-      {detalhe && <div className="mt-0.5 truncate text-xs text-texto-2">{detalhe}</div>}
+      {detalhe && <div className="mt-0.5 truncate text-xs text-texto-3">{detalhe}</div>}
     </>
   );
-  const classe = "block min-w-0 rounded-xl border border-borda bg-sup px-3.5 py-3";
+  const classe = "block min-w-0 bg-sup px-4 py-3";
   return para ? (
-    <Link to={para} className={`${classe} transition-colors hover:border-borda-2 hover:bg-sup-2`}>
+    <Link to={para} className={`${classe} group transition-colors hover:bg-sup-2`}>
       {conteudo}
     </Link>
   ) : (
@@ -315,7 +313,7 @@ export function SecaoRecolhivel({ titulo, children, aberta = true, extra, icone 
         aria-expanded={aberto}
         aria-controls={id}
         onClick={() => setAberto((a) => !a)}
-        className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-[12px] font-semibold uppercase tracking-wider text-texto-2 hover:bg-sup-2/60 hover:text-texto"
+        className="sobrelinha flex w-full items-center gap-2 px-4 py-2.5 text-left text-texto-2! transition-colors hover:bg-sup-2/60 hover:text-texto!"
       >
         <Icone nome="direita" className={`size-3.5 transition-transform ${aberto ? "rotate-90" : ""}`} />
         {icone && <Icone nome={icone} className="size-3.5 text-texto-3" />}
@@ -337,16 +335,8 @@ export function LinkBotao({ para, children, variante = "secundario", icone, clas
   icone?: NomeIcone;
   className?: string;
 }) {
-  const estilo = {
-    primario: "bg-ouro text-[#1a1305] hover:bg-ouro-claro",
-    secundario: "border border-borda-2 bg-sup-2 text-texto hover:bg-sup-3",
-    fantasma: "text-texto-2 hover:bg-sup-2 hover:text-texto",
-  }[variante];
   return (
-    <Link
-      to={para}
-      className={`inline-flex items-center justify-center gap-2 rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors ${estilo} ${className}`}
-    >
+    <Link to={para} className={`${classeBotao(variante)} ${className}`}>
       {icone && <Icone nome={icone} className="size-4" />}
       {children}
     </Link>
@@ -369,8 +359,8 @@ export function Abas<T extends string>({ abas, atual, mudar, rotulo }: {
           role="tab"
           aria-selected={atual === id}
           onClick={() => mudar(id)}
-          className={`-mb-px whitespace-nowrap border-b-2 px-3.5 py-2 text-[13px] font-medium transition-colors ${
-            atual === id ? "border-ouro text-ouro-claro" : "border-transparent text-texto-2 hover:text-texto"
+          className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+            atual === id ? "border-ouro text-texto" : "border-transparent text-texto-3 hover:border-borda-2 hover:text-texto-2"
           }`}
         >
           {texto}
@@ -395,8 +385,8 @@ export function Filtros<T extends string | null>({ opcoes, atual, mudar, rotulo 
           type="button"
           aria-pressed={atual === valor}
           onClick={() => mudar(valor)}
-          className={`rounded-md px-2.5 py-1 text-xs font-medium ring-1 ring-inset transition-colors ${
-            atual === valor ? "bg-ouro/15 text-ouro-claro ring-ouro/40" : "text-texto-2 ring-borda-2 hover:bg-sup-2 hover:text-texto"
+          className={`h-6 rounded-md px-2 text-xs font-medium ring-1 ring-inset transition-colors ${
+            atual === valor ? "bg-ouro/12 text-ouro-claro ring-ouro/45" : "text-texto-2 ring-borda-2 hover:bg-sup-2 hover:text-texto"
           }`}
         >
           {texto}
@@ -407,5 +397,4 @@ export function Filtros<T extends string | null>({ opcoes, atual, mudar, rotulo 
 }
 
 /** Classe dos campos de entrada soltos (busca, filtros) no tema escuro. */
-export const entrada =
-  "rounded-lg border border-borda-2 bg-fundo px-3 py-1.5 text-[13px] text-texto outline-none transition placeholder:text-texto-3 focus:border-ouro/70 focus:ring-2 focus:ring-ouro/20";
+export const entrada = "entrada";

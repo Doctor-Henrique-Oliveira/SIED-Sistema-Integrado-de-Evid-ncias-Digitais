@@ -6,7 +6,7 @@ import { useCancelarImportacao, useIniciarImportacao } from "../api/consultas";
 import { numero, tamanho } from "../util/formatar";
 import { duracaoMs, fracaoCopia, fracaoDaEtapa, PASSOS, passoDaEtapa, ritmoInventario, useAgora } from "../util/progresso";
 import { nomeEtapa, nomeStatusExtracao, nomeSuporte, tomStatus } from "../util/rotulos";
-import { Botao } from "./Botao";
+import { Botao, classeBotao } from "./Botao";
 import { Selecao } from "./Campo";
 import { Aviso, BarraProgresso, Selo } from "./Estrutura";
 import { Icone } from "./Icone";
@@ -96,7 +96,7 @@ export function AssistenteImportacao({ caso, dispositivos, aoFechar }: {
               value={digitada}
               onChange={(e) => setDigitada(e.target.value)}
               placeholder="Cole o caminho ou escolha a pasta"
-              className="min-w-0 flex-1 rounded-lg border border-borda-2 bg-fundo px-3 py-2 font-mono text-xs text-texto outline-none placeholder:text-texto-3 focus:border-ouro/70 focus:ring-2 focus:ring-ouro/20"
+              className="entrada min-w-0 flex-1 font-mono text-xs"
             />
             {digitada.trim() && digitada.trim() !== pasta && (
               <Botao variante="secundario" type="submit" carregando={analisando}>
@@ -132,7 +132,7 @@ export function AssistenteImportacao({ caso, dispositivos, aoFechar }: {
                     onChange={() => setImportador(d.importador.id)}
                   />
                   <span className="min-w-0">
-                    <span className="flex flex-wrap items-center gap-2 text-[13px] font-medium text-texto">
+                    <span className="flex flex-wrap items-center gap-2 text-sm font-medium text-texto">
                       {d.importador.nome}
                       <span className="font-normal text-texto-3">v{d.importador.versao}</span>
                       <Selo tom={disponivel ? "ok" : "neutro"}>{nomeSuporte[d.suporte] ?? d.suporte}</Selo>
@@ -182,13 +182,13 @@ export function PainelImportacao({ caso, estado, aoDispensar }: {
     return (
       <div className="rounded-lg border border-borda-2 bg-sup-2/60 p-3.5" aria-label="Resultado da importação">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="flex items-center gap-2 text-[13px] font-medium text-texto">
+          <p className="flex items-center gap-2 text-sm font-medium text-texto">
             Importação {x ? <Selo tom={tomStatus(x.status)}>{nomeStatusExtracao[x.status] ?? x.status}</Selo> : "terminada"}
           </p>
           <div className="flex gap-2">
             <Link
               to={`/casos/${caso.id}/extracoes/${estado.extracao_id}`}
-              className="rounded-lg bg-ouro px-3 py-1.5 text-[13px] font-medium text-[#1a1305] hover:bg-ouro-claro"
+              className={classeBotao("primario")}
             >
               Abrir extração
             </Link>
@@ -198,14 +198,14 @@ export function PainelImportacao({ caso, estado, aoDispensar }: {
           </div>
         </div>
         {x && (
-          <p className="mt-2 text-[13px] text-texto-2">
+          <p className="mt-2 text-sm text-texto-2">
             {numero(x.total_arquivos)} arquivos ({tamanho(x.total_bytes)}) inventariados,{" "}
             {numero(x.total_artefatos)} registros interpretados
             {x.total_avisos ? `, ${numero(x.total_avisos)} avisos` : ""}.
           </p>
         )}
-        {x?.erro && x.status !== "cancelada" && <p className="mt-2 text-[13px] text-erro">{x.erro}</p>}
-        {estado.erro && <p className="mt-2 text-[13px] text-erro">{estado.erro}</p>}
+        {x?.erro && x.status !== "cancelada" && <p className="mt-2 text-sm text-erro">{x.erro}</p>}
+        {estado.erro && <p className="mt-2 text-sm text-erro">{estado.erro}</p>}
       </div>
     );
   }
@@ -213,7 +213,7 @@ export function PainelImportacao({ caso, estado, aoDispensar }: {
   return (
     <div className="space-y-3 rounded-lg border border-ouro/40 bg-ouro/5 p-3.5" aria-label="Importação em andamento">
       <div className="flex items-center justify-between gap-3">
-        <p className="flex items-center gap-2 text-[13px] font-medium text-texto" data-teste="etapa-importacao">
+        <p className="flex items-center gap-2 text-sm font-medium text-texto" data-teste="etapa-importacao">
           <span className="size-3 animate-spin rounded-full border-2 border-ouro/40 border-r-ouro" aria-hidden />
           {nomeEtapa[p.etapa] ?? p.etapa}…
         </p>
@@ -289,8 +289,8 @@ function Passos({ atual }: { atual: number | null }) {
             }`}
           >
             <span
-              className={`grid size-4.5 shrink-0 place-items-center rounded-full text-[10px] font-semibold ${
-                estado === "feito" ? "bg-ok/20 text-ok" : estado === "atual" ? "bg-ouro text-[#1a1305]" : "bg-sup-3 text-texto-3"
+              className={`grid size-4.5 shrink-0 place-items-center rounded-full text-3xs font-semibold ${
+                estado === "feito" ? "bg-ok/20 text-ok" : estado === "atual" ? "bg-ouro text-ouro-tinta" : "bg-sup-3 text-texto-3"
               }`}
               aria-hidden
             >
@@ -331,7 +331,7 @@ export function ConsoleImportacao({ progresso: p }: { progresso: EstadoImportaca
         Console técnico
         <span className="text-texto-3">· estado atual informado pelo backend</span>
       </summary>
-      <pre className="overflow-x-auto border-t border-borda px-3 py-2 font-mono text-[11px] leading-relaxed text-texto-2" aria-label="Estado técnico da importação">
+      <pre className="overflow-x-auto border-t border-borda px-3 py-2 font-mono text-2xs leading-relaxed text-texto-2" aria-label="Estado técnico da importação">
         {linhas.map(([k, v]) => `${k.padEnd(10)}${v}`).join("\n")}
       </pre>
     </details>

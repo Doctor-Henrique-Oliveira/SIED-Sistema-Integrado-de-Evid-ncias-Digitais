@@ -506,6 +506,22 @@ marca, item ativo e ação principal; verde `ok`, azul `info`, laranja `atencao`
 para erro. Fontes do sistema (Segoe UI / Cascadia Mono), nada baixado. Foco visível dourado em tudo,
 barras de rolagem finas, `prefers-reduced-motion` respeitado.
 
+**Design system global (30/09/2026)**: tudo em `app/src/estilos.css`, só na interface.
+- Tokens: cores navy/preto + dourado (`ouro`, `ouro-claro`, `ouro-escuro`, `ouro-tinta` = texto sobre
+  dourado; `texto-4` = desabilitado; `*-claro` = texto dentro de avisos), escala tipográfica fixa
+  (`text-3xs` 10 px a `text-2xl` 22 px, `text-sm` = 13 px, o corpo das tabelas), cantos pequenos
+  (`rounded-md` 4 px, `rounded-xl` 6 px; `rounded-2xl` 12 px só nas bolhas de conversa) e
+  `--tracking-sobre`.
+- Receitas (`@utility`): `sobrelinha` (rótulo técnico em caixa alta), `botao` + `botao-p` +
+  `botao-primario|secundario|fantasma|perigo`, `entrada` (foco, hover, desabilitado e
+  `aria-invalid`), `painel` e `tecla`. `classeBotao()` (`Botao.tsx`) monta as classes de botão para
+  `Botao`, `LinkBotao` e links soltos. Nenhuma cor hexadecimal nas páginas.
+- Hierarquia por tipografia e linhas finas: `Cabecalho` sem caixa de ícone (ícone dourado junto ao
+  título, linha abaixo), `FaixaIndicadores` (células separadas por 1 px, sem um cartão por número),
+  `Aviso` com filete lateral, `Selo` retangular de 20 px.
+- Casca: barra lateral de 232 px com filete dourado no item ativo; cabeçalho de 48 px com trilho
+  "caso › módulo"; a área útil volta ao topo a cada troca de rota.
+
 **Casca** (`rotas/Layout.tsx`): barra lateral fixa (`componentes/BarraLateral.tsx`) com marca,
 caso aberto, 12 módulos com ícone em 4 grupos, status offline e versão; cabeçalho
 (`componentes/BarraSuperior.tsx`) com o caso (trocar/fechar), busca global do caso (Ctrl+K),

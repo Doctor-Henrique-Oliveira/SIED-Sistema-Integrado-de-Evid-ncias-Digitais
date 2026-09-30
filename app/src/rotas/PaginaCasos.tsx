@@ -60,9 +60,9 @@ export function PaginaCasos() {
           Crie um caso para começar, ou abra a pasta de um caso existente.
         </Vazio>
       ) : (
-        <div className="rounded-xl border border-borda bg-sup">
+        <div className="painel">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-borda px-4 py-2.5">
-            <p className="text-[13px] text-texto-2">
+            <p className="text-sm text-texto-2">
               <span className="tabular font-semibold text-texto">{casos.data.length}</span>{" "}
               {casos.data.length === 1 ? "caso catalogado" : "casos catalogados"}
             </p>
@@ -85,9 +85,7 @@ export function PaginaCasos() {
                     c.disponivel ? "hover:bg-sup-2" : "cursor-not-allowed opacity-60"
                   }`}
                 >
-                  <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-sup-2 text-ouro ring-1 ring-borda-2">
-                    <Icone nome="casos" className="size-4" />
-                  </span>
+                  <Icone nome="casos" className="size-4 shrink-0 text-ouro" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-semibold text-texto">{identificacaoCaso(c)}</p>
                     <div className="mt-0.5 truncate text-xs text-texto-2">
@@ -97,13 +95,13 @@ export function PaginaCasos() {
                     </div>
                   </div>
                   <div className="hidden text-right text-xs text-texto-3 md:block">
-                    <div>Criado em</div>
+                    <div className="sobrelinha">Criado em</div>
                     <div className="tabular text-texto-2">{dataHora(c.criado_em)}</div>
                   </div>
                   <div className="w-44 text-right text-xs text-texto-3">
                     {c.disponivel ? (
                       <>
-                        <div>Último acesso</div>
+                        <div className="sobrelinha">Último acesso</div>
                         <div className="tabular text-texto-2">{dataHora(c.ultimo_acesso_em)}</div>
                       </>
                     ) : (
@@ -112,11 +110,11 @@ export function PaginaCasos() {
                       </span>
                     )}
                   </div>
-                  <Icone nome="direita" className="size-4 text-texto-3" />
+                  <Icone nome="direita" className="size-4 text-texto-4" />
                 </Link>
               </li>
             ))}
-            {lista.length === 0 && <li className="px-4 py-6 text-center text-[13px] text-texto-2">Nenhum caso com esse filtro.</li>}
+            {lista.length === 0 && <li className="px-4 py-6 text-center text-sm text-texto-2">Nenhum caso com esse filtro.</li>}
           </ul>
         </div>
       )}
