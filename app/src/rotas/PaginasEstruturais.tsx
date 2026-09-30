@@ -42,8 +42,8 @@ function Localizacoes({ caso }: { caso: Caso }) {
             "Mapa offline, sem serviço de mapas da internet",
           ]}
         >
-          Nenhum leitor desta versão extrai localizações, por isso a lista ainda não existe. Quando houver, cada ponto terá a mesma
-          origem técnica das mensagens. O mapa será desenhado com dados locais, sem depender de internet.
+          O leitor do WhatsApp já extrai coordenadas válidas e as exibe nas conversas. Este módulo dedicado ainda não possui lista ou
+          mapa; quando forem implementados, cada ponto manterá a mesma origem técnica das mensagens e o mapa usará apenas dados locais.
         </Indisponivel>
       </div>
     </>
