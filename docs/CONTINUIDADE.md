@@ -7,9 +7,10 @@ contatos e registro de chamadas do Android** (PR #15, merge `9dd1947`; checkpoin
 do usuário (30/09, 17:27), cada fase vai para a `main` quando a CI Linux e Windows está verde. Em
 seguida vieram os **MMS do Android**, a **linha do tempo unificada** (Consultas e Localizações) e
 o **console de importação em tempo real** (§14.1) e o **importador IPED** (lista de itens em CSV),
-na branch `claude/contatos-chamadas-android-z7m48s` reiniciada da `main` (checkpoints
-`2026-09-30-mms-android.md`, `2026-09-30-linha-do-tempo.md`, `2026-09-30-console-importacao.md` e
-`2026-09-30-importador-iped.md`).
+no PR #16 (merge `b6da666`; checkpoints `2026-09-30-mms-android.md`,
+`2026-09-30-linha-do-tempo.md`, `2026-09-30-console-importacao.md` e
+`2026-09-30-importador-iped.md`). Depois, o **importador ADB**: leitura de backup `.ab` e de `.tar`
+sem extrair para o disco (checkpoint `2026-09-30-importador-adb.md`).
 
 Estado em 29/09/2026: a fase 1 fecha o ciclo **importar → analisar → selecionar → relatar**. Na
 `main` estão a interface para volume real (PR #9, merge `24791ff`), as **evidências selecionadas
@@ -95,7 +96,8 @@ release, execução manual ou PR que muda o build (opção "Só tags", PR #4).
 | — | `951365e` | #13 | mesclado (`6f5d5c1`): saneamento dos documentos do handoff |
 | `claude/project-thread-dycfuw` | `24e44fe` | #14 | mesclado (`132a8d5`): design system global e casca do workspace |
 | `claude/contatos-chamadas-android-z7m48s` | `c9762ec` | #15 | mesclado (`9dd1947`): agenda e chamadas do Android |
-| `claude/contatos-chamadas-android-z7m48s` (reiniciada da `main`) | — | novo PR | MMS do Android, linha do tempo unificada, console de importação e importador IPED |
+| `claude/contatos-chamadas-android-z7m48s` (reiniciada da `main`) | `0c19bca` | #16 | mesclado (`b6da666`): MMS do Android, linha do tempo unificada, console de importação e importador IPED |
+| `claude/contatos-chamadas-android-z7m48s` (reiniciada da `main`) | — | novo PR | importador ADB (backup `.ab` e `.tar`) |
 
 As branches mescladas **não foram apagadas**. Podem ser removidas depois que a `main` for
 confirmada íntegra e com CI verde, com aval do usuário.
@@ -301,6 +303,15 @@ depois do PR #15)
   no inventário. Fora de `iped/`, os bancos com nome padrão seguem para os leitores Android e
   WhatsApp. O índice Lucene não é lido. Sem migração.
 
+**Importador ADB e contêineres** (mesma branch; formato público do Android, AOSP)
+- A fonte lê por dentro `.tar` e backup `.ab` (sem cifra, comprimido ou não) sem extrair nada
+  para o disco: os itens de dentro entram no inventário com SHA-256 e caminho
+  `backup.ab!/apps/<pacote>/db/...`, e os parsers recebem a cópia verificada desses itens.
+- Importador `adb`: reconhece o `.ab` pelo cabeçalho, descreve cada backup e cada `_manifest`
+  (pacote, versão do app, API do Android) nas observações e manda os bancos de nome padrão para
+  os mesmos leitores da pasta genérica. Backup cifrado (`AES-256`) é inventariado com hash, mas
+  não aberto. A pasta genérica também passa a abrir `.tar` e `.ab`. Sem migração.
+
 **Busca global** (migração 3)
 - FTS5 em registros e nomes de arquivo, sem diferenciar acentos e maiúsculas, com prefixo.
 - Texto digitado protegido contra sintaxe do FTS (cada palavra vira frase com prefixo).
@@ -312,7 +323,7 @@ depois do PR #15)
 
 | Conjunto | Quantidade | Resultado |
 |---|---|---|
-| Rust (`cargo test --workspace`, soma de todos os `test result`) | 248 + 3 medições ignoradas com MMS, linha do tempo, console e IPED (222 com o PR #15; 201 após a auditoria) | todos passam |
+| Rust (`cargo test --workspace`, soma de todos os `test result`) | 257 + 3 medições ignoradas com o importador ADB (248 com o PR #16; 222 com o PR #15; 201 após a auditoria) | todos passam |
 | `cargo clippy -D warnings` e `cargo fmt --check` | — | limpos |
 | Interface (`vitest`) | 56 com a linha do tempo e o console (50 com o PR #15; 43 após a auditoria) | todos passam |
 | Build da interface (`npm run build`) e do app (`tauri build --debug --no-bundle`) | — | ok |
@@ -345,7 +356,10 @@ REAL infinito. Medições com volume em `tests/desempenho.rs` (ignoradas; ver o 
 ## 6. Limitações conhecidas
 
 - **Avilla sem importador**: falta a árvore de uma extração real (ver §10).
-- **Contêineres** (`.tar`, `.zip`, `.ab`) são inventariados com hash, mas não abertos.
+- **Contêineres**: `.tar` e `.ab` sem cifra são lidos por dentro; `.zip` e outros continuam só
+  inventariados com hash. Backup `.ab` cifrado não é aberto (exige a senha). Ler itens fora de
+  ordem num contêiner grande comprimido é lento (a leitura recomeça do início).
+- **ADB**: conferido só com backup sintético; `apps/<pacote>/f/` e `sp/` só inventariados.
 - **IPED**: só a lista de itens exportada em CSV é lida (o índice Lucene e os bancos internos
   não); conferido só com um caso sintético montado pelo código-fonte público. Fuso ambíguo
   (ex.: `CET`) fica só no valor original, com aviso.
@@ -528,13 +542,15 @@ Detalhes no `README.md`.
 `2026-09-29-fase1-evidencias-relatorio.md`. A auditoria pré-produção (PR #11) está em
 `2026-09-29-auditoria-hardening.md`; a passagem para outro agente, em `docs/HANDOFF-CODEX.md`.
 Depois vieram, em construção contínua, a agenda e as chamadas (PR #15), os MMS, a linha do
-tempo unificada, o console de importação e o importador IPED (checkpoints de 30/09/2026).
+tempo unificada, o console de importação, o importador IPED (PR #16) e o importador ADB
+(checkpoints de 30/09/2026).
 
 A seguir (ordem da construção contínua):
 1. importador Avilla (quando a árvore chegar, §10);
-2. conferência do WhatsApp, SMS/MMS, agenda, chamadas e da lista do IPED com dados de teste
+2. importadores ALEAPP e iLEAPP pelo formato público dos relatórios;
+3. conferência do WhatsApp, SMS/MMS, agenda, chamadas, da lista do IPED e do backup ADB com dados de teste
    (não de investigação);
-3. itens de dívida técnica medidos (HANDOFF §25).
+4. itens de dívida técnica medidos (HANDOFF §25).
 
 ---
 

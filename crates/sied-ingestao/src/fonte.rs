@@ -5,11 +5,12 @@
 //! importador ou parser consegue alterar a evidência por meio dele.
 
 use serde::{Deserialize, Serialize};
-use std::io::{Read, Seek};
+use std::io::Read;
 use ts_rs::TS;
 
 use crate::{ErroIngestao, Resultado};
 
+pub mod conteiner;
 pub mod pasta;
 
 /// Separador entre o caminho de um contêiner e o caminho interno.
@@ -95,16 +96,26 @@ pub struct EntradaFonte {
     pub criado_em: Option<String>,
 }
 
-pub trait LeitorFonte: Read + Seek + Send {}
-impl<T: Read + Seek + Send> LeitorFonte for T {}
+pub trait LeitorFonte: Read + Send {}
+impl<T: Read + Send> LeitorFonte for T {}
 
 /// Extração vista como árvore de arquivos, somente leitura.
 pub trait FonteSomenteLeitura: Send + Sync {
     /// Descrição para logs e auditoria (ex.: caminho absoluto da pasta).
     fn descricao(&self) -> String;
 
-    /// Percorre todos os itens. Deve ser incremental (não carregar a árvore toda).
+    /// Percorre todos os itens, inclusive os de dentro de contêineres. Deve ser
+    /// incremental (não carregar a árvore toda).
     fn listar(&self) -> Box<dyn Iterator<Item = Resultado<EntradaFonte>> + '_>;
+
+    /// Como [`listar`](Self::listar), sem abrir contêineres (rápido, para detecção).
+    fn listar_sem_conteineres(&self) -> Box<dyn Iterator<Item = Resultado<EntradaFonte>> + '_> {
+        Box::new(
+            self.listar().filter(
+                |r| !matches!(r, Ok(e) if e.caminho.como_str().contains(SEPARADOR_CONTEINER)),
+            ),
+        )
+    }
 
     /// Informações de um item, se existir.
     fn entrada(&self, caminho: &CaminhoFonte) -> Resultado<Option<EntradaFonte>>;

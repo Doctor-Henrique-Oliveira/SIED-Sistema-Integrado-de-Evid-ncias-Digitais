@@ -23,15 +23,23 @@ Com --iped, a saída é outra: um caso SINTÉTICO do IPED, copiado de testes/fix
 (pasta iped/ com IPEDConfig.txt, conf/ e index/ sem índice real, "Lista de Arquivos.csv" com as
 15 colunas do IPED e dois arquivos em Exportados/arquivos). Não se combina com as outras opções.
 
+Com --adb, a saída é outra: um backup SINTÉTICO do `adb backup` (backup.ab, versão 5,
+comprimido com zlib, sem cifra) com os bancos das fixtures do Android e do WhatsApp em
+apps/<pacote>/db/ e um _manifest por app, no formato público do Android. Não se combina com as
+outras opções.
+
 Uso: python3 testes/gerador/extracao_sintetica.py [--whatsapp] [--android] [--volume] <pasta de destino>
      python3 testes/gerador/extracao_sintetica.py --iped <pasta de destino>
+     python3 testes/gerador/extracao_sintetica.py --adb <pasta de destino>
 """
 
 import os
 import shutil
+import io
 import sqlite3
 import struct
 import sys
+import tarfile
 import tempfile
 import zlib
 
@@ -218,8 +226,69 @@ def gerar_iped(destino: str) -> None:
     print(destino)
 
 
+def gerar_adb(destino: str) -> None:
+    """Pastas do tar seguem o formato público do `adb backup` (apps/<pacote>/db, _manifest)."""
+    if os.path.exists(destino) and os.listdir(destino):
+        sys.exit(f"a pasta {destino} já existe e não está vazia")
+    os.makedirs(destino, exist_ok=True)
+    sms = ("CREATE TABLE sms (_id INTEGER PRIMARY KEY, thread_id INTEGER, address TEXT, date INTEGER, "
+           "type INTEGER, body TEXT, read INTEGER DEFAULT 1, seen INTEGER DEFAULT 1);")
+    with tempfile.TemporaryDirectory() as tmp:
+        def banco(nome: str, scripts: list) -> bytes:
+            p = os.path.join(tmp, nome)
+            conn = sqlite3.connect(p)
+            for s in scripts:
+                conn.executescript(s)
+            conn.close()
+            with open(p, "rb") as f:
+                return f.read()
+
+        def fixture(pasta: str, nome: str) -> str:
+            with open(os.path.join(pasta, nome), encoding="utf-8") as f:
+                return f.read()
+
+        inserir = "".join(
+            f"INSERT INTO sms(_id, thread_id, address, date, type, body) VALUES "
+            f"({i}, {t}, '{a}', {BASE_MS + m * MINUTO}, {tipo}, '{corpo}');"
+            for (i, t, a, m, tipo, corpo) in MENSAGENS
+        )
+        tel, cont, wa = ("apps/com.android.providers.telephony", "apps/com.android.providers.contacts",
+                         "apps/com.whatsapp")
+        manifesto = lambda p: f"1\n{p}\n34\n34\n\n0\n0\n".encode()
+        itens = [
+            (f"{tel}/_manifest", manifesto("com.android.providers.telephony")),
+            (f"{tel}/db/mmssms.db", banco("mmssms.db", [sms, inserir, fixture(FIXTURES_ANDROID, "mms.sql")])),
+            (f"{cont}/_manifest", manifesto("com.android.providers.contacts")),
+            (f"{cont}/db/contacts2.db", banco("contacts2.db", [fixture(FIXTURES_ANDROID, "contacts2.sql")])),
+            (f"{cont}/db/calllog.db", banco("calllog.db", [fixture(FIXTURES_ANDROID, "calllog.sql")])),
+            (f"{wa}/_manifest", manifesto("com.whatsapp")),
+            (f"{wa}/db/msgstore.db", banco("msgstore.db", [fixture(FIXTURES_WHATSAPP, "msgstore_novo.sql")])),
+            (f"{wa}/db/wa.db", banco("wa.db", [fixture(FIXTURES_WHATSAPP, "wa.sql")])),
+        ]
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w", format=tarfile.USTAR_FORMAT) as t:
+        for nome, dados in itens:
+            info = tarfile.TarInfo(nome)
+            info.size = len(dados)
+            info.mtime = BASE_MS // 1000
+            info.mode = 0o600
+            t.addfile(info, io.BytesIO(dados))
+    with open(os.path.join(destino, "backup.ab"), "wb") as f:
+        f.write(b"ANDROID BACKUP\n5\n1\nnone\n")
+        f.write(zlib.compress(buf.getvalue()))
+    with open(os.path.join(destino, "LEIAME-SINTETICO.txt"), "w", encoding="utf-8") as f:
+        f.write("Backup SINTÉTICO (adb backup) gerado para testes do SIED. Nenhum dado é real.\n")
+    print(destino)
+
+
 if __name__ == "__main__":
     args = sys.argv[1:]
+    if "--adb" in args:
+        resto = [a for a in args if a != "--adb"]
+        if len(resto) != 1 or resto[0].startswith("--"):
+            sys.exit(__doc__)
+        gerar_adb(resto[0])
+        sys.exit(0)
     if "--iped" in args:
         resto = [a for a in args if a != "--iped"]
         if len(resto) != 1 or resto[0].startswith("--"):

@@ -4147,6 +4147,7 @@ name = "sied-armazenamento"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "flate2",
  "hex",
  "rusqlite",
  "serde",
@@ -4206,6 +4207,7 @@ name = "sied-ingestao"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "flate2",
  "hex",
  "rusqlite",
  "serde",

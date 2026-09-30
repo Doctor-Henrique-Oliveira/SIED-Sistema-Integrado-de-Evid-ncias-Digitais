@@ -32,6 +32,7 @@ ts-rs = { version = "10", features = ["uuid-impl", "chrono-impl", "serde-json-im
 uuid = { version = "1", features = ["v7", "serde"] }
 tempfile = "3"
 walkdir = "2"
+flate2 = "1"
 
 sied-dominio = { path = "crates/sied-dominio" }
 sied-armazenamento = { path = "crates/sied-armazenamento" }
