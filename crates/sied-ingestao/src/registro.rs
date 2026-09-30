@@ -2,6 +2,7 @@
 
 use crate::fonte::FonteSomenteLeitura;
 use crate::importador::{Deteccao, Importador, Suporte};
+use crate::importadores::adb::AdbImporter;
 use crate::importadores::avilla::AvillaImporter;
 use crate::importadores::generico::ImportadorGenerico;
 use crate::importadores::iped::IpedImporter;
@@ -26,6 +27,7 @@ impl Registro {
         let mut r = Registro::default();
         r.adicionar_importador(Box::new(AvillaImporter));
         r.adicionar_importador(Box::new(IpedImporter));
+        r.adicionar_importador(Box::new(AdbImporter));
         r.adicionar_importador(Box::new(ImportadorGenerico));
         r.adicionar_parser(Box::new(ParserSmsAndroid));
         r.adicionar_parser(Box::new(ParserWhatsAppAndroid));

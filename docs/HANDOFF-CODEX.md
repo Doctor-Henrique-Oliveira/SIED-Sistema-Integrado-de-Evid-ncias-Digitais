@@ -35,13 +35,14 @@ Visão integral e permanente: `docs/VISAO.md`. Arquitetura aprovada (com ajustes
   evidências e relatório PDF (Typst embutido), e o hardening desta auditoria.
 - **Importador Avilla: só o contrato.** Responde `NaoImplementado`. Aguarda a árvore de uma
   extração real (§26).
-- Testes: 248 Rust (+3 medições ignoradas), 56 de interface (vitest), 1 roteiro E2E no app real
-  (com MMS, linha do tempo, console e IPED; 222 e 50 com o PR #15; 201 e 43 após a auditoria).
+- Testes: 257 Rust (+3 medições ignoradas), 56 de interface (vitest), 1 roteiro E2E no app real
+  (com o importador ADB; 248 com o PR #16; 222 e 50 com o PR #15; 201 e 43 após a auditoria).
   CI Linux e Windows.
 - Depois do handoff: design system global (PR #14, merge `132a8d5`), **agenda e registro de
   chamadas do Android** (PR #15, merge `9dd1947`, §10.1) e, em construção contínua, **MMS do
   Android** (§10.2), **linha do tempo unificada** (§13.1), **console de importação em tempo
-  real** (§9.1) e **importador IPED** (§9.2). Próximos passos em §27.
+  real** (§9.1) e **importador IPED** (§9.2) (PR #16, merge `b6da666`), e **importador ADB**
+  com leitura de `.tar`/`.ab` por dentro (§9.3). Próximos passos em §27.
 
 ## 3. Arquitetura
 
@@ -119,9 +120,12 @@ crates/
                             desempenho (ignorado)
   sied-ingestao/
     src/fonte.rs            CaminhoFonte (endereço seguro), FonteSomenteLeitura
-    src/fonte/pasta.rs      PastaSomenteLeitura (não segue links, confere cada parte)
+    src/fonte/pasta.rs      PastaSomenteLeitura (não segue links, confere cada parte; lista e
+                            abre itens de .tar/.ab como "arquivo.ab!/caminho")
+    src/fonte/conteiner.rs  leitura de tar (ustar, GNU, pax) e do backup .ab do Android
     src/importador.rs       contrato Importador
-    src/importadores/       generico.rs (pasta), iped.rs (caso do IPED), avilla.rs (só contrato)
+    src/importadores/       generico.rs (pasta), iped.rs (caso do IPED), adb.rs (backup .ab),
+                            avilla.rs (só contrato)
     src/parser.rs           contrato Parser e SaidaParser
     src/parsers/            android_sms.rs, android_mms.rs, android_contatos.rs, android_chamadas.rs,
                             iped_lista.rs (lista de itens do IPED),
@@ -252,6 +256,7 @@ transforma nome perigoso da listagem em **item ignorado com aviso** (a importaç
 |---|---|---|
 | `generico` | `importadores/generico.rs` | Pasta qualquer. Reconhece `mmssms.db` (SMS e MMS), `msgstore.db` + `wa.db` do WhatsApp (pareados pela pasta; `com.whatsapp` e `com.whatsapp.w4b`), `contacts2.db` (agenda; sem `calllog.db` na mesma pasta, também vai ao leitor de chamadas) e `calllog.db` (chamadas); `.crypt*` só inventariados |
 | `iped` | `importadores/iped.rs` | Caso do IPED: lista de itens na raiz (6 nomes por idioma) → `iped_lista_arquivos`; fora de `iped/`, o mesmo plano da pasta genérica; §9.2 |
+| `adb` | `importadores/adb.rs` | Backup `adb backup` (`.ab`), sozinho ou com arquivos de `adb pull`: observações do cabeçalho e dos `_manifest`; o mesmo plano da pasta genérica, inclusive dentro do backup; §9.3 |
 | `avilla` | `importadores/avilla.rs` | **Só contrato.** `detectar` → `NaoImplementado`; `planejar` → erro `NaoImplementado` |
 
 Pipeline (`pipeline.rs`), nesta ordem, igual para toda ferramenta:
@@ -287,6 +292,23 @@ Artefato: `normalizar()` (−0.0 → 0.0; `app` vazio → ausente) e depois `has
   no original com um aviso. O atalho `=HIPERLINK("Exportados\arquivos\E\0\<MD5>.png";"Abrir")`
   é relativo à raiz do caso e liga o item ao inventário pelo caminho exato.
 - Fixture: `testes/fixtures/iped/` (`-text` no `.gitattributes`); gerador `--iped`.
+
+### 9.3 ADB e contêineres
+
+- Formato público do Android (AOSP): cabeçalho de texto `ANDROID BACKUP`, versão, compressão
+  (`1` = zlib) e cifra (`none` ou `AES-256`), seguido de um tar com `apps/<pacote>/{_manifest,
+  db,f,sp,r}` e, se pedido, `shared/`.
+- `fonte/conteiner.rs` lê o tar em fluxo (ustar com prefixo, nome longo GNU `L`, pax `x` com
+  `path`/`size`, `g`/`K` ignorados, checksum conferido, tamanho em base-256). Nada é extraído.
+- `PastaSomenteLeitura` lista os itens de dentro logo depois do contêiner, com o separador `!/`
+  (`SEPARADOR_CONTEINER`). Duplicados (vale o primeiro), nomes inseguros, links, itens especiais,
+  `.ab` cifrado e erro de leitura no meio viram `ItemIgnorado` com o motivo. Um `.ab` sem o
+  cabeçalho é tratado como arquivo comum. Contêiner dentro de contêiner não é aberto.
+- A leitura mantém um cursor por contêiner: ler os itens na ordem da listagem descomprime cada
+  contêiner uma vez; voltar atrás recomeça do início. `LeitorFonte` deixou de exigir `Seek`.
+- `listar_sem_conteineres()` serve à detecção (rápida; não abre contêineres).
+- Fixture: gerada nos testes por `testes/rust/backup_sintetico.rs` a partir das fixtures SQL;
+  gerador `--adb`. `atributos_dispositivo` (ex.: `api_android`) ainda não é gravado no caso.
 
 ## 10. Parsers
 
@@ -484,7 +506,7 @@ não capturado.
 
 | Conjunto | Onde | Quantidade |
 |---|---|---|
-| Rust | `crates/*/src` (unitários, inclusive os que exportam os tipos TS) e `crates/*/tests` | 248 + 3 medições `#[ignore]` |
+| Rust | `crates/*/src` (unitários, inclusive os que exportam os tipos TS) e `crates/*/tests` | 257 + 3 medições `#[ignore]` |
 | Interface | `app/src/**/*.test.ts(x)` | 56 |
 | E2E | `testes/e2e/executar.sh` + `persistencia.mjs` | 1 roteiro (cria caso, importa, analisa, reabre; confere que a extração não mudou: hash e datas antes/depois) |
 
@@ -502,12 +524,14 @@ Testes de UI com virtualização: jsdom precisa de `offsetHeight`, `offsetWidth`
 ## 22. Limitações conhecidas
 
 Funcionais:
-- Avilla sem importador (§26). Contêineres (`.tar`, `.zip`, `.ab`) só inventariados.
+- Avilla sem importador (§26). `.tar` e `.ab` sem cifra lidos por dentro (§9.3); `.zip`, `.ab`
+  cifrado e contêiner dentro de contêiner só inventariados.
 - Interpretados: SMS e MMS, WhatsApp Android, agenda e chamadas do Android. Sem fotos de
   contato, `deleted_contacts`, chamadas de apps nem junção de contatos repetidos. MMS: só a
   primeira mídia vira anexo (as demais ficam listadas nas partes); RCS não é lido.
 - WhatsApp, MMS, agenda e chamadas conferidos só com bancos sintéticos (§10.1, §10.2, §11).
 - IPED: só a lista de itens em CSV; conferida só com o caso sintético (§9.2).
+- ADB: conferido só com backup sintético; `f/`, `sp/` e `shared/` só inventariados (§9.3).
 - Hash numa única thread; sem retomada de importação interrompida; sem exclusão de extração
   (de propósito); sem verificação do "hash declarado" do laudo de aquisição.
 - Miniaturas: sem HEIC, vídeo e áudio. Mídias e Arquivos mostram uma extração por vez; listas de
@@ -602,12 +626,13 @@ plano e pasta intacta, e importação completa no app real. Roteiro em
 
 Construção contínua (regra do usuário de 30/09/2026): cada fase vai para a `main` com a CI
 verde. Feitas: agenda e chamadas (PR #15), MMS, linha do tempo, console de importação e
-importador IPED (lista de itens). Ordem seguinte:
+importador IPED (lista de itens), importador ADB (backup `.ab` e `.tar`). Ordem seguinte:
 
 1. **Importador Avilla**, quando a árvore real chegar (§26).
-2. **Conferência do WhatsApp, SMS/MMS, agenda, chamadas e da lista do IPED** com dados de teste
-   (não de investigação).
-3. Itens F1–F9 (§25), conforme a necessidade medida.
+2. **Importadores ALEAPP e iLEAPP**, só pelo formato público dos relatórios.
+3. **Conferência do WhatsApp, SMS/MMS, agenda, chamadas, da lista do IPED e do backup ADB** com
+   dados de teste (não de investigação).
+4. Itens F1–F9 (§25), conforme a necessidade medida.
 
 ## 28. Arquivos para ler primeiro
 

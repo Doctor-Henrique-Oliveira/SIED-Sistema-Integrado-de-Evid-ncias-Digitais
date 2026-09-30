@@ -2,19 +2,29 @@
 //!
 //! Arquivos são abertos com `File::open` (somente leitura). Links simbólicos não são
 //! seguidos: um link poderia apontar para fora da extração.
+//!
+//! Contêineres (`.tar` e backup `.ab` do Android sem cifra) são abertos em memória, sem
+//! extrair nada: a listagem traz, logo depois do contêiner, os itens de dentro dele com o
+//! endereço `contêiner!/caminho/interno` (ver [`super::conteiner`]). Contêiner dentro de
+//! contêiner não é aberto.
 
 use chrono::{DateTime, SecondsFormat, Utc};
+use std::collections::HashSet;
 use std::fs::{self, File, Metadata};
-use std::io::BufReader;
+use std::io::{BufReader, Read};
 use std::path::{Component, Path, PathBuf};
+use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 use walkdir::WalkDir;
 
+use super::conteiner::{self, Cursor, LeitorTar, TipoConteiner, TipoItem};
 use super::{CaminhoFonte, EntradaFonte, FonteSomenteLeitura, LeitorFonte, SEPARADOR_CONTEINER};
 use crate::{ErroIngestao, Resultado};
 
 pub struct PastaSomenteLeitura {
     raiz: PathBuf,
+    /// Onde parou a leitura do último contêiner aberto (ver [`Cursor`]).
+    cursor: Arc<Mutex<Option<Cursor>>>,
 }
 
 impl PastaSomenteLeitura {
@@ -26,7 +36,10 @@ impl PastaSomenteLeitura {
                 raiz.display()
             )));
         }
-        Ok(PastaSomenteLeitura { raiz })
+        Ok(PastaSomenteLeitura {
+            raiz,
+            cursor: Arc::default(),
+        })
     }
 
     pub fn raiz(&self) -> &Path {
@@ -53,6 +66,30 @@ impl PastaSomenteLeitura {
         Ok(p)
     }
 
+    /// Separa `contêiner!/interno`: caminho do contêiner no disco, tipo e nome interno.
+    fn dentro(
+        &self,
+        caminho: &CaminhoFonte,
+    ) -> Resultado<Option<(PathBuf, TipoConteiner, String)>> {
+        let Some((cont, interno)) = caminho.como_str().split_once(SEPARADOR_CONTEINER) else {
+            return Ok(None);
+        };
+        let c = CaminhoFonte::novo(cont)?;
+        let tipo = conteiner::tipo_por_nome(c.nome())
+            .ok_or_else(|| ErroIngestao::CaminhoInvalido(caminho.to_string()))?;
+        if interno.is_empty() || interno.contains(SEPARADOR_CONTEINER) {
+            return Err(ErroIngestao::CaminhoInvalido(caminho.to_string()));
+        }
+        let p = self.no_disco(&c)?;
+        if fs::symlink_metadata(&p)?.file_type().is_symlink() {
+            return Err(ErroIngestao::ItemIgnorado {
+                caminho: c.to_string(),
+                motivo: "link simbólico (não seguido)".into(),
+            });
+        }
+        Ok(Some((p, tipo, interno.to_string())))
+    }
+
     fn relativo(&self, p: &Path) -> Resultado<CaminhoFonte> {
         let rel = p
             .strip_prefix(&self.raiz)
@@ -70,6 +107,248 @@ impl PastaSomenteLeitura {
                      (unidade, \".\", só pontos ou só espaços)"
                 .into(),
         })
+    }
+}
+
+impl PastaSomenteLeitura {
+    fn percorrer(&self) -> walkdir::IntoIter {
+        WalkDir::new(&self.raiz)
+            .follow_links(false)
+            .sort_by_file_name()
+            .min_depth(1)
+            .into_iter()
+    }
+
+    /// Item de pasta (fora de contêiner) da listagem.
+    fn item_da_pasta(&self, item: walkdir::Result<walkdir::DirEntry>) -> Resultado<EntradaFonte> {
+        let item = item.map_err(|e| {
+            let caminho = e
+                .path()
+                .and_then(|p| p.strip_prefix(&self.raiz).ok())
+                .map(|p| p.display().to_string())
+                .unwrap_or_default();
+            ErroIngestao::ItemIgnorado {
+                caminho,
+                motivo: format!("não foi possível ler: {e}"),
+            }
+        })?;
+        let caminho = self.relativo(item.path())?;
+        if item.path_is_symlink() {
+            return Err(ErroIngestao::ItemIgnorado {
+                caminho: caminho.to_string(),
+                motivo: "link simbólico (não seguido)".into(),
+            });
+        }
+        let m = item.metadata().map_err(|e| ErroIngestao::ItemIgnorado {
+            caminho: caminho.to_string(),
+            motivo: format!("sem metadados: {e}"),
+        })?;
+        Ok(entrada(caminho, &m))
+    }
+
+    /// Abre um item de dentro de um contêiner, continuando de onde a última leitura do
+    /// mesmo contêiner parou quando o item está mais à frente.
+    fn abrir_dentro(
+        &self,
+        caminho: &CaminhoFonte,
+        disco: &Path,
+        tipo: TipoConteiner,
+        interno: &str,
+    ) -> Resultado<Box<dyn LeitorFonte>> {
+        let chave = disco.display().to_string();
+        let anterior = self.cursor.lock().unwrap_or_else(|e| e.into_inner()).take();
+        let mut cur = match anterior {
+            Some(c) if c.conteiner == chave && !c.passados.contains(interno) => c,
+            _ => Cursor {
+                conteiner: chave,
+                tar: conteiner::abrir_tar(disco, tipo)?,
+                passados: HashSet::new(),
+            },
+        };
+        while let Some(i) = cur.tar.proximo()? {
+            let primeiro = cur.passados.insert(i.nome.clone());
+            if i.nome == interno && primeiro {
+                if i.tipo != TipoItem::Arquivo {
+                    return Err(ErroIngestao::ItemIgnorado {
+                        caminho: caminho.to_string(),
+                        motivo: "não é um arquivo comum dentro do contêiner".into(),
+                    });
+                }
+                return Ok(Box::new(ItemDoConteiner {
+                    cursor: Some(cur),
+                    dono: Arc::clone(&self.cursor),
+                }));
+            }
+        }
+        Err(ErroIngestao::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("{caminho}: item não encontrado dentro do contêiner"),
+        )))
+    }
+}
+
+/// Conteúdo de um item de contêiner. Ao terminar, devolve a posição de leitura para a
+/// fonte, para o próximo item não exigir recomeçar do início.
+struct ItemDoConteiner {
+    cursor: Option<Cursor>,
+    dono: Arc<Mutex<Option<Cursor>>>,
+}
+
+impl Read for ItemDoConteiner {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        match self.cursor.as_mut() {
+            Some(c) => c.tar.read(buf),
+            None => Ok(0),
+        }
+    }
+}
+
+impl Drop for ItemDoConteiner {
+    fn drop(&mut self) {
+        if let Some(mut c) = self.cursor.take() {
+            if c.tar.terminar_item().is_ok() {
+                *self.dono.lock().unwrap_or_else(|e| e.into_inner()) = Some(c);
+            }
+        }
+    }
+}
+
+/// Contêiner sendo percorrido pela listagem.
+struct Expansao {
+    conteiner: CaminhoFonte,
+    tar: Option<LeitorTar>,
+    /// Motivo de não abrir (ex.: backup cifrado), avisado uma vez.
+    recusa: Option<String>,
+    vistos: HashSet<String>,
+}
+
+struct Listagem<'a> {
+    fonte: &'a PastaSomenteLeitura,
+    walk: walkdir::IntoIter,
+    expansao: Option<Expansao>,
+    expandir: bool,
+}
+
+impl Listagem<'_> {
+    fn preparar_expansao(&self, e: &EntradaFonte) -> Option<Expansao> {
+        if e.diretorio || e.caminho.como_str().contains(SEPARADOR_CONTEINER) {
+            return None;
+        }
+        let tipo = conteiner::tipo_por_nome(e.caminho.nome())?;
+        let disco = self.fonte.no_disco(&e.caminho).ok()?;
+        let mut x = Expansao {
+            conteiner: e.caminho.clone(),
+            tar: None,
+            recusa: None,
+            vistos: HashSet::new(),
+        };
+        if tipo == TipoConteiner::BackupAndroid {
+            match conteiner::cabecalho_backup_do_arquivo(&disco) {
+                // Extensão .ab sem o cabeçalho de backup: arquivo comum.
+                Ok(None) => return None,
+                Ok(Some(c)) if c.cifrado() => {
+                    x.recusa = Some(format!(
+                        "backup .ab cifrado ({}): inventariado com hash, conteúdo não aberto \
+                         (exige a senha)",
+                        c.cifra
+                    ));
+                    return Some(x);
+                }
+                Ok(Some(_)) => {}
+                Err(err) => {
+                    x.recusa = Some(format!("cabeçalho do backup .ab ilegível: {err}"));
+                    return Some(x);
+                }
+            }
+        }
+        match conteiner::abrir_tar(&disco, tipo) {
+            Ok(t) => x.tar = Some(t),
+            Err(err) => x.recusa = Some(format!("contêiner não aberto: {err}")),
+        }
+        Some(x)
+    }
+
+    /// Próximo item de dentro do contêiner; `None` quando ele termina.
+    fn proximo_interno(x: &mut Expansao) -> Option<Resultado<EntradaFonte>> {
+        let ignorado =
+            |caminho: String, motivo: String| ErroIngestao::ItemIgnorado { caminho, motivo };
+        if let Some(m) = x.recusa.take() {
+            return Some(Err(ignorado(x.conteiner.to_string(), m)));
+        }
+        let tar = x.tar.as_mut()?;
+        loop {
+            let item = match tar.proximo() {
+                Ok(Some(i)) => i,
+                Ok(None) => return None,
+                Err(err) => {
+                    x.tar = None;
+                    return Some(Err(ignorado(
+                        x.conteiner.to_string(),
+                        format!(
+                            "contêiner lido só até um ponto (o resto não foi inventariado): {err}"
+                        ),
+                    )));
+                }
+            };
+            if item.nome.is_empty() {
+                continue;
+            }
+            let texto = format!("{}{SEPARADOR_CONTEINER}{}", x.conteiner, item.nome);
+            if item.nome.contains(SEPARADOR_CONTEINER) {
+                return Some(Err(ignorado(
+                    texto,
+                    "nome interno com \"!/\" (ambíguo com o separador do SIED)".into(),
+                )));
+            }
+            let Ok(caminho) = CaminhoFonte::novo(&texto) else {
+                return Some(Err(ignorado(
+                    texto,
+                    "nome interno que não pode ser endereçado com segurança".into(),
+                )));
+            };
+            if !x.vistos.insert(item.nome.clone()) {
+                return Some(Err(ignorado(
+                    texto,
+                    "nome repetido no contêiner: só a primeira ocorrência é inventariada".into(),
+                )));
+            }
+            return Some(match item.tipo {
+                TipoItem::Outro(t) => Err(ignorado(
+                    texto,
+                    format!(
+                        "link ou item especial do tar (tipo '{}'), não seguido",
+                        t as char
+                    ),
+                )),
+                tipo => Ok(EntradaFonte {
+                    caminho,
+                    diretorio: tipo == TipoItem::Diretorio,
+                    tamanho: item.tamanho,
+                    modificado_em: item.modificado_em,
+                    criado_em: None,
+                }),
+            });
+        }
+    }
+}
+
+impl Iterator for Listagem<'_> {
+    type Item = Resultado<EntradaFonte>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(x) = self.expansao.as_mut() {
+            match Self::proximo_interno(x) {
+                Some(r) => return Some(r),
+                None => self.expansao = None,
+            }
+        }
+        let r = self.fonte.item_da_pasta(self.walk.next()?);
+        if self.expandir {
+            if let Ok(e) = &r {
+                self.expansao = self.preparar_expansao(e);
+            }
+        }
+        Some(r)
     }
 }
 
@@ -94,40 +373,39 @@ impl FonteSomenteLeitura for PastaSomenteLeitura {
     }
 
     fn listar(&self) -> Box<dyn Iterator<Item = Resultado<EntradaFonte>> + '_> {
-        let iter = WalkDir::new(&self.raiz)
-            .follow_links(false)
-            .sort_by_file_name()
-            .min_depth(1)
-            .into_iter()
-            .map(move |item| {
-                let item = item.map_err(|e| {
-                    let caminho = e
-                        .path()
-                        .and_then(|p| p.strip_prefix(&self.raiz).ok())
-                        .map(|p| p.display().to_string())
-                        .unwrap_or_default();
-                    ErroIngestao::ItemIgnorado {
-                        caminho,
-                        motivo: format!("não foi possível ler: {e}"),
-                    }
-                })?;
-                let caminho = self.relativo(item.path())?;
-                if item.path_is_symlink() {
-                    return Err(ErroIngestao::ItemIgnorado {
-                        caminho: caminho.to_string(),
-                        motivo: "link simbólico (não seguido)".into(),
-                    });
-                }
-                let m = item.metadata().map_err(|e| ErroIngestao::ItemIgnorado {
-                    caminho: caminho.to_string(),
-                    motivo: format!("sem metadados: {e}"),
-                })?;
-                Ok(entrada(caminho, &m))
-            });
-        Box::new(iter)
+        Box::new(Listagem {
+            fonte: self,
+            walk: self.percorrer(),
+            expansao: None,
+            expandir: true,
+        })
+    }
+
+    fn listar_sem_conteineres(&self) -> Box<dyn Iterator<Item = Resultado<EntradaFonte>> + '_> {
+        Box::new(Listagem {
+            fonte: self,
+            walk: self.percorrer(),
+            expansao: None,
+            expandir: false,
+        })
     }
 
     fn entrada(&self, caminho: &CaminhoFonte) -> Resultado<Option<EntradaFonte>> {
+        if let Some((p, tipo, interno)) = self.dentro(caminho)? {
+            let mut tar = conteiner::abrir_tar(&p, tipo)?;
+            while let Some(i) = tar.proximo()? {
+                if i.nome == interno {
+                    return Ok(Some(EntradaFonte {
+                        caminho: caminho.clone(),
+                        diretorio: i.tipo == TipoItem::Diretorio,
+                        tamanho: i.tamanho,
+                        modificado_em: i.modificado_em,
+                        criado_em: None,
+                    }));
+                }
+            }
+            return Ok(None);
+        }
         let p = self.no_disco(caminho)?;
         match fs::symlink_metadata(&p) {
             Ok(m) if m.file_type().is_symlink() => Ok(None),
@@ -138,6 +416,9 @@ impl FonteSomenteLeitura for PastaSomenteLeitura {
     }
 
     fn abrir(&self, caminho: &CaminhoFonte) -> Resultado<Box<dyn LeitorFonte>> {
+        if let Some((p, tipo, interno)) = self.dentro(caminho)? {
+            return self.abrir_dentro(caminho, &p, tipo, &interno);
+        }
         let p = self.no_disco(caminho)?;
         if fs::symlink_metadata(&p)?.file_type().is_symlink() {
             return Err(ErroIngestao::ItemIgnorado {
@@ -228,5 +509,110 @@ mod testes {
             f.entrada(&forjado),
             Err(ErroIngestao::CaminhoInvalido(_))
         ));
+    }
+
+    fn ler(f: &PastaSomenteLeitura, c: &str) -> Vec<u8> {
+        let mut v = Vec::new();
+        f.abrir(&CaminhoFonte::novo(c).unwrap())
+            .unwrap()
+            .read_to_end(&mut v)
+            .unwrap();
+        v
+    }
+
+    /// Backup `.ab` e `.tar` SINTÉTICOS: itens listados logo depois do contêiner e lidos
+    /// em qualquer ordem, sem nada gravado na pasta.
+    #[test]
+    fn lista_e_le_dentro_de_conteineres() {
+        use crate::fonte::conteiner::testes::{backup, tar};
+        let dir = tempfile::tempdir().unwrap();
+        let t = tar(&[
+            ("apps/com.exemplo/db/", b"", b'5'),
+            ("apps/com.exemplo/db/a.db", b"banco A", b'0'),
+            ("apps/com.exemplo/f/b.txt", b"arquivo B", b'0'),
+            ("apps/com.exemplo/db/a.db", b"repetido", b'0'),
+            ("apps/../fora", b"x", b'0'),
+            ("apps/link", b"", b'2'),
+        ]);
+        fs::write(dir.path().join("backup.ab"), backup(&t, true)).unwrap();
+        fs::write(dir.path().join("pasta.tar"), tar(&[("x.txt", b"X", b'0')])).unwrap();
+        fs::write(dir.path().join("falso.ab"), "não é backup").unwrap();
+        let f = PastaSomenteLeitura::abrir(dir.path()).unwrap();
+        let mut ok = Vec::new();
+        let mut ignorados = Vec::new();
+        for r in f.listar() {
+            match r {
+                Ok(e) => ok.push((e.caminho.to_string(), e.diretorio, e.tamanho)),
+                Err(ErroIngestao::ItemIgnorado { caminho, .. }) => ignorados.push(caminho),
+                Err(e) => panic!("{e}"),
+            }
+        }
+        let tam_ab = fs::metadata(dir.path().join("backup.ab")).unwrap().len();
+        let tam_tar = fs::metadata(dir.path().join("pasta.tar")).unwrap().len();
+        assert_eq!(
+            ok,
+            vec![
+                ("backup.ab".into(), false, tam_ab),
+                ("backup.ab!/apps/com.exemplo/db".into(), true, 0),
+                ("backup.ab!/apps/com.exemplo/db/a.db".into(), false, 7),
+                ("backup.ab!/apps/com.exemplo/f/b.txt".into(), false, 9),
+                ("falso.ab".into(), false, 14),
+                ("pasta.tar".into(), false, tam_tar),
+                ("pasta.tar!/x.txt".into(), false, 1),
+            ]
+        );
+        assert_eq!(
+            ignorados,
+            vec![
+                "backup.ab!/apps/com.exemplo/db/a.db",
+                "backup.ab!/apps/../fora",
+                "backup.ab!/apps/link",
+            ]
+        );
+        assert_eq!(f.listar_sem_conteineres().count(), 3);
+
+        // Em ordem, fora de ordem e de volta: sempre a primeira ocorrência.
+        assert_eq!(ler(&f, "backup.ab!/apps/com.exemplo/db/a.db"), b"banco A");
+        assert_eq!(ler(&f, "backup.ab!/apps/com.exemplo/f/b.txt"), b"arquivo B");
+        assert_eq!(ler(&f, "backup.ab!/apps/com.exemplo/db/a.db"), b"banco A");
+        assert_eq!(ler(&f, "pasta.tar!/x.txt"), b"X");
+        // Leitura parcial devolve a posição sem quebrar a seguinte.
+        {
+            let mut l = f
+                .abrir(&CaminhoFonte::novo("backup.ab!/apps/com.exemplo/db/a.db").unwrap())
+                .unwrap();
+            let mut um = [0u8; 1];
+            l.read_exact(&mut um).unwrap();
+        }
+        assert_eq!(ler(&f, "backup.ab!/apps/com.exemplo/f/b.txt"), b"arquivo B");
+        let e = f
+            .entrada(&CaminhoFonte::novo("backup.ab!/apps/com.exemplo/f/b.txt").unwrap())
+            .unwrap()
+            .unwrap();
+        assert_eq!(e.tamanho, 9);
+        assert!(f
+            .abrir(&CaminhoFonte::novo("backup.ab!/nao/existe").unwrap())
+            .is_err());
+        assert!(f
+            .abrir(&CaminhoFonte::novo("backup.ab!/apps/com.exemplo/db").unwrap())
+            .is_err());
+    }
+
+    #[test]
+    fn backup_cifrado_e_inventariado_sem_abrir() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("cifrado.ab"),
+            b"ANDROID BACKUP\n5\n1\nAES-256\nsal-e-dados-sinteticos",
+        )
+        .unwrap();
+        let f = PastaSomenteLeitura::abrir(dir.path()).unwrap();
+        let r: Vec<_> = f.listar().collect();
+        assert_eq!(r.len(), 2);
+        assert!(matches!(&r[0], Ok(e) if e.caminho.como_str() == "cifrado.ab"));
+        assert!(
+            matches!(&r[1], Err(ErroIngestao::ItemIgnorado { caminho, motivo })
+            if caminho == "cifrado.ab" && motivo.contains("cifrado"))
+        );
     }
 }

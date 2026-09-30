@@ -17,6 +17,7 @@ sied-dominio.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 ts-rs.workspace = true
+flate2.workspace = true
 walkdir.workspace = true
 
 [dev-dependencies]
