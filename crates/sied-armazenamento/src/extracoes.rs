@@ -423,6 +423,8 @@ pub struct ArtefatoDetalhe {
     pub data_hora_original: Option<String>,
     pub formato_data: Option<String>,
     pub id_externo: Option<String>,
+    /// Conta do registro no app ou no aparelho (ex.: conta que sincroniza o contato).
+    pub conta: Option<String>,
     /// Caminho do anexo como o app gravou.
     pub anexo_caminho: Option<String>,
     pub anexo_arquivo: Option<AnexoInventario>,
@@ -448,7 +450,7 @@ pub fn detalhe_artefato(conn: &Connection, artefato_id: i64) -> Resultado<Artefa
                     a.data_hora_original, a.formato_data, a.id_externo, a.anexo_caminho, a.confianca,
                     a.metadados, a.hash_registro, x.id, x.importador, x.importador_versao, x.origem_caminho,
                     x.hash_manifesto, e.parser, e.parser_versao,
-                    f.id, f.caminho, f.sha256, f.tamanho, f.categoria
+                    f.id, f.caminho, f.sha256, f.tamanho, f.categoria, a.conta
                  FROM artefato a
                  JOIN extracao x ON x.id = a.extracao_id
                  JOIN execucao_parser e ON e.id = a.execucao_id
@@ -464,6 +466,7 @@ pub fn detalhe_artefato(conn: &Connection, artefato_id: i64) -> Resultado<Artefa
                     data_hora_original: r.get(n)?,
                     formato_data: r.get(n + 1)?,
                     id_externo: r.get(n + 2)?,
+                    conta: r.get(n + 19)?,
                     anexo_caminho: r.get(n + 3)?,
                     anexo_arquivo: match anexo_id {
                         Some(id) => Some(AnexoInventario {

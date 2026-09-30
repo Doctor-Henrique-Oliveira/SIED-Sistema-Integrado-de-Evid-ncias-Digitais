@@ -21,6 +21,9 @@ use sied_dominio::{
 use sied_ingestao::InfoComponente;
 use std::path::{Path, PathBuf};
 
+use crate::agenda::{
+    self, Chamada, ContatoAgenda, FiltroChamadas, FiltroContatos, ResumoChamadas, TotalApp,
+};
 use crate::auditoria::{self, RegistroAuditoria, VerificacaoAuditoria};
 use crate::busca::{self, FiltroBusca, ResultadoBusca};
 use crate::conexao::{self, Abertura};
@@ -479,6 +482,34 @@ impl BancoCaso {
         limite: i64,
     ) -> Resultado<Pagina<Identificador>> {
         resumo::identificadores(&self.conn, texto, deslocamento, limite)
+    }
+
+    // ------------------------------------------------------------ agenda e chamadas
+
+    pub fn contatos(
+        &self,
+        filtro: &FiltroContatos,
+        deslocamento: i64,
+        limite: i64,
+    ) -> Resultado<Pagina<ContatoAgenda>> {
+        agenda::contatos(&self.conn, filtro, deslocamento, limite)
+    }
+
+    pub fn apps_contatos(&self) -> Resultado<Vec<TotalApp>> {
+        agenda::apps_contatos(&self.conn)
+    }
+
+    pub fn chamadas(
+        &self,
+        filtro: &FiltroChamadas,
+        deslocamento: i64,
+        limite: i64,
+    ) -> Resultado<Pagina<Chamada>> {
+        agenda::chamadas(&self.conn, filtro, deslocamento, limite)
+    }
+
+    pub fn resumo_chamadas(&self) -> Resultado<ResumoChamadas> {
+        agenda::resumo_chamadas(&self.conn)
     }
 }
 

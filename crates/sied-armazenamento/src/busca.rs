@@ -97,11 +97,15 @@ pub fn digitos_telefone(texto: &str) -> Option<String> {
 }
 
 /// Mesma normalização da migração 3 (apenas dígitos de remetente + destinatários).
-/// Em contatos, o identificador do próprio contato (ex.: jid do WhatsApp) também
-/// conta, para que o número leve ao nome gravado no aparelho.
+/// Em contatos, o identificador do próprio contato (ex.: jid do WhatsApp) e os
+/// telefones da agenda (número gravado e normalizado) também contam, para que o número
+/// leve ao nome gravado no aparelho.
 const PESSOAS_SO_DIGITOS: &str = "replace(replace(replace(replace(replace(replace(
     coalesce(a.remetente, '') || ' ' || a.destinatarios || ' ' ||
-    CASE WHEN a.tipo = 'contato' THEN coalesce(a.id_externo, '') ELSE '' END,
+    CASE WHEN a.tipo = 'contato' THEN coalesce(a.id_externo, '') || ' ' || coalesce(
+        (SELECT group_concat(coalesce(t.value ->> '$.numero', '') || ' ' ||
+                             coalesce(t.value ->> '$.normalizado', ''), ' ')
+           FROM json_each(a.metadados, '$.telefones') t), '') ELSE '' END,
     '+', ''), '-', ''), '(', ''), ')', ''), '.', ''), ' ', '')";
 
 struct Filtros {

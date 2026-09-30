@@ -45,8 +45,24 @@ import type { RelatorioRegistrado } from "./tipos/RelatorioRegistrado";
 import type { SecoesRelatorio } from "./tipos/SecoesRelatorio";
 import type { TextosEvidencia } from "./tipos/TextosEvidencia";
 import type { TipoEvidencia } from "./tipos/TipoEvidencia";
+import type { Chamada } from "./tipos/Chamada";
+import type { ContatoAgenda } from "./tipos/ContatoAgenda";
+import type { ContatoVinculado } from "./tipos/ContatoVinculado";
+import type { FiltroChamadas } from "./tipos/FiltroChamadas";
+import type { FiltroContatos } from "./tipos/FiltroContatos";
+import type { ResumoChamadas } from "./tipos/ResumoChamadas";
+import type { TelefoneContato } from "./tipos/TelefoneContato";
+import type { TotalApp } from "./tipos/TotalApp";
 
 export type {
+  Chamada,
+  ContatoAgenda,
+  ContatoVinculado,
+  FiltroChamadas,
+  FiltroContatos,
+  ResumoChamadas,
+  TelefoneContato,
+  TotalApp,
   Evidencia,
   Marcacoes,
   NovaEvidencia,
@@ -191,6 +207,12 @@ export const api = {
   resumoCaso: () => chamar<ResumoCaso>("resumo_caso"),
   listarIdentificadores: (texto: string | null, deslocamento: number, limite: number) =>
     chamar<Pagina<Identificador>>("listar_identificadores", { texto, deslocamento, limite }),
+  listarContatos: (filtro: FiltroContatos, deslocamento: number, limite: number) =>
+    chamar<Pagina<ContatoAgenda>>("listar_contatos", { filtro, deslocamento, limite }),
+  appsDosContatos: () => chamar<TotalApp[]>("apps_dos_contatos"),
+  listarChamadas: (filtro: FiltroChamadas, deslocamento: number, limite: number) =>
+    chamar<Pagina<Chamada>>("listar_chamadas", { filtro, deslocamento, limite }),
+  resumoChamadas: () => chamar<ResumoChamadas>("resumo_chamadas"),
 
   listarEvidencias: () => chamar<Evidencia[]>("listar_evidencias"),
   marcacoesEvidencias: () => chamar<Marcacoes>("marcacoes_evidencias"),

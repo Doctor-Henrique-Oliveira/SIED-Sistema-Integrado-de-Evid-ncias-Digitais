@@ -20,8 +20,8 @@ const respostas: Record<string, unknown> = {
   listar_identificadores: {
     total: 2,
     itens: [
-      { identificador: "+5511900000001", app: "sms", conversas: 1, mensagens: 3, primeira_ms: 0, ultima_ms: 1000 },
-      { identificador: "+5521900000002", app: "sms", conversas: 1, mensagens: 1, primeira_ms: 0, ultima_ms: 1000 },
+      { identificador: "+5511900000001", app: "sms", conversas: 1, mensagens: 3, primeira_ms: 0, ultima_ms: 1000, nome: null, agenda: [] },
+      { identificador: "+5521900000002", app: "sms", conversas: 1, mensagens: 1, primeira_ms: 0, ultima_ms: 1000, nome: null, agenda: [] },
     ],
   },
   listar_extracoes: [
@@ -120,7 +120,7 @@ describe("componentes", () => {
 
 describe("módulos do caso", () => {
   it("contatos lista os identificadores como o parser leu", async () => {
-    montar("/casos/c1/contatos", <PaginaContatos />, "/casos/:casoId/contatos");
+    montar("/casos/c1/contatos?aba=identificadores", <PaginaContatos />, "/casos/:casoId/contatos");
     const tabelaIds = await screen.findByRole("table", { name: "Identificadores das conversas" });
     expect(within(tabelaIds).getByText("+5511900000001")).toBeInTheDocument();
     expect(screen.getByText("Identificadores (2)")).toBeInTheDocument();

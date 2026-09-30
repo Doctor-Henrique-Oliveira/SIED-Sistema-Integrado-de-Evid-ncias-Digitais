@@ -170,3 +170,15 @@ export function servicoDeNuvem(caminho: string): string | null {
   }
   return null;
 }
+
+/** Duração em segundos: "42 s", "2 min 05 s", "1 h 02 min 03 s". */
+export function duracaoSegundos(s: number | null | undefined): string {
+  if (s == null) return "—";
+  const h = Math.floor(s / 3600);
+  const min = Math.floor((s % 3600) / 60);
+  const seg = s % 60;
+  const dois = (n: number) => String(n).padStart(2, "0");
+  if (h > 0) return `${h} h ${dois(min)} min ${dois(seg)} s`;
+  if (min > 0) return `${min} min ${dois(seg)} s`;
+  return `${seg} s`;
+}

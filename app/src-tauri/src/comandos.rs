@@ -8,6 +8,9 @@
 //! bloqueantes do runtime, para que a espera pela trava ou pela decodificação de
 //! imagens não ocupe as threads assíncronas do Tauri.
 
+use sied_armazenamento::agenda::{
+    Chamada, ContatoAgenda, FiltroChamadas, FiltroContatos, ResumoChamadas, TotalApp,
+};
 use sied_armazenamento::auditoria::{RegistroAuditoria, VerificacaoAuditoria};
 use sied_armazenamento::busca::{FiltroBusca, ResultadoBusca};
 use sied_armazenamento::conversas::{AppConversas, Conversa, FiltroConversas, PosicaoMensagem};
@@ -410,6 +413,48 @@ pub async fn listar_identificadores(
 ) -> ResultadoApp<Pagina<Identificador>> {
     em_segundo_plano(app_handle, move |estado| {
         estado.com(|s| s.listar_identificadores(texto, deslocamento, limite))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn listar_contatos(
+    app_handle: AppHandle,
+    filtro: FiltroContatos,
+    deslocamento: i64,
+    limite: i64,
+) -> ResultadoApp<Pagina<ContatoAgenda>> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.listar_contatos(&filtro, deslocamento, limite))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn apps_dos_contatos(app_handle: AppHandle) -> ResultadoApp<Vec<TotalApp>> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.apps_dos_contatos())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn listar_chamadas(
+    app_handle: AppHandle,
+    filtro: FiltroChamadas,
+    deslocamento: i64,
+    limite: i64,
+) -> ResultadoApp<Pagina<Chamada>> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.listar_chamadas(&filtro, deslocamento, limite))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn resumo_chamadas(app_handle: AppHandle) -> ResultadoApp<ResumoChamadas> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.resumo_chamadas())
     })
     .await
 }

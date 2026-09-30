@@ -1,5 +1,11 @@
 # SIED — Documento de continuidade
 
+Estado em 30/09/2026: depois da auditoria, a `main` recebeu o saneamento dos documentos (PR #13) e o
+**design system global com a casca do workspace** (PR #14, merge `132a8d5`). A etapa seguinte,
+**agenda de contatos e registro de chamadas do Android**, está na branch
+`claude/contatos-chamadas-android-z7m48s` (PR em rascunho; checkpoint
+`docs/checkpoints/2026-09-30-contatos-chamadas-android.md`), aguardando aval para o merge.
+
 Estado em 29/09/2026: a fase 1 fecha o ciclo **importar → analisar → selecionar → relatar**. Na
 `main` estão a interface para volume real (PR #9, merge `24791ff`), as **evidências selecionadas
 com o relatório PDF** em Typst (PR #10, merge `5b68c8d`) e a **auditoria pré-produção com
@@ -81,6 +87,9 @@ release, execução manual ou PR que muda o build (opção "Só tags", PR #4).
 | `fase1-evidencias-relatorio` | — | #10 | mesclado (`5b68c8d`) |
 | `claude/auditoria-hardening-7p20bx` | `e1916af` | #11 | mesclado (`9f87f89`) |
 | `claude/auditoria-hardening-7p20bx` (reiniciada da `main`) | — | #12 | só documentos: registra o commit final |
+| — | `951365e` | #13 | mesclado (`6f5d5c1`): saneamento dos documentos do handoff |
+| `claude/project-thread-dycfuw` | `24e44fe` | #14 | mesclado (`132a8d5`): design system global e casca do workspace |
+| `claude/contatos-chamadas-android-z7m48s` | — | rascunho | agenda e chamadas do Android; aguarda aval para o merge |
 
 As branches mescladas **não foram apagadas**. Podem ser removidas depois que a `main` for
 confirmada íntegra e com CI verde, com aval do usuário.
@@ -219,6 +228,34 @@ explícito** e CI completa verde (Linux e Windows).
 - Saída `<caso>/relatorios/AAAA-MM-DD_HHMMSS_relatorio.pdf` + `.pdf.sha256`, nunca sobrescrita,
   registrada na tabela `relatorio` (somente inclusão) com o SHA-256 e a posição da trilha.
 
+**Agenda de contatos e registro de chamadas do Android** (branch `claude/contatos-chamadas-android-z7m48s`)
+- Parser `android_contatos` (`contacts2.db`): um registro por contato bruto (`raw_contacts`), com a
+  conta que sincroniza (Google, WhatsApp, aparelho), telefones (tipo, rótulo, número normalizado
+  pelo aparelho), e-mails, nome estruturado, apelido, empresa, observação, endereço, site e outros
+  tipos de dado (inclusive de apps) com o mimetype. Cada linha de `data`, a conta e o contato
+  agrupado entram como origens adicionais. Apagados (`deleted=1`) ficam com estado "apagado".
+- Parser `android_chamadas` (tabela `calls` de `calllog.db`, ou de `contacts2.db` nas versões
+  antigas): tipo (recebida, efetuada, perdida, correio de voz, rejeitada, bloqueada, atendida em
+  outro aparelho, desconhecido), duração, apresentação, nome gravado junto da chamada, recursos
+  (vídeo, Wi-Fi, HD...), conta/chip, número normalizado e demais colunas nos metadados. Códigos
+  antigos no lugar do número (`-1`…`-4`) não viram telefone.
+- O importador genérico reconhece `contacts2.db` e `calllog.db`; `contacts2.db` sem `calllog.db`
+  na mesma pasta também passa pelo leitor de chamadas (tabela ausente vira aviso, execução
+  "parcial").
+- Vínculo com a agenda **calculado na consulta, nunca gravado**: mesma extração e igualdade exata
+  dos dígitos do número (ou do número normalizado pelo aparelho). Aparece nas chamadas e nos
+  identificadores das conversas. Não é identificação de quem usava a linha.
+- Tela Contatos com três abas: "Agenda e contatos" (filtro por origem e por nome/telefone,
+  detalhe com telefones e "Ver chamadas"), "Chamadas" (resumo, filtro por tipo e por número ou
+  nome, detalhe) e "Identificadores das conversas" (a tabela anterior, com a coluna "Na agenda").
+  Contato e chamada podem virar evidência e têm painel técnico com a origem até a linha da tabela.
+  A barra lateral continua com 12 módulos (Chamadas é uma aba de Contatos).
+- Busca por telefone também acha contatos pelos telefones da agenda; resultado de contato ou
+  chamada abre direto em Contatos.
+- Relatório PDF com campos próprios para chamada (tipo, número, duração, nome gravado, recursos,
+  conta) e contato (telefones com tipo e rótulo, e-mails, conta, empresa).
+- Sem migração nova (índices existentes bastam).
+
 **Busca global** (migração 3)
 - FTS5 em registros e nomes de arquivo, sem diferenciar acentos e maiúsculas, com prefixo.
 - Texto digitado protegido contra sintaxe do FTS (cada palavra vira frase com prefixo).
@@ -230,9 +267,9 @@ explícito** e CI completa verde (Linux e Windows).
 
 | Conjunto | Quantidade | Resultado |
 |---|---|---|
-| Rust (`cargo test --workspace`, soma de todos os `test result`) | 201 + 3 medições ignoradas (172 com o PR #10) | todos passam |
+| Rust (`cargo test --workspace`, soma de todos os `test result`) | 222 + 3 medições ignoradas na branch de agenda e chamadas (201 após a auditoria; 172 com o PR #10) | todos passam |
 | `cargo clippy -D warnings` e `cargo fmt --check` | — | limpos |
-| Interface (`vitest`) | 43 (41 com o PR #10) | todos passam |
+| Interface (`vitest`) | 50 na branch de agenda e chamadas (43 após a auditoria; 41 com o PR #10) | todos passam |
 | Build da interface (`npm run build`) e do app (`tauri build --debug --no-bundle`) | — | ok |
 | Typecheck TypeScript | — | limpo |
 | Tipos gerados (ts-rs) atualizados | — | conferido pela CI |
@@ -264,8 +301,11 @@ REAL infinito. Medições com volume em `tests/desempenho.rs` (ignoradas; ver o 
 
 - **Avilla sem importador**: falta a árvore de uma extração real (ver §10).
 - **Contêineres** (`.tar`, `.zip`, `.ab`) são inventariados com hash, mas não abertos.
-- São interpretados **SMS** (sem MMS) e **WhatsApp Android**. A
-  agenda e as chamadas do Android vêm a seguir.
+- São interpretados **SMS** (sem MMS), **WhatsApp Android** e, na branch da etapa de 30/09,
+  **agenda e registro de chamadas do Android**. Estes dois foram conferidos só com fixtures
+  sintéticas montadas pela documentação pública (`ContactsContract`, `CallLog.Calls`), não com
+  um banco de aparelho de teste. Fotos dos contatos, `deleted_contacts`, chamadas de apps
+  (WhatsApp etc.) e MMS não são lidos. Contatos repetidos em contas diferentes não são juntados.
 - WhatsApp:
   - conferido só com bancos sintéticos, com nomes da referência pública do app;
   - `.crypt*` não decifrados;
@@ -441,9 +481,11 @@ Nenhuma fase nova foi iniciada.
 
 A seguir:
 1. importador Avilla (quando a árvore chegar, §10);
-2. conferência do WhatsApp com um banco de aparelho de teste;
-3. agenda de contatos e chamadas do Android;
-4. console de importação em tempo real (§14.1).
+2. conferência do WhatsApp, da agenda e das chamadas com bancos de aparelho de teste;
+3. console de importação em tempo real (§14.1).
+
+A agenda e as chamadas do Android estão prontas na branch `claude/contatos-chamadas-android-z7m48s`
+(checkpoint `2026-09-30-contatos-chamadas-android.md`), aguardando o merge.
 
 ---
 

@@ -175,3 +175,39 @@ export function EvidenciaArquivo({ caso, arquivoId, sha256 }: { caso: Caso; arqu
     </div>
   );
 }
+
+/** Detalhe de um registro solto (contato, chamada): marcar como evidência. */
+export function EvidenciaRegistro({ caso, artefatoId }: { caso: Caso; artefatoId: number }) {
+  const marcas = useMarcas(caso.id);
+  const adicionar = useAdicionarEvidencia(caso.id);
+  const numeros = marcas.registros.get(artefatoId);
+  return (
+    <div className="mt-3 border-t border-borda pt-3" aria-label="Evidência do registro">
+      {numeros ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <SeloEvidencia numeros={numeros} />
+          <LinkRelatorios caso={caso} />
+        </div>
+      ) : (
+        <Botao
+          variante="secundario"
+          icone="mais"
+          carregando={adicionar.isPending}
+          onClick={() => adicionar.mutate({ artefato_id: artefatoId })}
+        >
+          Adicionar às evidências
+        </Botao>
+      )}
+      {adicionar.isError && (
+        <p role="alert" className="mt-1.5 text-xs text-erro">
+          {adicionar.error.message}
+        </p>
+      )}
+      {adicionar.isSuccess && !adicionar.isPending && (
+        <p role="status" className="mt-1.5 text-xs text-ok">
+          Adicionado como evidência nº {adicionar.data.numero}. O hash foi registrado agora.
+        </p>
+      )}
+    </div>
+  );
+}
