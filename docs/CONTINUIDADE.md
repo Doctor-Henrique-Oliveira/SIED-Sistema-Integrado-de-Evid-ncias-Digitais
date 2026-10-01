@@ -703,3 +703,12 @@ indicador de importação em curso com percentual real, selo "Local" e usuário 
 
 **Resoluções conferidas**: 1366×768 e 1920×1080 (capturas do app real sobre o caso sintético do
 ponta a ponta).
+
+### 15.1 Premium Experience (01/10/2026)
+
+Em validação na branch `feat/premium-experience-splash-console`: o aplicativo passa por splash
+SIED e welcome sem sidebar; criação/abertura bem-sucedida mostra um console de inicialização com
+eventos reais antes de liberar o workspace. A janela é contida na entrada e libera
+resize/maximização no workspace usando somente permissões específicas de janela. Dashboard e
+Conversas receberam ajustes de hierarquia sem mudar dados ou regras. Decisões, testes e
+limitações: `docs/checkpoints/2026-10-01-premium-experience.md`.
