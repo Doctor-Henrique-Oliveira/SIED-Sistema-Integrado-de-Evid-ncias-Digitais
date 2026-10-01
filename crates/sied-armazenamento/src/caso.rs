@@ -31,6 +31,7 @@ use crate::busca::AchadoArtefato;
 use crate::busca::{self, FiltroBusca, ResultadoBusca};
 use crate::conexao::{self, Abertura};
 use crate::conversas::{self, AppConversas, Conversa, FiltroConversas, PosicaoMensagem, Trecho};
+use crate::derivados::{self, ConferenciaDerivados, ReconstrucaoDerivados};
 use crate::evidencias::{self, Evidencia, Marcacoes, NovaEvidencia, TextosEvidencia};
 use crate::extracoes::{
     self, ArquivoComOrigem, ArquivoExtracao, ArtefatoDetalhe, ArtefatoResumo, ExecucaoParser,
@@ -257,6 +258,23 @@ impl BancoCaso {
 
     pub fn verificar_auditoria(&self) -> Resultado<VerificacaoAuditoria> {
         auditoria::verificar(&self.conn)
+    }
+
+    /// Confere conversas, participantes e índices de busca contra os registros de
+    /// origem (ver [`derivados`]). Só lê.
+    pub fn conferir_derivados(&self) -> Resultado<ConferenciaDerivados> {
+        derivados::conferir(&self.conn)
+    }
+
+    /// Recalcula os dados derivados a partir dos registros de origem (com auditoria).
+    pub fn reconstruir_derivados(&mut self) -> Resultado<ReconstrucaoDerivados> {
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let r = derivados::reconstruir(&tx, &self.sessao)?;
+        tx.commit()?;
+        tracing::info!(caso = %self.caso.id, antes = ?r.antes.tabelas, "dados derivados reconstruídos");
+        Ok(r)
     }
 
     /// Registra o início de uma importação e devolve o gravador, que tem conexão

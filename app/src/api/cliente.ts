@@ -44,6 +44,9 @@ import type { NovaEvidencia } from "./tipos/NovaEvidencia";
 import type { PedidoRelatorio } from "./tipos/PedidoRelatorio";
 import type { RelatorioRegistrado } from "./tipos/RelatorioRegistrado";
 import type { ConferenciaPastaRelatorios } from "./tipos/ConferenciaPastaRelatorios";
+import type { ConferenciaDerivados } from "./tipos/ConferenciaDerivados";
+import type { DiferencaDerivado } from "./tipos/DiferencaDerivado";
+import type { ReconstrucaoDerivados } from "./tipos/ReconstrucaoDerivados";
 import type { ArquivoAvulso } from "./tipos/ArquivoAvulso";
 import type { SecoesRelatorio } from "./tipos/SecoesRelatorio";
 import type { TextosEvidencia } from "./tipos/TextosEvidencia";
@@ -80,6 +83,9 @@ export type {
   PedidoRelatorio,
   RelatorioRegistrado,
   ConferenciaPastaRelatorios,
+  ConferenciaDerivados,
+  DiferencaDerivado,
+  ReconstrucaoDerivados,
   ArquivoAvulso,
   SecoesRelatorio,
   TextosEvidencia,
@@ -171,6 +177,10 @@ export const api = {
   listarDispositivos: () => chamar<Dispositivo[]>("listar_dispositivos"),
   listarAuditoria: (limite: number) => chamar<RegistroAuditoria[]>("listar_auditoria", { limite }),
   verificarAuditoria: () => chamar<VerificacaoAuditoria>("verificar_auditoria"),
+  /** Confere conversas e índices de busca contra os registros importados. Só lê. */
+  conferirDerivados: () => chamar<ConferenciaDerivados>("conferir_derivados"),
+  /** Recalcula conversas e índices de busca a partir dos registros importados. */
+  reconstruirDerivados: () => chamar<ReconstrucaoDerivados>("reconstruir_derivados"),
 
   detectarFonte: (pasta: string) => chamar<Deteccao[]>("detectar_fonte", { pasta }),
   iniciarImportacao: (dispositivoId: DispositivoId, pasta: string, importador: string) =>

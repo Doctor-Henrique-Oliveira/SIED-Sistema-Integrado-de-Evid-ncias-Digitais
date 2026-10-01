@@ -333,13 +333,19 @@ depois do PR #15)
 - Filtros por extração e período (backend também aceita app e tipo).
 - "Abrir na conversa" a partir do resultado, com o registro destacado e a origem aberta.
 
+**Conferência e reconstrução dos dados derivados** (01/10/2026, sem migração)
+- Dashboard → Auditoria → "Conversas e índices de busca": **Conferir** compara conversas,
+  participantes e os índices de busca com o que os registros importados produzem (e o índice FTS
+  com o texto guardado). Com diferença, lista por tabela e oferece **Reconstruir**, que recalcula
+  tudo numa transação registrada na auditoria; os registros de origem não são tocados.
+
 ## 5. Testes e resultados
 
 | Conjunto | Quantidade | Resultado |
 |---|---|---|
-| Rust (`cargo test --workspace`, soma de todos os `test result`) | 276 + 3 medições ignoradas com a conferência da pasta de relatórios e o destaque em pedaços (267 com as conversas grandes; 265 com o ALEAPP/iLEAPP; 257 com o ADB; 248 com o PR #16; 222 com o PR #15; 201 após a auditoria) | todos passam |
+| Rust (`cargo test --workspace`, soma de todos os `test result`) | 282 + 3 medições ignoradas com a conferência e reconstrução dos derivados (276 com a conferência da pasta de relatórios e o destaque em pedaços; 267 com as conversas grandes; 265 com o ALEAPP/iLEAPP; 257 com o ADB; 248 com o PR #16; 222 com o PR #15; 201 após a auditoria) | todos passam |
 | `cargo clippy -D warnings` e `cargo fmt --check` | — | limpos |
-| Interface (`vitest`) | 57 com a conferência da pasta de relatórios (56 com a linha do tempo e o console; 50 com o PR #15; 43 após a auditoria) | todos passam |
+| Interface (`vitest`) | 59 com a conferência dos derivados (57 com a conferência da pasta de relatórios; 56 com a linha do tempo e o console; 50 com o PR #15; 43 após a auditoria) | todos passam |
 | Build da interface (`npm run build`) e do app (`tauri build --debug --no-bundle`) | — | ok |
 | Typecheck TypeScript | — | limpo |
 | Tipos gerados (ts-rs) atualizados | — | conferido pela CI |
