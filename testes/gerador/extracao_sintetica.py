@@ -28,9 +28,14 @@ comprimido com zlib, sem cifra) com os bancos das fixtures do Android e do Whats
 apps/<pacote>/db/ e um _manifest por app, no formato público do Android. Não se combina com as
 outras opções.
 
+Com --leapp, a saída é outra: um relatório SINTÉTICO do ALEAPP, copiado de
+testes/fixtures/leapp/aleapp (_lava_data.lava e três exportações em _TSV Exports, gravadas
+pelo csv.writer do Python como o ALEAPP grava). Não se combina com as outras opções.
+
 Uso: python3 testes/gerador/extracao_sintetica.py [--whatsapp] [--android] [--volume] <pasta de destino>
      python3 testes/gerador/extracao_sintetica.py --iped <pasta de destino>
      python3 testes/gerador/extracao_sintetica.py --adb <pasta de destino>
+     python3 testes/gerador/extracao_sintetica.py --leapp <pasta de destino>
 """
 
 import os
@@ -46,6 +51,7 @@ import zlib
 FIXTURES_WHATSAPP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "fixtures", "whatsapp")
 FIXTURES_ANDROID = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "fixtures", "android")
 FIXTURE_IPED = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "fixtures", "iped", "caso")
+FIXTURE_LEAPP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "fixtures", "leapp", "aleapp")
 
 # 2026-01-01 00:00:00 UTC em milissegundos
 BASE_MS = 1767225600000
@@ -226,6 +232,15 @@ def gerar_iped(destino: str) -> None:
     print(destino)
 
 
+def gerar_leapp(destino: str) -> None:
+    if os.path.exists(destino) and os.listdir(destino):
+        sys.exit(f"a pasta {destino} já existe e não está vazia")
+    if os.path.exists(destino):
+        os.rmdir(destino)
+    shutil.copytree(FIXTURE_LEAPP, destino)
+    print(destino)
+
+
 def gerar_adb(destino: str) -> None:
     """Pastas do tar seguem o formato público do `adb backup` (apps/<pacote>/db, _manifest)."""
     if os.path.exists(destino) and os.listdir(destino):
@@ -283,6 +298,12 @@ def gerar_adb(destino: str) -> None:
 
 if __name__ == "__main__":
     args = sys.argv[1:]
+    if "--leapp" in args:
+        resto = [a for a in args if a != "--leapp"]
+        if len(resto) != 1 or resto[0].startswith("--"):
+            sys.exit(__doc__)
+        gerar_leapp(resto[0])
+        sys.exit(0)
     if "--adb" in args:
         resto = [a for a in args if a != "--adb"]
         if len(resto) != 1 or resto[0].startswith("--"):

@@ -243,6 +243,9 @@ fn nome_app(app: Option<&str>) -> String {
         Some("telefone") => "Telefone".into(),
         Some("contatos_android") => "Agenda (Android)".into(),
         Some("iped") => "IPED (lista de itens)".into(),
+        Some("aleapp") => "ALEAPP".into(),
+        Some("ileapp") => "iLEAPP".into(),
+        Some("xleapp") => "ALEAPP/iLEAPP".into(),
         Some(outro) => outro.into(),
         None => "Não informado".into(),
     }
@@ -285,6 +288,7 @@ fn nome_tipo_artefato(s: &str) -> &str {
         "contato" => "Contato",
         "chamada" => "Chamada",
         "arquivo" => "Arquivo",
+        "outro" => "Outro registro",
         outro => outro,
     }
 }

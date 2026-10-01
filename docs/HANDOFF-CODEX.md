@@ -35,14 +35,15 @@ Visão integral e permanente: `docs/VISAO.md`. Arquitetura aprovada (com ajustes
   evidências e relatório PDF (Typst embutido), e o hardening desta auditoria.
 - **Importador Avilla: só o contrato.** Responde `NaoImplementado`. Aguarda a árvore de uma
   extração real (§26).
-- Testes: 257 Rust (+3 medições ignoradas), 56 de interface (vitest), 1 roteiro E2E no app real
-  (com o importador ADB; 248 com o PR #16; 222 e 50 com o PR #15; 201 e 43 após a auditoria).
+- Testes: 265 Rust (+3 medições ignoradas), 56 de interface (vitest), 1 roteiro E2E no app real
+  (com o importador ALEAPP/iLEAPP; 257 com o ADB; 248 com o PR #16; 222 e 50 com o PR #15; 201 e 43 após a auditoria).
   CI Linux e Windows.
 - Depois do handoff: design system global (PR #14, merge `132a8d5`), **agenda e registro de
   chamadas do Android** (PR #15, merge `9dd1947`, §10.1) e, em construção contínua, **MMS do
   Android** (§10.2), **linha do tempo unificada** (§13.1), **console de importação em tempo
   real** (§9.1) e **importador IPED** (§9.2) (PR #16, merge `b6da666`), e **importador ADB**
-  com leitura de `.tar`/`.ab` por dentro (§9.3). Próximos passos em §27.
+  com leitura de `.tar`/`.ab` por dentro (§9.3, PR #17, merge `bcdcd0c`) e **importador ALEAPP/iLEAPP** (§9.4).
+  Próximos passos em §27.
 
 ## 3. Arquitetura
 
@@ -125,10 +126,12 @@ crates/
     src/fonte/conteiner.rs  leitura de tar (ustar, GNU, pax) e do backup .ab do Android
     src/importador.rs       contrato Importador
     src/importadores/       generico.rs (pasta), iped.rs (caso do IPED), adb.rs (backup .ab),
+                            leapp.rs (relatório ALEAPP/iLEAPP),
                             avilla.rs (só contrato)
     src/parser.rs           contrato Parser e SaidaParser
     src/parsers/            android_sms.rs, android_mms.rs, android_contatos.rs, android_chamadas.rs,
                             iped_lista.rs (lista de itens do IPED),
+                            leapp_tsv.rs (exportações TSV do ALEAPP/iLEAPP),
                             whatsapp_android/, comum.rs (auxiliares), sqlite.rs (leitura segura)
     src/pipeline.rs         inventário, manifesto, cópias verificadas, execução dos parsers
     src/eventos.rs          eventos do console da importação (fila e releitura do log)
@@ -149,7 +152,8 @@ app/
   src-tauri/tauri.conf.json CSP e empacotamento
 testes/
   e2e/                      roteiro ponta a ponta no app real (WebDriver)
-  fixtures/                 fixtures SINTÉTICAS (WhatsApp e Android em SQL, imagem, caso do IPED)
+  fixtures/                 fixtures SINTÉTICAS (WhatsApp e Android em SQL, imagem, caso do IPED,
+                            relatórios ALEAPP/iLEAPP)
   gerador/                  extracao_sintetica.py (--whatsapp, --android, --volume)
   rust/caso_sintetico.rs    caso sintético compartilhado pelos testes Rust (#[path])
 docs/                       VISAO, ARQUITETURA, CONTINUIDADE, PREPARACAO-AVILLA-WHATSAPP,
@@ -257,6 +261,7 @@ transforma nome perigoso da listagem em **item ignorado com aviso** (a importaç
 | `generico` | `importadores/generico.rs` | Pasta qualquer. Reconhece `mmssms.db` (SMS e MMS), `msgstore.db` + `wa.db` do WhatsApp (pareados pela pasta; `com.whatsapp` e `com.whatsapp.w4b`), `contacts2.db` (agenda; sem `calllog.db` na mesma pasta, também vai ao leitor de chamadas) e `calllog.db` (chamadas); `.crypt*` só inventariados |
 | `iped` | `importadores/iped.rs` | Caso do IPED: lista de itens na raiz (6 nomes por idioma) → `iped_lista_arquivos`; fora de `iped/`, o mesmo plano da pasta genérica; §9.2 |
 | `adb` | `importadores/adb.rs` | Backup `adb backup` (`.ab`), sozinho ou com arquivos de `adb pull`: observações do cabeçalho e dos `_manifest`; o mesmo plano da pasta genérica, inclusive dentro do backup; §9.3 |
+| `leapp` | `importadores/leapp.rs` | Relatório do ALEAPP/iLEAPP: `_TSV Exports/*.tsv` → `aleapp_tsv`, `ileapp_tsv` ou `xleapp_tsv` conforme o `_lava_data.lava`; o resto só no inventário; §9.4 |
 | `avilla` | `importadores/avilla.rs` | **Só contrato.** `detectar` → `NaoImplementado`; `planejar` → erro `NaoImplementado` |
 
 Pipeline (`pipeline.rs`), nesta ordem, igual para toda ferramenta:
@@ -310,6 +315,21 @@ Artefato: `normalizar()` (−0.0 → 0.0; `app` vazio → ausente) e depois `has
 - Fixture: gerada nos testes por `testes/rust/backup_sintetico.rs` a partir das fixtures SQL;
   gerador `--adb`. `atributos_dispositivo` (ex.: `api_android`) ainda não é gravado no caso.
 
+### 9.4 ALEAPP e iLEAPP
+
+- Formato conferido no código-fonte público (abrignoni/ALEAPP e abrignoni/iLEAPP:
+  `scripts/ilapfuncs.py` função `tsv`, `scripts/lavafuncs.py`). Os dois gravam igual.
+- TSV: `csv.writer` do Python com TAB, UTF-8 com BOM, CRLF, aspas só quando preciso; arquivo em
+  acréscimo, então o cabeçalho pode se repetir (com outro BOM, no ALEAPP). O nome do arquivo é o
+  nome do artefato (pode ter espaço no fim, como "Call logs ").
+- Datas: `str(datetime)` do Python. Só com fuso explícito (`+00:00`, `-03:00`, `Z`) entram na
+  linha do tempo; sem fuso, ficam no original com um aviso por arquivo.
+- Um parser por ferramenta (mesmo código, `ParserLeappTsv(Ferramenta)`), para a execução e o
+  `app` dizerem de onde veio. `ferramenta_versao` da extração vem do `_lava_data.lava`.
+- O banco `_lava_artifacts.db` não é lido (esquema muda com a versão). Mapear artefatos
+  conhecidos (SMS, chamadas...) para os tipos do SIED fica para depois, com conferência.
+- Fixtures: `testes/fixtures/leapp/` (gravadas por `montar.py`; `-text`); gerador `--leapp`.
+
 ## 10. Parsers
 
 | Id | Papéis | Versão | O que lê |
@@ -320,6 +340,7 @@ Artefato: `normalizar()` (−0.0 → 0.0; `app` vazio → ausente) e depois `has
 | `android_contatos` | `contacts2` | 1.0.0 | agenda (`raw_contacts`, `data`, `mimetypes`, `accounts`, `contacts`); §10.1 |
 | `android_chamadas` | `chamadas` | 1.0.0 | tabela `calls` de `calllog.db` (ou de `contacts2.db` antigo); §10.1 |
 | `iped_lista_arquivos` | `lista_iped` | 1.0.0 | lista de itens do IPED em CSV; §9.2 |
+| `aleapp_tsv`, `ileapp_tsv`, `xleapp_tsv` | `tsv_leapp` | 1.0.0 | exportações TSV do ALEAPP/iLEAPP; §9.4 |
 
 `parsers/sqlite.rs`: abre a **cópia** com `SQLITE_OPEN_READ_ONLY` e lê valores brutos. REAL não
 finito vira `{"real_nao_finito": "inf"|"-inf"|"nan"}` (JSON não tem infinito).
@@ -506,7 +527,7 @@ não capturado.
 
 | Conjunto | Onde | Quantidade |
 |---|---|---|
-| Rust | `crates/*/src` (unitários, inclusive os que exportam os tipos TS) e `crates/*/tests` | 257 + 3 medições `#[ignore]` |
+| Rust | `crates/*/src` (unitários, inclusive os que exportam os tipos TS) e `crates/*/tests` | 265 + 3 medições `#[ignore]` |
 | Interface | `app/src/**/*.test.ts(x)` | 56 |
 | E2E | `testes/e2e/executar.sh` + `persistencia.mjs` | 1 roteiro (cria caso, importa, analisa, reabre; confere que a extração não mudou: hash e datas antes/depois) |
 
@@ -532,6 +553,8 @@ Funcionais:
 - WhatsApp, MMS, agenda e chamadas conferidos só com bancos sintéticos (§10.1, §10.2, §11).
 - IPED: só a lista de itens em CSV; conferida só com o caso sintético (§9.2).
 - ADB: conferido só com backup sintético; `f/`, `sp/` e `shared/` só inventariados (§9.3).
+- ALEAPP/iLEAPP: só `_TSV Exports`; linhas ficam como "outro registro"; conferido só com
+  relatórios sintéticos (§9.4).
 - Hash numa única thread; sem retomada de importação interrompida; sem exclusão de extração
   (de propósito); sem verificação do "hash declarado" do laudo de aquisição.
 - Miniaturas: sem HEIC, vídeo e áudio. Mídias e Arquivos mostram uma extração por vez; listas de
@@ -626,13 +649,13 @@ plano e pasta intacta, e importação completa no app real. Roteiro em
 
 Construção contínua (regra do usuário de 30/09/2026): cada fase vai para a `main` com a CI
 verde. Feitas: agenda e chamadas (PR #15), MMS, linha do tempo, console de importação e
-importador IPED (lista de itens), importador ADB (backup `.ab` e `.tar`). Ordem seguinte:
+importador IPED (lista de itens), importador ADB (backup `.ab` e `.tar`), importador
+ALEAPP/iLEAPP (exportações TSV). Ordem seguinte:
 
 1. **Importador Avilla**, quando a árvore real chegar (§26).
-2. **Importadores ALEAPP e iLEAPP**, só pelo formato público dos relatórios.
-3. **Conferência do WhatsApp, SMS/MMS, agenda, chamadas, da lista do IPED e do backup ADB** com
-   dados de teste (não de investigação).
-4. Itens F1–F9 (§25), conforme a necessidade medida.
+2. **Conferência do WhatsApp, SMS/MMS, agenda, chamadas, da lista do IPED, do backup ADB e dos
+   relatórios ALEAPP/iLEAPP** com dados de teste (não de investigação).
+3. Itens F1–F9 (§25), conforme a necessidade medida.
 
 ## 28. Arquivos para ler primeiro
 

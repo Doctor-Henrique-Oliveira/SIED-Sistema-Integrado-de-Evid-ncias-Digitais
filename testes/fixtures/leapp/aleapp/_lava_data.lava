@@ -1,0 +1,23 @@
+{
+    "lava_schema_version": "SINTETICO",
+    "parser_info": {
+        "leapp_name": "ALEAPP",
+        "leapp_version": "2026.4.2",
+        "leapp_mode": "CLI",
+        "package": "Source code",
+        "OS": "SINTETICO",
+        "start_timestamp": 1767358800
+    },
+    "param_input": "/sintetico/extracao-SINTETICA.tar",
+    "param_output": "/sintetico/saida",
+    "param_type": "tar",
+    "param_profile": null,
+    "profile_used": false,
+    "processing_status": "Complete",
+    "lava_db_name": "_lava_artifacts.db",
+    "modules": [],
+    "artifacts": {},
+    "meta": {
+        "modules": []
+    }
+}

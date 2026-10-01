@@ -63,6 +63,9 @@ export const nomeApp: Record<string, string> = {
   telefone: "Telefone",
   contatos_android: "Agenda (Android)",
   iped: "IPED (lista de itens)",
+  aleapp: "ALEAPP",
+  ileapp: "iLEAPP",
+  xleapp: "ALEAPP/iLEAPP",
 };
 
 export function rotuloApp(app: string | null | undefined): string {
@@ -85,6 +88,7 @@ export const nomeTipoArtefato: Record<string, string> = {
   contato: "Contato",
   chamada: "Chamada",
   arquivo: "Arquivo",
+  outro: "Outro registro",
 };
 
 /** Subtipos emitidos pelos parsers (o código bruto fica nos detalhes técnicos). */
