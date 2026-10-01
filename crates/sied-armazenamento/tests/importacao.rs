@@ -351,7 +351,10 @@ fn caso_v1_e_migrado_com_copia_de_seguranca() {
     banco.fechar().unwrap();
     let conn = Connection::open(pasta.join("caso.sied.db")).unwrap();
     conn.execute_batch(
-        "DROP TABLE evidencia; DROP TABLE relatorio; DELETE FROM schema_migracao WHERE versao = 5;
+        "DROP INDEX idx_artefato_conversa_ordem;
+         CREATE INDEX idx_artefato_conversa ON artefato(app, conversa_id_externo, data_hora_ms);
+         DELETE FROM schema_migracao WHERE versao = 6;
+         DROP TABLE evidencia; DROP TABLE relatorio; DELETE FROM schema_migracao WHERE versao = 5;
          DELETE FROM schema_migracao WHERE versao = 4;
          DROP TABLE busca_artefato; DROP TABLE busca_arquivo; DROP TABLE conversa_participante;
          DROP TABLE conversa; DELETE FROM schema_migracao WHERE versao = 3;
@@ -521,7 +524,10 @@ fn caso_v2_ganha_conversas_e_busca_do_que_ja_foi_importado() {
     // Volta o banco para a versão 2 (sem as tabelas derivadas).
     let conn = Connection::open(pasta.join("caso.sied.db")).unwrap();
     conn.execute_batch(
-        "DROP TABLE evidencia; DROP TABLE relatorio; DELETE FROM schema_migracao WHERE versao = 5;
+        "DROP INDEX idx_artefato_conversa_ordem;
+         CREATE INDEX idx_artefato_conversa ON artefato(app, conversa_id_externo, data_hora_ms);
+         DELETE FROM schema_migracao WHERE versao = 6;
+         DROP TABLE evidencia; DROP TABLE relatorio; DELETE FROM schema_migracao WHERE versao = 5;
          DROP INDEX idx_arquivo_nome; DROP INDEX idx_artefato_id_externo;
          DELETE FROM schema_migracao WHERE versao = 4;
          DROP TRIGGER artefato_indexa_busca; DROP TRIGGER artefato_agrega_conversa;

@@ -271,7 +271,10 @@ fn copia_de_seguranca_existente_nao_bloqueia_a_migracao() {
     // Volta o caso para a versão 4 (sem as tabelas da migração 5).
     let c = Connection::open(pasta.join(NOME_ARQUIVO_CASO)).unwrap();
     c.execute_batch(
-        "DROP TABLE evidencia; DROP TABLE relatorio; DELETE FROM schema_migracao WHERE versao = 5;
+        "DROP INDEX idx_artefato_conversa_ordem;
+         CREATE INDEX idx_artefato_conversa ON artefato(app, conversa_id_externo, data_hora_ms);
+         DELETE FROM schema_migracao WHERE versao = 6;
+         DROP TABLE evidencia; DROP TABLE relatorio; DELETE FROM schema_migracao WHERE versao = 5;
          PRAGMA user_version = 4;",
     )
     .unwrap();

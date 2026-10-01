@@ -73,6 +73,11 @@ pub const BANCO_CASO: TipoBanco = TipoBanco {
             nome: "evidencias_relatorio",
             sql: include_str!("../migracoes/caso/0005_evidencias_relatorio.sql"),
         },
+        Migracao {
+            versao: 6,
+            nome: "ordem_conversa",
+            sql: include_str!("../migracoes/caso/0006_ordem_conversa.sql"),
+        },
     ],
 };
 

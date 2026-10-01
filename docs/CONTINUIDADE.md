@@ -99,7 +99,8 @@ release, execução manual ou PR que muda o build (opção "Só tags", PR #4).
 | `claude/contatos-chamadas-android-z7m48s` | `c9762ec` | #15 | mesclado (`9dd1947`): agenda e chamadas do Android |
 | `claude/contatos-chamadas-android-z7m48s` (reiniciada da `main`) | `0c19bca` | #16 | mesclado (`b6da666`): MMS do Android, linha do tempo unificada, console de importação e importador IPED |
 | `claude/contatos-chamadas-android-z7m48s` (reiniciada da `main`) | `6dfadb6` | #17 | mesclado (`bcdcd0c`): importador ADB (backup `.ab` e `.tar`) |
-| `claude/contatos-chamadas-android-z7m48s` (reiniciada da `main`) | — | novo PR | importador ALEAPP/iLEAPP |
+| `claude/contatos-chamadas-android-z7m48s` (reiniciada da `main`) | `0b641e3` | #18 | mesclado (`eb7bdfe`): importador ALEAPP/iLEAPP |
+| `claude/contatos-chamadas-android-z7m48s` (reiniciada da `main`) | — | novo PR | conversas grandes pelo índice (migração 6) |
 
 As branches mescladas **não foram apagadas**. Podem ser removidas depois que a `main` for
 confirmada íntegra e com CI verde, com aval do usuário.
@@ -335,7 +336,7 @@ depois do PR #15)
 
 | Conjunto | Quantidade | Resultado |
 |---|---|---|
-| Rust (`cargo test --workspace`, soma de todos os `test result`) | 265 + 3 medições ignoradas com o importador ALEAPP/iLEAPP (257 com o ADB; 248 com o PR #16; 222 com o PR #15; 201 após a auditoria) | todos passam |
+| Rust (`cargo test --workspace`, soma de todos os `test result`) | 267 + 3 medições ignoradas com as conversas grandes pelo índice (265 com o ALEAPP/iLEAPP; 257 com o ADB; 248 com o PR #16; 222 com o PR #15; 201 após a auditoria) | todos passam |
 | `cargo clippy -D warnings` e `cargo fmt --check` | — | limpos |
 | Interface (`vitest`) | 56 com a linha do tempo e o console (50 com o PR #15; 43 após a auditoria) | todos passam |
 | Build da interface (`npm run build`) e do app (`tauri build --debug --no-bundle`) | — | ok |
@@ -413,7 +414,7 @@ REAL infinito. Medições com volume em `tests/desempenho.rs` (ignoradas; ver o 
   sem assinatura digital do PDF; erro de imagem ilegível vem do decodificador em inglês.
 - Da auditoria (baixo risco): marcadores do trecho da busca podem vir do próprio conteúdo (B6);
   queda do processo entre gravar e registrar o PDF deixa um PDF órfão (B7); conversa de 100 mil
-  mensagens com páginas de 79–185 ms (B8); copie o caso **fechado** (a trava impede copiar com ele
+  mensagens: página 7–14 ms e localizar ~0,14 s desde a migração 6 (eram 79–185 ms e ~0,5 s, B8); copie o caso **fechado** (a trava impede copiar com ele
   aberto no Windows, e o `-wal` ficaria para trás) (B9).
 - Caso em compartilhamento de rede ou pasta sincronizada (OneDrive e afins): WAL e trava não são
   confiáveis fora do disco local. A tela avisa, sem bloquear; unidade mapeada (`Z:`) não é
@@ -491,6 +492,7 @@ Arquivos em `crates/sied-armazenamento/migracoes/`, registrados em `src/migracoe
 | 3 | conversas_busca | `conversa`, `conversa_participante`, FTS5 `busca_artefato` e `busca_arquivo`; gatilhos `artefato_indexa_busca`, `artefato_agrega_conversa`, `arquivo_indexa_busca`; preenchimento dos dados já importados |
 | 4 | whatsapp | coluna `artefato.anexo_vinculo`; índices `idx_arquivo_nome` e `idx_artefato_id_externo` |
 | 5 | evidencias_relatorio | `evidencia` (alvo e hash imutáveis, sem `DELETE`, removida não muda), `relatorio` (somente inclusão) |
+| 6 | ordem_conversa | índice `idx_artefato_conversa_ordem (extracao_id, app, conversa_id_externo, data_hora_ms)` no lugar de `idx_artefato_conversa`; nenhum dado muda |
 
 Um caso criado em versão anterior é migrado ao abrir, depois da cópia de segurança.
 
@@ -557,15 +559,16 @@ Detalhes no `README.md`.
 `2026-09-29-fase1-evidencias-relatorio.md`. A auditoria pré-produção (PR #11) está em
 `2026-09-29-auditoria-hardening.md`; a passagem para outro agente, em `docs/HANDOFF-CODEX.md`.
 Depois vieram, em construção contínua, a agenda e as chamadas (PR #15), os MMS, a linha do
-tempo unificada, o console de importação, o importador IPED (PR #16), o importador ADB (PR #17) e o importador
-ALEAPP/iLEAPP (checkpoints de 30/09/2026).
+tempo unificada, o console de importação, o importador IPED (PR #16), o importador ADB (PR #17), o importador
+ALEAPP/iLEAPP (PR #18, checkpoints de 30/09/2026) e as conversas grandes servidas pelo índice
+(F1 da dívida técnica, checkpoint `2026-10-01-conversas-grandes.md`).
 
 A seguir (ordem da construção contínua):
 1. importador Avilla (quando a árvore chegar, §10);
 2. conferência do WhatsApp, SMS/MMS, agenda, chamadas, da lista do IPED, do backup ADB e dos
    relatórios ALEAPP/iLEAPP com dados de teste
    (não de investigação);
-3. itens de dívida técnica medidos (HANDOFF §25).
+3. demais itens de dívida técnica medidos (HANDOFF §25; F1 feito, F4 medido sem ganho).
 
 ---
 
