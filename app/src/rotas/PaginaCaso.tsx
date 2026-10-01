@@ -1,12 +1,12 @@
 import { useEffect, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { Caso, Extracao, ResumoCaso } from "../api/cliente";
-import { useAbrirCaso, useCasoAtual, useExtracoes, useResumoCaso } from "../api/consultas";
+import { useAbrirCaso, useCasoAtual, useExtracoes, usePastaEmRede, useResumoCaso } from "../api/consultas";
 import { classeBotao } from "../componentes/Botao";
 import { Aviso, Cartao, Carregando, FaixaIndicadores, Indicador, Selo } from "../componentes/Estrutura";
 import { Icone, type NomeIcone } from "../componentes/Icone";
 import { SecaoAtividades, SecaoDispositivos, SecaoExtracoes } from "../componentes/SecoesCaso";
-import { dataHora, identificacaoCaso, numero, tamanho } from "../util/formatar";
+import { dataHora, identificacaoCaso, localDaPasta, numero, tamanho } from "../util/formatar";
 import { nomeTipoArtefato } from "../util/rotulos";
 
 export function PaginaCaso() {
@@ -54,7 +54,7 @@ function PainelCaso({ caso, pasta }: { caso: Caso; pasta: string }) {
           <SecaoExtracoes caso={caso} compacto />
         </div>
         <div className="min-w-0 space-y-4">
-          <Alertas caso={caso} r={resumo.data} />
+          <Alertas caso={caso} pasta={pasta} r={resumo.data} />
           <SecaoAtividades caso={caso} />
         </div>
       </div>
@@ -180,9 +180,17 @@ function Indicadores({ caso, r }: { caso: Caso; r: ResumoCaso | undefined }) {
 
 type Alerta = { tom: "erro" | "atencao" | "info"; texto: string; para?: string };
 
-function Alertas({ caso, r }: { caso: Caso; r: ResumoCaso | undefined }) {
+function Alertas({ caso, pasta, r }: { caso: Caso; pasta: string; r: ResumoCaso | undefined }) {
   const extracoes = useExtracoes(caso.id);
+  const emRede = usePastaEmRede(pasta);
+  const local = localDaPasta(pasta, emRede.data);
   const alertas: Alerta[] = [];
+  if (local) {
+    alertas.push({
+      tom: "atencao",
+      texto: `A pasta do caso está ${local === "compartilhamento de rede" ? "num compartilhamento de rede" : `no ${local}`}: a rede ou a sincronização podem danificar o banco do caso aberto. Feche o caso e copie a pasta para um disco local.`,
+    });
+  }
   for (const x of extracoes.data ?? ([] as Extracao[])) {
     if (x.status === "falhou" || x.status === "interrompida" || x.status === "cancelada") {
       alertas.push({

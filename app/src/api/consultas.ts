@@ -52,6 +52,16 @@ export function useCasoAtual() {
   return useQuery({ queryKey: chaves.casoAtual, queryFn: api.casoAtual });
 }
 
+/** Pasta num compartilhamento de rede (consulta ao sistema operacional). */
+export function usePastaEmRede(caminho: string | null | undefined) {
+  return useQuery({
+    queryKey: ["pasta-em-rede", caminho ?? ""],
+    queryFn: () => api.pastaEmRede(caminho ?? ""),
+    enabled: !!caminho,
+    staleTime: 60_000,
+  });
+}
+
 export function useDispositivos(casoId: CasoId | undefined) {
   return useQuery({
     queryKey: chaves.dispositivos(casoId ?? ""),

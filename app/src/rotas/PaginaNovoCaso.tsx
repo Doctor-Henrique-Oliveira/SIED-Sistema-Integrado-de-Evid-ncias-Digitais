@@ -2,11 +2,11 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { normalizarErro, type NovoCaso } from "../api/cliente";
-import { useCriarCaso, useInfoApp } from "../api/consultas";
+import { useCriarCaso, useInfoApp, usePastaEmRede } from "../api/consultas";
 import { Botao } from "../componentes/Botao";
 import { AreaTexto, Campo } from "../componentes/Campo";
 import { Aviso, Cabecalho, Cartao } from "../componentes/Estrutura";
-import { ouNulo, servicoDeNuvem } from "../util/formatar";
+import { localDaPasta, ouNulo } from "../util/formatar";
 
 const vazio = {
   procedimento: "",
@@ -37,7 +37,8 @@ export function PaginaNovoCaso() {
   });
 
   const pastaExibida = pastaBase ?? info.data?.pasta_casos_padrao ?? null;
-  const nuvem = pastaExibida ? servicoDeNuvem(pastaExibida) : null;
+  const emRede = usePastaEmRede(pastaExibida);
+  const nuvem = pastaExibida ? localDaPasta(pastaExibida, emRede.data) : null;
 
   async function escolherPasta() {
     const p = await open({ directory: true, title: "Pasta onde os casos serão criados" });

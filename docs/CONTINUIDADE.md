@@ -343,9 +343,9 @@ depois do PR #15)
 
 | Conjunto | Quantidade | Resultado |
 |---|---|---|
-| Rust (`cargo test --workspace`, soma de todos os `test result`) | 282 + 3 medições ignoradas com a conferência e reconstrução dos derivados (276 com a conferência da pasta de relatórios e o destaque em pedaços; 267 com as conversas grandes; 265 com o ALEAPP/iLEAPP; 257 com o ADB; 248 com o PR #16; 222 com o PR #15; 201 após a auditoria) | todos passam |
+| Rust (`cargo test --workspace`, soma de todos os `test result`) | 284 + 3 medições ignoradas com o aviso de unidade de rede mapeada (282 com a conferência e reconstrução dos derivados; 276 com a conferência da pasta de relatórios e o destaque em pedaços; 267 com as conversas grandes; 265 com o ALEAPP/iLEAPP; 257 com o ADB; 248 com o PR #16; 222 com o PR #15; 201 após a auditoria) | todos passam |
 | `cargo clippy -D warnings` e `cargo fmt --check` | — | limpos |
-| Interface (`vitest`) | 59 com a conferência dos derivados (57 com a conferência da pasta de relatórios; 56 com a linha do tempo e o console; 50 com o PR #15; 43 após a auditoria) | todos passam |
+| Interface (`vitest`) | 62 com o aviso de unidade de rede mapeada (59 com a conferência dos derivados; 57 com a conferência da pasta de relatórios; 56 com a linha do tempo e o console; 50 com o PR #15; 43 após a auditoria) | todos passam |
 | Build da interface (`npm run build`) e do app (`tauri build --debug --no-bundle`) | — | ok |
 | Typecheck TypeScript | — | limpo |
 | Tipos gerados (ts-rs) atualizados | — | conferido pela CI |
@@ -425,8 +425,9 @@ REAL infinito. Medições com volume em `tests/desempenho.rs` (ignoradas; ver o 
   mensagens: página 7–14 ms e localizar ~0,14 s desde a migração 6 (eram 79–185 ms e ~0,5 s, B8); copie o caso **fechado** (a trava impede copiar com ele
   aberto no Windows, e o `-wal` ficaria para trás) (B9).
 - Caso em compartilhamento de rede ou pasta sincronizada (OneDrive e afins): WAL e trava não são
-  confiáveis fora do disco local. A tela avisa, sem bloquear; unidade mapeada (`Z:`) não é
-  detectada.
+  confiáveis fora do disco local. A tela avisa, sem bloquear: no Novo caso e nos Alertas do
+  Dashboard do caso aberto. Desde 01/10/2026 a unidade mapeada (`Z:`) também é reconhecida,
+  pelo sistema operacional (`app/src-tauri/src/disco.rs`).
 
 ## 7. Decisões técnicas
 
