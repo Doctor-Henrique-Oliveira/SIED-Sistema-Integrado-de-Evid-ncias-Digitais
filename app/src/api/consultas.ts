@@ -113,6 +113,16 @@ export function useCadastrarDispositivo(casoId: CasoId) {
   });
 }
 
+/** Reconstrução dos dados derivados: conversas, busca, contatos e números do painel
+ * mudam de uma vez, então todas as consultas são refeitas. */
+export function useReconstruirDerivados() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.reconstruirDerivados,
+    onSuccess: () => void qc.invalidateQueries(),
+  });
+}
+
 // ---------- Importação ----------
 
 /** Acompanha a importação em curso: consulta a cada 500 ms até terminar. Quando

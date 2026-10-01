@@ -88,6 +88,8 @@ pub fn executar() {
             comandos::listar_dispositivos,
             comandos::listar_auditoria,
             comandos::verificar_auditoria,
+            comandos::conferir_derivados,
+            comandos::reconstruir_derivados,
             comandos::detectar_fonte,
             comandos::iniciar_importacao,
             comandos::estado_importacao,

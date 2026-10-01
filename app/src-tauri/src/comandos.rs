@@ -14,6 +14,7 @@ use sied_armazenamento::agenda::{
 use sied_armazenamento::auditoria::{RegistroAuditoria, VerificacaoAuditoria};
 use sied_armazenamento::busca::{AchadoArtefato, FiltroBusca, ResultadoBusca};
 use sied_armazenamento::conversas::{AppConversas, Conversa, FiltroConversas, PosicaoMensagem};
+use sied_armazenamento::derivados::{ConferenciaDerivados, ReconstrucaoDerivados};
 use sied_armazenamento::evidencias::{Evidencia, Marcacoes, NovaEvidencia, TextosEvidencia};
 use sied_armazenamento::extracoes::{
     ArquivoExtracao, ArtefatoDetalhe, ArtefatoResumo, ExecucaoParser, Extracao, Pagina,
@@ -157,6 +158,24 @@ pub async fn listar_auditoria(
 pub async fn verificar_auditoria(app_handle: AppHandle) -> ResultadoApp<VerificacaoAuditoria> {
     em_segundo_plano(app_handle, move |estado| {
         estado.com(|s| s.verificar_auditoria())
+    })
+    .await
+}
+
+/// Percorre todos os artefatos: fora da thread da janela.
+#[tauri::command]
+pub async fn conferir_derivados(app_handle: AppHandle) -> ResultadoApp<ConferenciaDerivados> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.conferir_derivados())
+    })
+    .await
+}
+
+/// Refaz conversas e índices de busca de todo o caso: pode levar alguns segundos.
+#[tauri::command]
+pub async fn reconstruir_derivados(app_handle: AppHandle) -> ResultadoApp<ReconstrucaoDerivados> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.reconstruir_derivados())
     })
     .await
 }

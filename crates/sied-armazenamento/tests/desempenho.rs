@@ -259,6 +259,12 @@ fn medir_desempenho_com_volume() {
     medir("verificar a trilha de auditoria", || {
         banco.verificar_auditoria().unwrap()
     });
+    medir("conferir dados derivados (conversas e índices)", || {
+        assert!(banco.conferir_derivados().unwrap().consistente)
+    });
+    medir("reconstruir dados derivados", || {
+        assert!(banco.reconstruir_derivados().unwrap().depois.consistente)
+    });
     if std::env::var_os("SIED_MANTER").is_some() {
         let pasta = banco.pasta().to_path_buf();
         drop(banco);

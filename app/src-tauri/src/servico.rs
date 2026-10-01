@@ -9,6 +9,7 @@ use sied_armazenamento::auditoria::{RegistroAuditoria, VerificacaoAuditoria};
 use sied_armazenamento::busca::{AchadoArtefato, FiltroBusca, ResultadoBusca};
 use sied_armazenamento::caso::{nome_pasta_sugerido, NOME_ARQUIVO_CASO};
 use sied_armazenamento::conversas::{AppConversas, Conversa, FiltroConversas, PosicaoMensagem};
+use sied_armazenamento::derivados::{ConferenciaDerivados, ReconstrucaoDerivados};
 use sied_armazenamento::evidencias::{Evidencia, Marcacoes, NovaEvidencia, TextosEvidencia};
 use sied_armazenamento::extracoes::{
     ArquivoExtracao, ArtefatoDetalhe, ArtefatoResumo, ExecucaoParser, Extracao, Pagina,
@@ -268,6 +269,23 @@ impl Servico {
 
     pub fn verificar_auditoria(&mut self) -> ResultadoApp<VerificacaoAuditoria> {
         Ok(self.banco()?.verificar_auditoria()?)
+    }
+
+    /// Confere conversas e índices de busca contra os registros de origem. Só lê.
+    pub fn conferir_derivados(&mut self) -> ResultadoApp<ConferenciaDerivados> {
+        Ok(self.banco()?.conferir_derivados()?)
+    }
+
+    /// Recalcula conversas e índices de busca (com auditoria). Recusado durante uma
+    /// importação, que grava nas mesmas tabelas.
+    pub fn reconstruir_derivados(&mut self) -> ResultadoApp<ReconstrucaoDerivados> {
+        if self.importacao.as_ref().is_some_and(|t| t.em_curso()) {
+            return Err(ErroApp::novo(
+                CodigoErro::Conflito,
+                "há uma importação em andamento; reconstrua depois que ela terminar",
+            ));
+        }
+        Ok(self.banco()?.reconstruir_derivados()?)
     }
 
     // ---------- Importação ----------

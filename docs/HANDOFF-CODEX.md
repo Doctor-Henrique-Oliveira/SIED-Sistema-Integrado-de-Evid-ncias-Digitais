@@ -35,7 +35,7 @@ Visão integral e permanente: `docs/VISAO.md`. Arquitetura aprovada (com ajustes
   evidências e relatório PDF (Typst embutido), e o hardening desta auditoria.
 - **Importador Avilla: só o contrato.** Responde `NaoImplementado`. Aguarda a árvore de uma
   extração real (§26).
-- Testes: 276 Rust (+3 medições ignoradas), 57 de interface (vitest), 1 roteiro E2E no app real
+- Testes: 282 Rust (+3 medições ignoradas), 59 de interface (vitest), 1 roteiro E2E no app real
   (com o importador ALEAPP/iLEAPP; 257 com o ADB; 248 com o PR #16; 222 e 50 com o PR #15; 201 e 43 após a auditoria).
   CI Linux e Windows.
 - Depois do handoff: design system global (PR #14, merge `132a8d5`), **agenda e registro de
@@ -419,6 +419,16 @@ Fora disso ficam só no valor original. Regra geral: **"não sei" é melhor que 
 - Trecho destacado: o backend pede ao FTS o trecho com e sem marcadores e o separa em pedaços
   (`PedacoTrecho { texto, destaque }`, `busca::pedacos`); a interface só pinta os pedaços. Texto
   do registro com os mesmos caracteres dos marcadores não muda o destaque (B6 resolvido).
+- Conversas, participantes e os dois índices FTS são **derivados** (migração 3, gatilhos).
+  `derivados.rs` confere cada tabela contra o cálculo a partir de `artefato`/`arquivo` (`EXCEPT`
+  nos dois sentidos + `integrity-check` do FTS) e reconstrói numa transação auditada
+  (`derivados_reconstruidos`): conversas corrigidas pela chave (o `id` das que continuam
+  existindo não muda), participantes refeitos, FTS refeito com `rebuild` e repreenchido. Só
+  confirma se a conferência depois não achar diferença. Tela: Dashboard → Auditoria → "Conversas
+  e índices de busca" (Conferir; Reconstruir só aparece com diferença). Recusada durante uma
+  importação. 200 mil registros (release): conferir ~3 s, reconstruir ~10 s.
+  **Ao mudar um gatilho da migração 3 numa migração nova, mude também as consultas de
+  `derivados.rs`** (são a mesma regra escrita duas vezes).
 
 ### 13.1 Linha do tempo
 
@@ -534,7 +544,7 @@ não capturado.
 
 | Conjunto | Onde | Quantidade |
 |---|---|---|
-| Rust | `crates/*/src` (unitários, inclusive os que exportam os tipos TS) e `crates/*/tests` | 276 + 3 medições `#[ignore]` |
+| Rust | `crates/*/src` (unitários, inclusive os que exportam os tipos TS) e `crates/*/tests` | 282 + 3 medições `#[ignore]` |
 | Interface | `app/src/**/*.test.ts(x)` | 57 |
 | E2E | `testes/e2e/executar.sh` + `persistencia.mjs` | 1 roteiro (cria caso, importa, analisa, reabre; confere que a extração não mudou: hash e datas antes/depois) |
 
@@ -628,10 +638,10 @@ Mais detalhes e histórico: `docs/CONTINUIDADE.md` §7.
 | Item | Risco | Proposta |
 |---|---|---|
 | ~~Conversas enormes sem índice de ordenação~~ | **feito em 01/10/2026 (F1):** migração 6 e leitura em duas partes do índice; números no B8 | — |
-| Sem comando de reconstrução dos derivados | se um gatilho mudar, derivados antigos não se ajustam | F2: reconstruir conversas/FTS e conferir consistência |
+| ~~Sem comando de reconstrução dos derivados~~ | **feito em 01/10/2026 (F2):** conferência e reconstrução de conversas, participantes e índices FTS (§13) | — |
 | Sem `ANALYZE` | plano de consulta ruim em consultas novas | F4: **medido em 01/10/2026 sem ganho** em nenhuma consulta da medição (as críticas usam `INDEXED BY`); não adotado. Reavaliar se uma consulta nova sem `INDEXED BY` ficar lenta |
 | PDF sem assinatura; trilha ancorada só no próprio caso | quem reescreve banco e PDFs juntos não é detectado | F3: assinatura/carimbo de tempo; âncora externa |
-| Hash numa thread | importações grandes lentas | F6 |
+| Hash numa thread | importações grandes lentas | F6: **medido em 01/10/2026 sem ganho que justifique**: SHA-256 de uma thread com instruções SHA da CPU passa de 1 GB/s, acima da leitura de um disco de evidência típico (USB/HD); o gargalo é o disco. Reavaliar com SSD NVMe e medição de importação real |
 | ~~PDF órfão após queda (B7)~~ | **feito em 01/10/2026 (F9):** conferência da pasta e aviso na tela de Relatórios | — |
 | ~~Marcadores de destaque no texto (B6)~~ | **feito em 01/10/2026 (F8):** trecho em pedaços montado no backend | — |
 | Unidade mapeada `Z:` não detectada | caso em rede sem aviso | F5 |
@@ -660,12 +670,13 @@ Construção contínua (regra do usuário de 30/09/2026): cada fase vai para a `
 verde. Feitas: agenda e chamadas (PR #15), MMS, linha do tempo, console de importação e
 importador IPED (lista de itens), importador ADB (backup `.ab` e `.tar`), importador
 ALEAPP/iLEAPP (exportações TSV), conversas grandes pelo índice (F1), conferência da pasta de
-relatórios (F9) e destaque da busca em pedaços (F8). Ordem seguinte:
+relatórios (F9), destaque da busca em pedaços (F8) e conferência/reconstrução dos dados
+derivados (F2). Ordem seguinte:
 
 1. **Importador Avilla**, quando a árvore real chegar (§26).
 2. **Conferência do WhatsApp, SMS/MMS, agenda, chamadas, da lista do IPED, do backup ADB e dos
    relatórios ALEAPP/iLEAPP** com dados de teste (não de investigação).
-3. Itens F2, F3, F5 e F6 (§25), conforme a necessidade medida (F1, F8 e F9 feitos; F4 medido sem
+3. Itens F3 e F5 (§25), conforme a necessidade (F1, F2, F8 e F9 feitos; F4 e F6 medidos sem
    ganho).
 
 ## 28. Arquivos para ler primeiro

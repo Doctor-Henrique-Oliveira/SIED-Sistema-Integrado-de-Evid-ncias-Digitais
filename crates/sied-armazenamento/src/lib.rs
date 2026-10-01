@@ -15,6 +15,7 @@ pub mod caso;
 mod conexao;
 pub use conexao::{normalizar_busca, so_digitos};
 pub mod conversas;
+pub mod derivados;
 pub mod erro;
 pub mod evidencias;
 pub mod extracoes;

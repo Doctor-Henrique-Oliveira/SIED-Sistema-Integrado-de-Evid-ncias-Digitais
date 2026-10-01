@@ -3,8 +3,8 @@
 
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { api, normalizarErro, type Caso, type Dispositivo, type VerificacaoAuditoria } from "../api/cliente";
-import { useAuditoria, useCadastrarDispositivo, useDispositivos, useEstadoImportacao, useExtracoes } from "../api/consultas";
+import { api, normalizarErro, type Caso, type ConferenciaDerivados, type Dispositivo, type VerificacaoAuditoria } from "../api/cliente";
+import { useAuditoria, useCadastrarDispositivo, useDispositivos, useEstadoImportacao, useExtracoes, useReconstruirDerivados } from "../api/consultas";
 import { bytes, dataHora, duracao, numero, tamanho } from "../util/formatar";
 import { nomeStatusExtracao, tomStatus } from "../util/rotulos";
 import { Botao } from "./Botao";
@@ -25,6 +25,7 @@ export const nomeAcao: Record<string, string> = {
   importacao_cancelada: "Importação cancelada",
   importacao_falhou: "Importação falhou",
   importacao_interrompida: "Importação interrompida",
+  derivados_reconstruidos: "Conversas e índices reconstruídos",
 };
 
 function aparelho(d: Dispositivo) {
@@ -346,6 +347,7 @@ export function SecaoAtividades({ caso }: { caso: Caso }) {
           </p>
         )}
       </div>
+      <DadosDerivados />
       {auditoria.isPending ? (
         <Carregando />
       ) : auditoria.isError ? (
@@ -364,5 +366,93 @@ export function SecaoAtividades({ caso }: { caso: Caso }) {
         </ol>
       )}
     </Cartao>
+  );
+}
+
+const nomeDerivado: Record<string, string> = {
+  conversa: "Conversas",
+  conversa_participante: "Participantes das conversas",
+  busca_artefato: "Índice de busca dos registros",
+  busca_arquivo: "Índice de busca dos arquivos",
+};
+
+/** Conversas, participantes e índices de busca são calculados a partir dos registros
+ * importados. Aqui o analista confere se batem e, se não, manda recalcular. */
+function DadosDerivados() {
+  const [conferencia, setConferencia] = useState<ConferenciaDerivados | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+  const [conferindo, setConferindo] = useState(false);
+  const reconstruir = useReconstruirDerivados();
+
+  async function conferir() {
+    setConferindo(true);
+    setErro(null);
+    reconstruir.reset();
+    try {
+      setConferencia(await api.conferirDerivados());
+    } catch (e) {
+      setConferencia(null);
+      setErro(normalizarErro(e).message);
+    } finally {
+      setConferindo(false);
+    }
+  }
+
+  const divergentes = conferencia?.tabelas.filter((t) => t.faltando > 0 || t.sobrando > 0 || !t.indice_integro) ?? [];
+
+  return (
+    <section className="mb-4 rounded-md border border-borda bg-sup-2 px-3.5 py-3" aria-label="Conversas e índices">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-sm text-texto">Conversas e índices de busca</p>
+          <p className="text-xs text-texto-3">Calculados a partir dos registros importados, que nunca são alterados.</p>
+        </div>
+        <Botao variante="secundario" tamanho="p" icone="banco" onClick={conferir} carregando={conferindo} disabled={reconstruir.isPending}>
+          Conferir
+        </Botao>
+      </div>
+      {erro && (
+        <div className="mt-2.5">
+          <Aviso>{erro}</Aviso>
+        </div>
+      )}
+      {reconstruir.isSuccess ? (
+        <div className="mt-2.5">
+          <Aviso tipo="sucesso">Reconstruído: conversas e índices conferem com os registros. A ação ficou na auditoria.</Aviso>
+        </div>
+      ) : reconstruir.isError ? (
+        <div className="mt-2.5">
+          <Aviso>{normalizarErro(reconstruir.error).message}</Aviso>
+        </div>
+      ) : conferencia?.consistente ? (
+        <div className="mt-2.5">
+          <Aviso tipo="sucesso">Conferem com os registros importados.</Aviso>
+        </div>
+      ) : conferencia ? (
+        <div className="mt-2.5">
+          <Aviso tipo="atencao">
+            <p>Diferenças encontradas:</p>
+            <ul className="mt-1 space-y-0.5 text-xs" aria-label="Diferenças nos dados derivados">
+              {divergentes.map((t) => (
+                <li key={t.tabela}>
+                  {nomeDerivado[t.tabela] ?? t.tabela}:{" "}
+                  {[
+                    t.faltando > 0 && `${numero(t.faltando)} faltando`,
+                    t.sobrando > 0 && `${numero(t.sobrando)} a mais ou alteradas`,
+                    !t.indice_integro && "índice danificado",
+                  ]
+                    .filter(Boolean)
+                    .join(", ")}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-1.5 text-xs">Reconstruir recalcula tudo a partir dos registros importados e fica registrado na auditoria.</p>
+            <Botao className="mt-2" tamanho="p" icone="integridade" onClick={() => reconstruir.mutate()} carregando={reconstruir.isPending}>
+              Reconstruir
+            </Botao>
+          </Aviso>
+        </div>
+      ) : null}
+    </section>
   );
 }
