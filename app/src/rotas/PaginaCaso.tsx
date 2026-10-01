@@ -64,19 +64,22 @@ function PainelCaso({ caso, pasta }: { caso: Caso; pasta: string }) {
 
 function CabecalhoCaso({ caso, pasta }: { caso: Caso; pasta: string }) {
   const fuso = caso.fuso_horario;
-  const campos: [string, ReactNode][] = [
+  const principais: [string, ReactNode][] = [
+    ["Unidade", caso.unidade],
+    ["Responsável pela análise", caso.responsavel_analise],
+    ["Delegado(a)", caso.delegado],
+    ["Criado em", dataHora(caso.criado_em, fuso)],
+  ];
+  const vinculados: [string, ReactNode][] = [
     ["Nº do procedimento", caso.numero_procedimento],
     ["Nº do BO", caso.numero_bo],
     ["Investigado", caso.investigado],
     ["Vítima", caso.vitima],
-    ["Delegado(a)", caso.delegado],
-    ["Responsável pela análise", caso.responsavel_analise],
-    ["Unidade", caso.unidade],
-    ["Criado em", dataHora(caso.criado_em, fuso)],
   ];
   return (
-    <section aria-label="Identificação do caso" className="border-b border-borda pb-4">
-      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+    <section aria-label="Identificação do caso" className="relative overflow-hidden rounded-xl border border-borda bg-sup px-5 py-4">
+      <span className="absolute inset-y-0 left-0 w-0.5 bg-ouro" aria-hidden />
+      <div className="flex flex-wrap items-start justify-between gap-x-8 gap-y-4">
         <div className="min-w-0">
           <p className="sobrelinha flex items-center gap-1.5 text-ouro!">
             <Icone nome="casos" className="size-3.5" />
@@ -96,13 +99,21 @@ function CabecalhoCaso({ caso, pasta }: { caso: Caso; pasta: string }) {
           </Selo>
         </div>
       </div>
-      <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-4 2xl:grid-cols-8">
-        {campos.map(([rotulo, valor]) => (
+      <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-3 xl:grid-cols-4">
+        {principais.map(([rotulo, valor]) => (
           <div key={rotulo} className="min-w-0 border-l border-borda-2 pl-3">
             <dt className="sobrelinha truncate">{rotulo}</dt>
             <dd className="mt-0.5 truncate text-sm text-texto" title={typeof valor === "string" ? valor : undefined}>
               {valor ?? "—"}
             </dd>
+          </div>
+        ))}
+      </dl>
+      <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 border-t border-borda pt-4 lg:grid-cols-4">
+        {vinculados.map(([rotulo, valor]) => (
+          <div key={rotulo} className="min-w-0">
+            <dt className="sobrelinha truncate">{rotulo}</dt>
+            <dd className="mt-0.5 truncate text-sm text-texto-2" title={typeof valor === "string" ? valor : undefined}>{valor ?? "—"}</dd>
           </div>
         ))}
       </dl>

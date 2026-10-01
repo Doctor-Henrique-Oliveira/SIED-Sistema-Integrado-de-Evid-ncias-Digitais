@@ -6,6 +6,7 @@ import { useCriarCaso, useInfoApp, usePastaEmRede } from "../api/consultas";
 import { Botao } from "../componentes/Botao";
 import { AreaTexto, Campo } from "../componentes/Campo";
 import { Aviso, Cabecalho, Cartao } from "../componentes/Estrutura";
+import { Icone } from "../componentes/Icone";
 import { localDaPasta, ouNulo } from "../util/formatar";
 
 const vazio = {
@@ -62,7 +63,13 @@ export function PaginaNovoCaso() {
   }
 
   return (
-    <form onSubmit={enviar} noValidate>
+    <form onSubmit={enviar} noValidate className="pagina-contida">
+      <div className="mb-6 flex items-center justify-between border-b border-borda pb-4">
+        <button type="button" onClick={() => navegar("/")} className="flex items-center gap-2 text-sm text-texto-2 hover:text-texto">
+          <Icone nome="voltar" className="size-4" /> Voltar
+        </button>
+        <p className="sobrelinha flex items-center gap-2"><Icone nome="escudo" className="size-3.5 text-ouro" /> SIED · NOVO CASO</p>
+      </div>
       <Cabecalho
         icone="casos"
         sobre="Casos"

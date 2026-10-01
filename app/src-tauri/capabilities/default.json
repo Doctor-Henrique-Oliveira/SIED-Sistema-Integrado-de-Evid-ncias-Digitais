@@ -3,5 +3,15 @@
   "identifier": "padrao",
   "description": "Permissões da janela principal. Sem acesso a rede, shell ou sistema de arquivos pelo frontend: todo acesso a disco passa pelos comandos do backend.",
   "windows": ["main"],
-  "permissions": ["core:default", "dialog:allow-open"]
+  "permissions": [
+    "core:default",
+    "core:window:allow-center",
+    "core:window:allow-current-monitor",
+    "core:window:allow-set-maximizable",
+    "core:window:allow-set-min-size",
+    "core:window:allow-set-resizable",
+    "core:window:allow-set-size",
+    "core:window:allow-unmaximize",
+    "dialog:allow-open"
+  ]
 }

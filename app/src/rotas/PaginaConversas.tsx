@@ -105,12 +105,12 @@ function Conversas({ caso }: { caso: Caso }) {
 
   const colunas =
     selecionada == null
-      ? "grid-cols-[18rem_minmax(0,1fr)]"
+      ? "grid-cols-[19rem_minmax(0,1fr)]"
       : tecnica
         ? "grid-cols-[minmax(0,1fr)_24rem] 2xl:grid-cols-[19rem_minmax(0,1fr)_26rem]"
         : contexto
-          ? "grid-cols-[18rem_minmax(0,1fr)] xl:grid-cols-[18rem_minmax(0,1fr)_18rem] 2xl:grid-cols-[19rem_minmax(0,1fr)_20rem]"
-          : "grid-cols-[18rem_minmax(0,1fr)] 2xl:grid-cols-[19rem_minmax(0,1fr)]";
+          ? "grid-cols-[19rem_minmax(0,1fr)] xl:grid-cols-[19rem_minmax(0,1fr)_19rem] 2xl:grid-cols-[20rem_minmax(0,1fr)_21rem]"
+          : "grid-cols-[19rem_minmax(0,1fr)] 2xl:grid-cols-[20rem_minmax(0,1fr)]";
 
   return (
     <>
@@ -124,7 +124,7 @@ function Conversas({ caso }: { caso: Caso }) {
           </LinkBotao>
         }
       />
-      <div className={`grid h-[calc(100vh-10.25rem)] min-h-[28rem] gap-3 ${colunas}`}>
+      <div className={`grid h-[calc(100vh-10.25rem)] min-h-[28rem] gap-2 ${colunas}`}>
         <div className={`min-h-0 ${selecionada != null && tecnica ? "hidden 2xl:flex" : "flex"}`}>
           <ListaConversas caso={caso} selecionada={selecionada} />
         </div>
@@ -193,7 +193,7 @@ function ListaConversas({ caso, selecionada }: { caso: Caso; selecionada: number
 
   const totalApps = apps.data?.reduce((n, a) => n + a.conversas, 0) ?? 0;
   return (
-    <section aria-label="Conversas do caso" className="flex min-h-0 w-full flex-col painel">
+    <section aria-label="Conversas do caso" className="flex min-h-0 w-full flex-col overflow-hidden border border-borda bg-sup">
       <div className="space-y-2 border-b border-borda p-2.5">
         <div className="relative">
           <Icone nome="busca" className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-texto-3" />
@@ -997,8 +997,8 @@ function PainelContexto({ caso, c, selecionada, abrirOrigem, abrirRegistro }: {
     </div>
   );
   return (
-    <aside aria-label="Contexto da conversa" className="hidden min-h-0 flex-col overflow-y-auto painel xl:flex">
-      <p className="border-b border-borda px-4 py-2.5 text-sm font-semibold text-texto">Contexto da conversa</p>
+    <aside aria-label="Contexto da conversa" className="hidden min-h-0 flex-col overflow-y-auto border border-borda bg-sup xl:flex">
+      <div className="border-b border-borda px-4 py-3"><p className="sobrelinha text-ouro!">Inspector técnico</p><p className="mt-0.5 text-sm font-semibold text-texto">Contexto da conversa</p></div>
       <SecaoRecolhivel titulo="Conversa" icone="conversas">
         <dl>
           {par("App", rotuloApp(c.app))}
