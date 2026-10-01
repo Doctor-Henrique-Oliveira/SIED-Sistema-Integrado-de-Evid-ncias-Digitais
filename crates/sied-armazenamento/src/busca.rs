@@ -17,10 +17,11 @@ use ts_rs::TS;
 use crate::extracoes::{ler_resumo, uuid, ArtefatoResumo, Pagina, COLUNAS_RESUMO, N_RESUMO};
 use crate::Resultado;
 
-/// Marcadores do trecho destacado. Caracteres de controle não aparecem em texto
-/// de mensagem, então a interface pode separar o trecho com segurança.
-pub const MARCA_INICIO: &str = "\u{1}";
-pub const MARCA_FIM: &str = "\u{2}";
+/// Marcadores do trecho destacado pedidos ao FTS. Ficam só no backend: o texto do
+/// próprio registro pode conter estes caracteres, então o trecho é separado em
+/// [`PedacoTrecho`] comparando-o com o mesmo trecho sem marcadores.
+const MARCA_INICIO: char = '\u{1}';
+const MARCA_FIM: char = '\u{2}';
 
 /// Mínimo de dígitos para tratar o texto como telefone.
 const MIN_DIGITOS_TELEFONE: usize = 6;
@@ -47,10 +48,62 @@ pub struct FiltroBusca {
 pub struct AchadoArtefato {
     pub artefato: ArtefatoResumo,
     pub extracao_id: ExtracaoId,
-    /// Trecho com o termo entre `\u0001` e `\u0002`.
-    pub trecho: Option<String>,
+    /// Trecho em torno do termo, já separado em pedaços com e sem destaque.
+    pub trecho: Option<Vec<PedacoTrecho>>,
     #[ts(type = "number | null")]
     pub conversa_id: Option<i64>,
+}
+
+/// Parte do trecho de um achado; `destaque` marca o termo encontrado.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[ts(export)]
+pub struct PedacoTrecho {
+    pub texto: String,
+    pub destaque: bool,
+}
+
+/// Separa o trecho marcado pelo FTS (`marcado`) em pedaços, usando o mesmo trecho sem
+/// marcadores (`puro`): os marcadores são só inserções, então o que sobra do marcado ao
+/// percorrer o puro são os marcadores de verdade, mesmo que o texto do registro também
+/// tenha esses caracteres. Se não fechar, devolve o trecho puro sem destaque.
+pub(crate) fn pedacos(marcado: &str, puro: &str) -> Vec<PedacoTrecho> {
+    let sem_destaque = || {
+        vec![PedacoTrecho {
+            texto: puro.to_string(),
+            destaque: false,
+        }]
+    };
+    let mut saida: Vec<PedacoTrecho> = Vec::new();
+    let mut atual = String::new();
+    let mut dentro = false;
+    let mut resto = puro.chars().peekable();
+    let fechar = |saida: &mut Vec<PedacoTrecho>, atual: &mut String, destaque: bool| {
+        if !atual.is_empty() {
+            saida.push(PedacoTrecho {
+                texto: std::mem::take(atual),
+                destaque,
+            });
+        }
+    };
+    for c in marcado.chars() {
+        if resto.peek() == Some(&c) {
+            atual.push(c);
+            resto.next();
+        } else if c == MARCA_INICIO && !dentro {
+            fechar(&mut saida, &mut atual, false);
+            dentro = true;
+        } else if c == MARCA_FIM && dentro {
+            fechar(&mut saida, &mut atual, true);
+            dentro = false;
+        } else {
+            return sem_destaque();
+        }
+    }
+    if resto.next().is_some() {
+        return sem_destaque();
+    }
+    fechar(&mut saida, &mut atual, dentro);
+    saida
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
@@ -153,7 +206,9 @@ pub(crate) fn ler_achado(r: &rusqlite::Row, com_trecho: bool) -> rusqlite::Resul
         extracao_id: uuid(r.get(N_RESUMO)?)?,
         conversa_id: r.get(N_RESUMO + 1)?,
         trecho: if com_trecho {
-            r.get(N_RESUMO + 2)?
+            let marcado: Option<String> = r.get(N_RESUMO + 2)?;
+            let puro: Option<String> = r.get(N_RESUMO + 3)?;
+            marcado.zip(puro).map(|(m, p)| pedacos(&m, &p))
         } else {
             None
         },
@@ -225,7 +280,8 @@ pub fn buscar(
     valores.push(ValorSql::Integer(deslocamento));
     let mut stmt = conn.prepare(&format!(
         "SELECT {},
-                snippet(busca_artefato, -1, '{MARCA_INICIO}', '{MARCA_FIM}', '…', 16)
+                snippet(busca_artefato, -1, '{MARCA_INICIO}', '{MARCA_FIM}', '…', 16),
+                snippet(busca_artefato, -1, '', '', '…', 16)
          FROM busca_artefato JOIN artefato a ON a.id = busca_artefato.rowid
          WHERE {cond} ORDER BY rank, a.data_hora_ms DESC LIMIT ? OFFSET ?",
         colunas_achado()
@@ -289,6 +345,71 @@ mod testes {
             consulta_fts("encontro OR NEAR(x) \"a\"b"),
             Some("\"encontro\"* \"OR\"* \"NEAR(x\"* \"a\"\"b\"*".into())
         );
+    }
+
+    fn p(texto: &str, destaque: bool) -> PedacoTrecho {
+        PedacoTrecho {
+            texto: texto.into(),
+            destaque,
+        }
+    }
+
+    #[test]
+    fn trecho_separado_em_pedacos() {
+        assert_eq!(
+            pedacos("antes \u{1}termo\u{2} depois", "antes termo depois"),
+            [p("antes ", false), p("termo", true), p(" depois", false)]
+        );
+        assert_eq!(
+            pedacos("\u{1}a\u{2} e \u{1}b\u{2}", "a e b"),
+            [p("a", true), p(" e ", false), p("b", true)]
+        );
+        assert_eq!(pedacos("sem nada", "sem nada"), [p("sem nada", false)]);
+    }
+
+    /// O texto do registro tem os mesmos caracteres dos marcadores: o que aparece é o
+    /// texto original, e o destaque cai no termo (os caracteres de controle são
+    /// invisíveis, então ficar dentro ou fora do destaque não muda o que se vê).
+    #[test]
+    fn marcadores_no_proprio_texto_nao_mudam_o_destaque() {
+        let visivel = |v: &[PedacoTrecho]| -> Vec<(String, bool)> {
+            v.iter()
+                .map(|x| (x.texto.replace(['\u{1}', '\u{2}'], ""), x.destaque))
+                .filter(|(t, _)| !t.is_empty())
+                .collect()
+        };
+        for (puro, marcado, esperado) in [
+            (
+                "x\u{1}fim termo",
+                "x\u{1}fim \u{1}termo\u{2}",
+                vec![("xfim ", false), ("termo", true)],
+            ),
+            (
+                "\u{2}termo\u{1} resto",
+                "\u{2}\u{1}termo\u{2}\u{1} resto",
+                vec![("termo", true), (" resto", false)],
+            ),
+            (
+                "termo\u{2}\u{2} b",
+                "\u{1}termo\u{2}\u{2}\u{2} b",
+                vec![("termo", true), (" b", false)],
+            ),
+        ] {
+            let v = pedacos(marcado, puro);
+            let junto: String = v.iter().map(|x| x.texto.as_str()).collect();
+            assert_eq!(junto, puro);
+            let esperado: Vec<(String, bool)> = esperado
+                .into_iter()
+                .map(|(t, d)| (t.to_string(), d))
+                .collect();
+            assert_eq!(visivel(&v), esperado, "{puro:?}");
+        }
+    }
+
+    #[test]
+    fn trecho_que_nao_fecha_fica_sem_destaque() {
+        assert_eq!(pedacos("a\u{1}b", "ab c"), [p("ab c", false)]);
+        assert_eq!(pedacos("a?b", "ab"), [p("ab", false)]);
     }
 
     #[test]

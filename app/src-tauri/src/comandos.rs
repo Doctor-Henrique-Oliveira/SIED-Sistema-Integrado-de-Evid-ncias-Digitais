@@ -20,7 +20,7 @@ use sied_armazenamento::extracoes::{
     TotalCategoria,
 };
 use sied_armazenamento::linha_tempo::{FiltroLinhaTempo, ResumoLinhaTempo};
-use sied_armazenamento::relatorios::RelatorioRegistrado;
+use sied_armazenamento::relatorios::{ConferenciaPastaRelatorios, RelatorioRegistrado};
 use sied_armazenamento::resumo::{Identificador, ResumoCaso};
 use sied_armazenamento::CasoCatalogado;
 use sied_dominio::{CasoId, Dispositivo, DispositivoId, ExtracaoId, NovoCaso, NovoDispositivo};
@@ -571,6 +571,17 @@ pub async fn remover_evidencia(
 pub async fn listar_relatorios(app_handle: AppHandle) -> ResultadoApp<Vec<RelatorioRegistrado>> {
     em_segundo_plano(app_handle, move |estado| {
         estado.com(|s| s.listar_relatorios())
+    })
+    .await
+}
+
+/// Lê cada PDF registrado para conferir o SHA-256: fora da thread da janela.
+#[tauri::command]
+pub async fn conferir_pasta_relatorios(
+    app_handle: AppHandle,
+) -> ResultadoApp<ConferenciaPastaRelatorios> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.conferir_pasta_relatorios())
     })
     .await
 }

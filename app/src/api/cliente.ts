@@ -28,6 +28,7 @@ import type { Conversa } from "./tipos/Conversa";
 import type { FiltroBusca } from "./tipos/FiltroBusca";
 import type { ResultadoBusca } from "./tipos/ResultadoBusca";
 import type { AchadoArtefato } from "./tipos/AchadoArtefato";
+import type { PedacoTrecho } from "./tipos/PedacoTrecho";
 import type { AchadoArquivo } from "./tipos/AchadoArquivo";
 import type { Identificador } from "./tipos/Identificador";
 import type { ResumoCaso } from "./tipos/ResumoCaso";
@@ -42,6 +43,8 @@ import type { Marcacoes } from "./tipos/Marcacoes";
 import type { NovaEvidencia } from "./tipos/NovaEvidencia";
 import type { PedidoRelatorio } from "./tipos/PedidoRelatorio";
 import type { RelatorioRegistrado } from "./tipos/RelatorioRegistrado";
+import type { ConferenciaPastaRelatorios } from "./tipos/ConferenciaPastaRelatorios";
+import type { ArquivoAvulso } from "./tipos/ArquivoAvulso";
 import type { SecoesRelatorio } from "./tipos/SecoesRelatorio";
 import type { TextosEvidencia } from "./tipos/TextosEvidencia";
 import type { TipoEvidencia } from "./tipos/TipoEvidencia";
@@ -76,6 +79,8 @@ export type {
   NovaEvidencia,
   PedidoRelatorio,
   RelatorioRegistrado,
+  ConferenciaPastaRelatorios,
+  ArquivoAvulso,
   SecoesRelatorio,
   TextosEvidencia,
   TipoEvidencia,
@@ -89,6 +94,7 @@ export type {
   TotalTipo,
   AchadoArquivo,
   AchadoArtefato,
+  PedacoTrecho,
   Conversa,
   FiltroBusca,
   ResultadoBusca,
@@ -234,6 +240,8 @@ export const api = {
   moverEvidencia: (id: number, numero: number) => chamar<Evidencia[]>("mover_evidencia", { id, numero }),
   removerEvidencia: (id: number, motivo: string | null) => chamar<null>("remover_evidencia", { id, motivo }),
   listarRelatorios: () => chamar<RelatorioRegistrado[]>("listar_relatorios"),
+  /** Relê os PDFs registrados (SHA-256) e lista arquivos sem registro na pasta. Só lê. */
+  conferirPastaRelatorios: () => chamar<ConferenciaPastaRelatorios>("conferir_pasta_relatorios"),
   /** Confere os hashes, relê os arquivos na extração e grava o PDF na pasta do caso. */
   gerarRelatorio: (pedido: PedidoRelatorio) => chamar<RelatorioRegistrado>("gerar_relatorio", { pedido }),
 };

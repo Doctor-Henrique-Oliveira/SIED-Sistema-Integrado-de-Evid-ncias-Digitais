@@ -35,7 +35,7 @@ Visão integral e permanente: `docs/VISAO.md`. Arquitetura aprovada (com ajustes
   evidências e relatório PDF (Typst embutido), e o hardening desta auditoria.
 - **Importador Avilla: só o contrato.** Responde `NaoImplementado`. Aguarda a árvore de uma
   extração real (§26).
-- Testes: 267 Rust (+3 medições ignoradas), 56 de interface (vitest), 1 roteiro E2E no app real
+- Testes: 276 Rust (+3 medições ignoradas), 57 de interface (vitest), 1 roteiro E2E no app real
   (com o importador ALEAPP/iLEAPP; 257 com o ADB; 248 com o PR #16; 222 e 50 com o PR #15; 201 e 43 após a auditoria).
   CI Linux e Windows.
 - Depois do handoff: design system global (PR #14, merge `132a8d5`), **agenda e registro de
@@ -416,7 +416,9 @@ Fora disso ficam só no valor original. Regra geral: **"não sei" é melhor que 
 - Texto digitado é neutralizado: cada palavra vira `"palavra"*` (sintaxe do FTS não passa).
 - Telefone (6+ dígitos, com separadores): `instr` nos dígitos de remetente e destinatários (e,
   para contatos, também nos telefones da agenda e no normalizado).
-- Trecho destacado com marcadores `\u0001`/`\u0002` (ver B6 em §22).
+- Trecho destacado: o backend pede ao FTS o trecho com e sem marcadores e o separa em pedaços
+  (`PedacoTrecho { texto, destaque }`, `busca::pedacos`); a interface só pinta os pedaços. Texto
+  do registro com os mesmos caracteres dos marcadores não muda o destaque (B6 resolvido).
 
 ### 13.1 Linha do tempo
 
@@ -468,7 +470,10 @@ Fora disso ficam só no valor original. Regra geral: **"não sei" é melhor que 
   `.pdf.sha256` → linha em `relatorio` com SHA-256 e âncora da trilha
   (`auditoria_ate_seq`, `auditoria_hash`). Falha em qualquer passo, inclusive no registro, apaga
   o que já foi gravado (`.parcial`, PDF, `.sha256`). Nunca existe linha em `relatorio` apontando
-  para PDF parcial ou ausente; só uma queda do processo no meio deixa um PDF órfão (B7).
+  para PDF parcial ou ausente; só uma queda do processo no meio deixa um PDF órfão (B7). A tela
+  de Relatórios confere a pasta (`BancoCaso::conferir_pasta_relatorios`): cada PDF registrado
+  aparece como "PDF confere", "PDF alterado" ou "PDF ausente" (SHA-256 relido), e o que não
+  tem registro (PDF, `.parcial`, `.sha256` avulso) é listado com aviso. Só lê; nada é apagado.
 
 ## 17. Auditoria
 
@@ -529,8 +534,8 @@ não capturado.
 
 | Conjunto | Onde | Quantidade |
 |---|---|---|
-| Rust | `crates/*/src` (unitários, inclusive os que exportam os tipos TS) e `crates/*/tests` | 267 + 3 medições `#[ignore]` |
-| Interface | `app/src/**/*.test.ts(x)` | 56 |
+| Rust | `crates/*/src` (unitários, inclusive os que exportam os tipos TS) e `crates/*/tests` | 276 + 3 medições `#[ignore]` |
+| Interface | `app/src/**/*.test.ts(x)` | 57 |
 | E2E | `testes/e2e/executar.sh` + `persistencia.mjs` | 1 roteiro (cria caso, importa, analisa, reabre; confere que a extração não mudou: hash e datas antes/depois) |
 
 Medições (não rodam na bateria normal):
@@ -567,10 +572,10 @@ Funcionais:
   "Abrir PDF"; um modelo; sem assinatura digital; usuário é o do sistema operacional.
 
 Da auditoria (baixo risco, documentados):
-- **B6** Marcadores `\u0001`/`\u0002` do trecho da busca podem vir do próprio conteúdo e destacar
-  o texto errado (só visual; o React escapa o texto).
+- ~~**B6**~~ Resolvido em 01/10/2026: o trecho da busca chega em pedaços (§13).
 - **B7** Se o SIED cair entre renomear o PDF e registrá-lo, fica um PDF com `.sha256` sem linha
-  em `relatorio` (órfão visível; nunca o contrário).
+  em `relatorio` (nunca o contrário). Desde 01/10/2026 a tela de Relatórios lista esses arquivos
+  como "sem registro no caso" e confere o SHA-256 de cada PDF registrado (§16).
 - **B8** Conversa de 100 mil mensagens (200 mil registros, release): desde a migração 6, página
   7–14 ms, posição ~6 ms, localizar ~0,14 s, marcar trecho de 2.000 ~11 ms (eram 58–148 ms,
   34 ms, 0,53 s e 0,5 s). Busca por telefone continua ~0,26 s (varre os registros; um índice
@@ -627,8 +632,8 @@ Mais detalhes e histórico: `docs/CONTINUIDADE.md` §7.
 | Sem `ANALYZE` | plano de consulta ruim em consultas novas | F4: **medido em 01/10/2026 sem ganho** em nenhuma consulta da medição (as críticas usam `INDEXED BY`); não adotado. Reavaliar se uma consulta nova sem `INDEXED BY` ficar lenta |
 | PDF sem assinatura; trilha ancorada só no próprio caso | quem reescreve banco e PDFs juntos não é detectado | F3: assinatura/carimbo de tempo; âncora externa |
 | Hash numa thread | importações grandes lentas | F6 |
-| PDF órfão após queda (B7) | confusão na pasta de relatórios | F9: varredura e aviso |
-| Marcadores de destaque no texto (B6) | destaque errado | F8: posições em vez de marcadores |
+| ~~PDF órfão após queda (B7)~~ | **feito em 01/10/2026 (F9):** conferência da pasta e aviso na tela de Relatórios | — |
+| ~~Marcadores de destaque no texto (B6)~~ | **feito em 01/10/2026 (F8):** trecho em pedaços montado no backend | — |
 | Unidade mapeada `Z:` não detectada | caso em rede sem aviso | F5 |
 | WhatsApp sem banco real | esquemas reais podem ter variações | conferir com aparelho de teste |
 | `typescript` 7 / `vite` 8 recentes | quebra em atualizações | fixar versões ao atualizar; rodar toda a bateria |
@@ -654,12 +659,14 @@ plano e pasta intacta, e importação completa no app real. Roteiro em
 Construção contínua (regra do usuário de 30/09/2026): cada fase vai para a `main` com a CI
 verde. Feitas: agenda e chamadas (PR #15), MMS, linha do tempo, console de importação e
 importador IPED (lista de itens), importador ADB (backup `.ab` e `.tar`), importador
-ALEAPP/iLEAPP (exportações TSV), conversas grandes pelo índice (F1). Ordem seguinte:
+ALEAPP/iLEAPP (exportações TSV), conversas grandes pelo índice (F1), conferência da pasta de
+relatórios (F9) e destaque da busca em pedaços (F8). Ordem seguinte:
 
 1. **Importador Avilla**, quando a árvore real chegar (§26).
 2. **Conferência do WhatsApp, SMS/MMS, agenda, chamadas, da lista do IPED, do backup ADB e dos
    relatórios ALEAPP/iLEAPP** com dados de teste (não de investigação).
-3. Itens F2–F9 (§25), conforme a necessidade medida (F1 feito; F4 medido sem ganho).
+3. Itens F2, F3, F5 e F6 (§25), conforme a necessidade medida (F1, F8 e F9 feitos; F4 medido sem
+   ganho).
 
 ## 28. Arquivos para ler primeiro
 

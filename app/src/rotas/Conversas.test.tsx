@@ -72,7 +72,10 @@ const respostas: Record<string, unknown> = {
         {
           artefato: msg(2, true, Date.UTC(2026, 0, 2, 12), "Até amanhã"),
           extracao_id: "x1",
-          trecho: "\u0001Até\u0002 amanhã",
+          trecho: [
+            { texto: "Até", destaque: true },
+            { texto: " amanhã", destaque: false },
+          ],
           conversa_id: 5,
         },
       ],
@@ -133,7 +136,15 @@ describe("conversas", () => {
 
 describe("busca", () => {
   it("destaca o termo no trecho", () => {
-    render(<TrechoDestacado texto={"antes \u0001termo\u0002 depois"} />);
+    render(
+      <TrechoDestacado
+        partes={[
+          { texto: "antes ", destaque: false },
+          { texto: "termo", destaque: true },
+          { texto: " depois", destaque: false },
+        ]}
+      />,
+    );
     expect(screen.getByText("termo").tagName).toBe("MARK");
     expect(screen.getByText("antes")).toBeInTheDocument();
   });

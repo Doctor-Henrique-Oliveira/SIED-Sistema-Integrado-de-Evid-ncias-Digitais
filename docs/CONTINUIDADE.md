@@ -100,7 +100,8 @@ release, execução manual ou PR que muda o build (opção "Só tags", PR #4).
 | `claude/contatos-chamadas-android-z7m48s` (reiniciada da `main`) | `0c19bca` | #16 | mesclado (`b6da666`): MMS do Android, linha do tempo unificada, console de importação e importador IPED |
 | `claude/contatos-chamadas-android-z7m48s` (reiniciada da `main`) | `6dfadb6` | #17 | mesclado (`bcdcd0c`): importador ADB (backup `.ab` e `.tar`) |
 | `claude/contatos-chamadas-android-z7m48s` (reiniciada da `main`) | `0b641e3` | #18 | mesclado (`eb7bdfe`): importador ALEAPP/iLEAPP |
-| `claude/contatos-chamadas-android-z7m48s` (reiniciada da `main`) | — | novo PR | conversas grandes pelo índice (migração 6) |
+| `claude/contatos-chamadas-android-z7m48s` (reiniciada da `main`) | `2012ac7` | #19 | mesclado (`e92b830`): conversas grandes pelo índice (migração 6) |
+| `claude/contatos-chamadas-android-z7m48s` (reiniciada da `main`) | — | novo PR | conferência da pasta de relatórios (F9) e destaque da busca em pedaços (F8) |
 
 As branches mescladas **não foram apagadas**. Podem ser removidas depois que a `main` for
 confirmada íntegra e com CI verde, com aval do usuário.
@@ -336,9 +337,9 @@ depois do PR #15)
 
 | Conjunto | Quantidade | Resultado |
 |---|---|---|
-| Rust (`cargo test --workspace`, soma de todos os `test result`) | 267 + 3 medições ignoradas com as conversas grandes pelo índice (265 com o ALEAPP/iLEAPP; 257 com o ADB; 248 com o PR #16; 222 com o PR #15; 201 após a auditoria) | todos passam |
+| Rust (`cargo test --workspace`, soma de todos os `test result`) | 276 + 3 medições ignoradas com a conferência da pasta de relatórios e o destaque em pedaços (267 com as conversas grandes; 265 com o ALEAPP/iLEAPP; 257 com o ADB; 248 com o PR #16; 222 com o PR #15; 201 após a auditoria) | todos passam |
 | `cargo clippy -D warnings` e `cargo fmt --check` | — | limpos |
-| Interface (`vitest`) | 56 com a linha do tempo e o console (50 com o PR #15; 43 após a auditoria) | todos passam |
+| Interface (`vitest`) | 57 com a conferência da pasta de relatórios (56 com a linha do tempo e o console; 50 com o PR #15; 43 após a auditoria) | todos passam |
 | Build da interface (`npm run build`) e do app (`tauri build --debug --no-bundle`) | — | ok |
 | Typecheck TypeScript | — | limpo |
 | Tipos gerados (ts-rs) atualizados | — | conferido pela CI |
@@ -412,8 +413,9 @@ REAL infinito. Medições com volume em `tests/desempenho.rs` (ignoradas; ver o 
 - Relatório: no máximo 60 figuras; a geração segura a trava do caso (outros comandos esperam); sem
   botão "Abrir PDF" (a tela mostra o caminho); usuário é o do sistema operacional; um único modelo;
   sem assinatura digital do PDF; erro de imagem ilegível vem do decodificador em inglês.
-- Da auditoria (baixo risco): marcadores do trecho da busca podem vir do próprio conteúdo (B6);
-  queda do processo entre gravar e registrar o PDF deixa um PDF órfão (B7); conversa de 100 mil
+- Da auditoria (baixo risco): queda do processo entre gravar e registrar o PDF deixa um PDF órfão
+  (B7; desde 01/10/2026 a tela de Relatórios o lista como "sem registro no caso"; B6, destaque da
+  busca, resolvido); conversa de 100 mil
   mensagens: página 7–14 ms e localizar ~0,14 s desde a migração 6 (eram 79–185 ms e ~0,5 s, B8); copie o caso **fechado** (a trava impede copiar com ele
   aberto no Windows, e o `-wal` ficaria para trás) (B9).
 - Caso em compartilhamento de rede ou pasta sincronizada (OneDrive e afins): WAL e trava não são
@@ -561,14 +563,15 @@ Detalhes no `README.md`.
 Depois vieram, em construção contínua, a agenda e as chamadas (PR #15), os MMS, a linha do
 tempo unificada, o console de importação, o importador IPED (PR #16), o importador ADB (PR #17), o importador
 ALEAPP/iLEAPP (PR #18, checkpoints de 30/09/2026) e as conversas grandes servidas pelo índice
-(F1 da dívida técnica, checkpoint `2026-10-01-conversas-grandes.md`).
+(F1 da dívida técnica, checkpoint `2026-10-01-conversas-grandes.md`), a conferência da pasta de
+relatórios e o destaque da busca em pedaços (F9 e F8, checkpoint `2026-10-01-relatorios-busca.md`).
 
 A seguir (ordem da construção contínua):
 1. importador Avilla (quando a árvore chegar, §10);
 2. conferência do WhatsApp, SMS/MMS, agenda, chamadas, da lista do IPED, do backup ADB e dos
    relatórios ALEAPP/iLEAPP com dados de teste
    (não de investigação);
-3. demais itens de dívida técnica medidos (HANDOFF §25; F1 feito, F4 medido sem ganho).
+3. demais itens de dívida técnica medidos (HANDOFF §25; F1, F8 e F9 feitos, F4 medido sem ganho).
 
 ---
 

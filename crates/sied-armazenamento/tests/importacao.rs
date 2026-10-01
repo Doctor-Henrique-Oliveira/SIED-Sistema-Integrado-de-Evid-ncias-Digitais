@@ -461,7 +461,12 @@ fn busca_global_por_texto_telefone_e_arquivo() {
     assert_eq!(a.extracao_id, x.id);
     assert!(a.conversa_id.is_some());
     let trecho = a.trecho.as_deref().unwrap();
-    assert!(trecho.contains("\u{1}Resposta\u{2}"), "{trecho:?}");
+    assert!(
+        trecho.iter().any(|p| p.destaque && p.texto == "Resposta"),
+        "{trecho:?}"
+    );
+    let texto: String = trecho.iter().map(|p| p.texto.as_str()).collect();
+    assert!(!texto.contains(['\u{1}', '\u{2}']), "{texto:?}");
 
     // Telefone digitado de outro jeito encontra remetente e destinatário.
     let r = buscar("(11) 90000-0001");
