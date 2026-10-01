@@ -15,7 +15,7 @@ use sied_armazenamento::extracoes::{
     TotalCategoria,
 };
 use sied_armazenamento::linha_tempo::{FiltroLinhaTempo, ResumoLinhaTempo};
-use sied_armazenamento::relatorios::RelatorioRegistrado;
+use sied_armazenamento::relatorios::{ConferenciaPastaRelatorios, RelatorioRegistrado};
 use sied_armazenamento::resumo::{Identificador, ResumoCaso};
 use sied_armazenamento::{BancoCaso, CasoCatalogado, CatalogoGlobal, Sessao};
 use sied_dominio::{
@@ -661,6 +661,11 @@ impl Servico {
 
     pub fn listar_relatorios(&mut self) -> ResultadoApp<Vec<RelatorioRegistrado>> {
         Ok(self.banco()?.relatorios()?)
+    }
+
+    /// Relê os PDFs registrados e lista o que não tem registro em `relatorios/`.
+    pub fn conferir_pasta_relatorios(&mut self) -> ResultadoApp<ConferenciaPastaRelatorios> {
+        Ok(self.banco()?.conferir_pasta_relatorios()?)
     }
 
     /// Gera o PDF em `<pasta do caso>/relatorios/` e o registra (com auditoria).

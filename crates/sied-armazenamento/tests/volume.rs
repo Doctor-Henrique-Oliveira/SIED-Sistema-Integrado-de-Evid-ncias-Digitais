@@ -391,6 +391,52 @@ fn paginas_posicoes_e_trecho_batem_com_a_ordem_calculada_a_parte() {
     assert!(t.mensagens.iter().all(|(_, h)| h.len() == 64));
 }
 
+/// Mensagem cujo próprio texto traz os caracteres usados como marcadores do destaque:
+/// a busca devolve o texto original e destaca só o termo.
+#[test]
+fn destaque_da_busca_nao_se_confunde_com_o_texto_da_mensagem() {
+    let raiz = tempfile::tempdir().unwrap();
+    let origem = raiz.path().join("Extracao-SINTETICA");
+    fs::create_dir_all(origem.join("telefonia")).unwrap();
+    fs::write(origem.join("SINTETICO.txt"), "Extração SINTÉTICA de teste.").unwrap();
+    let conn = Connection::open(origem.join("telefonia/mmssms.db")).unwrap();
+    conn.execute_batch(
+        "CREATE TABLE sms(_id INTEGER PRIMARY KEY, thread_id, address, date, type, body);",
+    )
+    .unwrap();
+    let corpo = "inicio \u{2}falso\u{1} combinado \u{1}aberto amanha";
+    conn.execute(
+        "INSERT INTO sms VALUES (1, 1, '+5511900000001', ?1, 1, ?2)",
+        rusqlite::params![BASE_MS, corpo],
+    )
+    .unwrap();
+    drop(conn);
+    let (banco, d) = caso(raiz.path());
+    let x = importar(&banco, &d, &origem, &Controle::default());
+    assert_eq!(x.status, "concluida", "{:?}", x.erro);
+
+    let r = banco
+        .buscar(
+            &sied_armazenamento::busca::FiltroBusca {
+                texto: "combinado".into(),
+                ..Default::default()
+            },
+            0,
+            10,
+        )
+        .unwrap();
+    assert_eq!(r.artefatos.total, 1);
+    let trecho = r.artefatos.itens[0].trecho.clone().unwrap();
+    let junto: String = trecho.iter().map(|p| p.texto.as_str()).collect();
+    assert_eq!(junto, corpo);
+    let destacados: Vec<&str> = trecho
+        .iter()
+        .filter(|p| p.destaque)
+        .map(|p| p.texto.as_str())
+        .collect();
+    assert_eq!(destacados, ["combinado"]);
+}
+
 #[test]
 fn arquivo_com_a_pasta_de_origem_e_progresso_final() {
     let raiz = tempfile::tempdir().unwrap();

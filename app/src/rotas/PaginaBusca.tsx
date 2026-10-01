@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import type { Caso, FiltroBusca } from "../api/cliente";
+import type { Caso, FiltroBusca, PedacoTrecho } from "../api/cliente";
 import { useBusca, useExtracoes } from "../api/consultas";
 import { Botao } from "../componentes/Botao";
 import { Aviso, Cabecalho, Cartao, Carregando, entrada, Paginacao, Selo, tabela, Vazio } from "../componentes/Estrutura";
@@ -11,33 +11,17 @@ import { nomeApp, nomeCategoria, nomeTipoArtefato, rotuloApp, rotuloSubtipo } fr
 import { ComCasoAberto, VoltarAoCaso } from "./PaginaCaso";
 
 const LIMITE = 50;
-const INICIO = "\u0001";
-const FIM = "\u0002";
 
 export function PaginaBusca() {
   return <ComCasoAberto>{(caso) => <Busca caso={caso} />}</ComCasoAberto>;
 }
 
-/** Trecho devolvido pelo backend com o termo entre \u0001 e \u0002. */
-export function TrechoDestacado({ texto }: { texto: string }) {
-  const partes: { texto: string; marcado: boolean }[] = [];
-  let resto = texto;
-  while (resto) {
-    const i = resto.indexOf(INICIO);
-    if (i < 0) {
-      partes.push({ texto: resto, marcado: false });
-      break;
-    }
-    if (i > 0) partes.push({ texto: resto.slice(0, i), marcado: false });
-    const f = resto.indexOf(FIM, i);
-    const fim = f < 0 ? resto.length : f;
-    partes.push({ texto: resto.slice(i + 1, fim), marcado: true });
-    resto = resto.slice(fim + 1);
-  }
+/** Trecho do achado, já separado pelo backend em pedaços com e sem destaque. */
+export function TrechoDestacado({ partes }: { partes: PedacoTrecho[] }) {
   return (
     <>
       {partes.map((p, i) =>
-        p.marcado ? (
+        p.destaque ? (
           <mark key={i} className="rounded-sm bg-ouro/35 px-0.5 text-texto">
             {p.texto}
           </mark>
@@ -200,7 +184,7 @@ function Busca({ caso }: { caso: Caso }) {
                           </div>
                           <p className="mt-0.5 text-sm text-texto">
                             {a.trecho ? (
-                              <TrechoDestacado texto={a.trecho} />
+                              <TrechoDestacado partes={a.trecho} />
                             ) : (
                               (reg.conteudo ?? reg.nome_arquivo ?? (reg.subtipo && reg.subtipo !== reg.app ? rotuloSubtipo(reg.subtipo) : "—"))
                             )}

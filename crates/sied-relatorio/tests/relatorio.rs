@@ -336,6 +336,105 @@ fn caso_sem_evidencias_gera_relatorio_so_com_as_secoes_escolhidas() {
         .starts_with(b"%PDF-"));
 }
 
+/// A pasta de relatórios é conferida com o registro do caso: PDF íntegro, alterado ou
+/// apagado, e o que sobra de uma queda (PDF sem registro, gravação parcial). Só lê.
+#[test]
+fn pasta_de_relatorios_conferida_com_o_registro() {
+    let (_raiz, _origem, mut banco, _x) = preparado();
+    assert!(banco
+        .conferir_pasta_relatorios()
+        .unwrap()
+        .avulsos
+        .is_empty());
+    let pedido = || PedidoRelatorio {
+        secoes: Some(sied_relatorio::SecoesRelatorio {
+            apendice_tecnico: false,
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let r1 = sied_relatorio::gerar_em(
+        &mut banco,
+        pedido(),
+        Utc.timestamp_opt(1_767_300_000, 0).unwrap(),
+    )
+    .unwrap();
+    let r2 = sied_relatorio::gerar_em(
+        &mut banco,
+        pedido(),
+        Utc.timestamp_opt(1_767_300_060, 0).unwrap(),
+    )
+    .unwrap();
+    let r3 = sied_relatorio::gerar_em(
+        &mut banco,
+        pedido(),
+        Utc.timestamp_opt(1_767_300_120, 0).unwrap(),
+    )
+    .unwrap();
+    let c = banco.conferir_pasta_relatorios().unwrap();
+    assert!(c.pdfs.iter().all(|p| p.situacao == "confere"), "{c:?}");
+    assert_eq!(c.pdfs.len(), 3);
+    assert!(
+        c.avulsos.is_empty(),
+        "o .sha256 de cada relatório é esperado: {c:?}"
+    );
+
+    let pasta = banco.pasta().join("relatorios");
+    let mut pdf = fs::read(banco.pasta().join(&r2.caminho)).unwrap();
+    pdf.push(b'\n');
+    fs::write(banco.pasta().join(&r2.caminho), &pdf).unwrap();
+    fs::remove_file(banco.pasta().join(&r3.caminho)).unwrap();
+    fs::write(
+        pasta.join("2026-01-01_000000_relatorio.pdf"),
+        b"%PDF-1.7 sintetico",
+    )
+    .unwrap();
+    fs::write(
+        pasta.join("2026-01-01_000000_relatorio.pdf.sha256"),
+        b"0  x\n",
+    )
+    .unwrap();
+    fs::write(pasta.join("2026-01-01_000001_relatorio.parcial"), b"%PDF").unwrap();
+    let antes: Vec<_> = fs::read_dir(&pasta)
+        .unwrap()
+        .map(|e| e.unwrap().file_name())
+        .collect();
+
+    let c = banco.conferir_pasta_relatorios().unwrap();
+    let situacao = |id| {
+        c.pdfs
+            .iter()
+            .find(|p| p.relatorio_id == id)
+            .unwrap()
+            .situacao
+            .as_str()
+    };
+    assert_eq!(situacao(r1.id), "confere");
+    assert_eq!(situacao(r2.id), "divergente");
+    assert_eq!(situacao(r3.id), "ausente");
+    let avulsos: Vec<(&str, &str)> = c
+        .avulsos
+        .iter()
+        .map(|a| (a.nome.as_str(), a.tipo.as_str()))
+        .collect();
+    assert_eq!(
+        avulsos,
+        [
+            ("2026-01-01_000000_relatorio.pdf", "pdf"),
+            ("2026-01-01_000000_relatorio.pdf.sha256", "sha256"),
+            ("2026-01-01_000001_relatorio.parcial", "parcial"),
+        ]
+    );
+    assert_eq!(c.avulsos[0].tamanho, 18);
+    // Nada foi apagado, movido nem registrado.
+    let depois: Vec<_> = fs::read_dir(&pasta)
+        .unwrap()
+        .map(|e| e.unwrap().file_name())
+        .collect();
+    assert_eq!(antes.len(), depois.len());
+    assert_eq!(banco.relatorios().unwrap().len(), 3);
+}
+
 /// O banco do caso é alterado com outra ferramenta (gatilhos desligados): o conteúdo da
 /// mensagem muda, mas a coluna hash_registro e o hash da evidência continuam os mesmos.
 /// A conferência recalcula o hash do conteúdo e acusa a divergência.

@@ -4,12 +4,13 @@
 
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import type { Caso, Evidencia, SecoesRelatorio } from "../api/cliente";
+import type { ArquivoAvulso, Caso, Evidencia, SecoesRelatorio } from "../api/cliente";
 import {
   useAlterarEvidencia,
   useEvidencias,
   useGerarRelatorio,
   useMoverEvidencia,
+  usePastaRelatorios,
   useRelatorios,
   useRemoverEvidencia,
 } from "../api/consultas";
@@ -387,6 +388,9 @@ function GerarRelatorio({ caso, pasta }: { caso: Caso; pasta: string }) {
 
 function RelatoriosGerados({ caso, pasta }: { caso: Caso; pasta: string }) {
   const lista = useRelatorios(caso.id);
+  const conferencia = usePastaRelatorios(caso.id);
+  const situacao = new Map((conferencia.data?.pdfs ?? []).map((p) => [p.relatorio_id, p.situacao]));
+  const avulsos = conferencia.data?.avulsos ?? [];
   return (
     <Cartao titulo="Relatórios gerados" icone="integridade" rotulo="Relatórios gerados" denso>
       {lista.isPending ? (
@@ -402,10 +406,13 @@ function RelatoriosGerados({ caso, pasta }: { caso: Caso; pasta: string }) {
       ) : (
         <ul className="divide-y divide-borda">
           {lista.data.map((r) => (
-            <li key={r.id} className="px-4 py-2.5 text-xs">
-              <p className="break-all font-mono text-texto" title={caminhoCompleto(pasta, r.caminho)}>
-                {nomeArquivo(r.caminho)}
-              </p>
+            <li key={r.id} className="px-4 py-2.5 text-xs" aria-label={`Relatório ${nomeArquivo(r.caminho)}`}>
+              <div className="flex items-start gap-2">
+                <p className="min-w-0 flex-1 break-all font-mono text-texto" title={caminhoCompleto(pasta, r.caminho)}>
+                  {nomeArquivo(r.caminho)}
+                </p>
+                <SeloPdf situacao={situacao.get(r.id)} />
+              </div>
               <p className="mt-0.5 text-texto-2">
                 {dataHora(r.gerado_em, caso.fuso_horario)} · {r.gerado_por} · {tamanho(r.tamanho)} · <ResumoConferencia v={r.evidencias} />
               </p>
@@ -416,7 +423,69 @@ function RelatoriosGerados({ caso, pasta }: { caso: Caso; pasta: string }) {
           ))}
         </ul>
       )}
+      {conferencia.isError && (
+        <div className="p-4">
+          <Aviso>Não foi possível conferir a pasta de relatórios: {conferencia.error.message}</Aviso>
+        </div>
+      )}
+      {avulsos.length > 0 && <ArquivosAvulsos avulsos={avulsos} />}
     </Cartao>
+  );
+}
+
+/** Conferência do arquivo na pasta com o SHA-256 registrado na geração. */
+function SeloPdf({ situacao }: { situacao: string | undefined }) {
+  if (situacao === "confere")
+    return (
+      <Selo tom="ok" titulo="O SHA-256 do arquivo na pasta é o registrado na geração">
+        PDF confere
+      </Selo>
+    );
+  if (situacao === "divergente")
+    return (
+      <Selo tom="erro" titulo="O arquivo na pasta não tem o SHA-256 registrado na geração">
+        PDF alterado
+      </Selo>
+    );
+  if (situacao === "ausente")
+    return (
+      <Selo tom="erro" titulo="O arquivo registrado não está na pasta de relatórios">
+        PDF ausente
+      </Selo>
+    );
+  return null;
+}
+
+const tipoAvulso: Record<string, string> = {
+  pdf: "PDF sem registro",
+  parcial: "gravação interrompida",
+  sha256: "hash sem relatório",
+  outro: "outro arquivo",
+};
+
+/** Arquivos em relatorios/ que não pertencem a relatório registrado (ex.: queda entre
+ *  gravar o PDF e registrá-lo). O SIED não apaga nem registra nada: só mostra. */
+function ArquivosAvulsos({ avulsos }: { avulsos: ArquivoAvulso[] }) {
+  return (
+    <div className="border-t border-borda p-4" aria-label="Arquivos sem registro">
+      <Aviso tipo="atencao">
+        <p className="font-medium">
+          {avulsos.length === 1 ? "1 arquivo" : `${numero(avulsos.length)} arquivos`} na pasta de relatórios sem registro no caso
+        </p>
+        <p className="mt-0.5 text-xs">
+          Não fazem parte da trilha de auditoria e não são relatórios do caso. Costumam sobrar de uma geração interrompida. O SIED não
+          apaga nem altera estes arquivos.
+        </p>
+        <ul className="mt-2 space-y-0.5 text-xs">
+          {avulsos.map((a) => (
+            <li key={a.nome}>
+              <span className="break-all font-mono">{a.nome}</span> · {tipoAvulso[a.tipo] ?? a.tipo}
+              {a.tipo !== "outro" && <> · {tamanho(a.tamanho)}</>}
+            </li>
+          ))}
+        </ul>
+      </Aviso>
+    </div>
   );
 }
 

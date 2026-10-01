@@ -444,6 +444,11 @@ export function useRelatorios(casoId: CasoId) {
   return useQuery({ queryKey: chaves.relatorios(casoId), queryFn: api.listarRelatorios });
 }
 
+/** Mesma raiz de chave dos relatórios: gerar um novo também reconfere a pasta. */
+export function usePastaRelatorios(casoId: CasoId) {
+  return useQuery({ queryKey: [...chaves.relatorios(casoId), "pasta"], queryFn: api.conferirPastaRelatorios });
+}
+
 export function useGerarRelatorio(casoId: CasoId) {
   const qc = useQueryClient();
   return useMutation({

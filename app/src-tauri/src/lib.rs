@@ -125,6 +125,7 @@ pub fn executar() {
             comandos::mover_evidencia,
             comandos::remover_evidencia,
             comandos::listar_relatorios,
+            comandos::conferir_pasta_relatorios,
             comandos::gerar_relatorio,
         ])
         .build(tauri::generate_context!())

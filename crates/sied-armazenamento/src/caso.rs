@@ -480,6 +480,12 @@ impl BancoCaso {
         relatorios::listar(&self.conn)
     }
 
+    /// Confere os PDFs registrados e lista arquivos sem registro na pasta de relatórios
+    /// (ver [`relatorios::conferir_pasta`]).
+    pub fn conferir_pasta_relatorios(&self) -> Resultado<relatorios::ConferenciaPastaRelatorios> {
+        relatorios::conferir_pasta(&self.pasta, &self.relatorios()?)
+    }
+
     /// Registra um PDF já gravado em `relatorios/` (com auditoria).
     pub fn registrar_relatorio(&mut self, novo: NovoRelatorio) -> Resultado<RelatorioRegistrado> {
         let tx = self

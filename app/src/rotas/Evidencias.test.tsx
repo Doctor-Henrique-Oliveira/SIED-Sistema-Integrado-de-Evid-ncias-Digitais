@@ -303,5 +303,30 @@ describe("tela de relatórios", () => {
     const gerados = screen.getByRole("region", { name: "Relatórios gerados" });
     expect(await within(gerados).findByText("2026-01-02_120000_relatorio.pdf")).toBeInTheDocument();
     expect(within(gerados).getByText(/trilha até o registro 42/)).toBeInTheDocument();
+    // Sem resposta da conferência da pasta: nenhum selo nem aviso inventado.
+    expect(within(gerados).queryByText(/^PDF /)).not.toBeInTheDocument();
+    expect(within(gerados).queryByLabelText("Arquivos sem registro")).not.toBeInTheDocument();
+  });
+
+  it("confere o PDF na pasta e mostra arquivos sem registro sem apagar nada", async () => {
+    respostas.listar_evidencias = [];
+    respostas.listar_relatorios = [gerado];
+    respostas.conferir_pasta_relatorios = {
+      pdfs: [{ relatorio_id: 1, situacao: "divergente" }],
+      avulsos: [
+        { nome: "2026-01-01_000000_relatorio.pdf", tamanho: 2048, tipo: "pdf" },
+        { nome: "2026-01-01_000001_relatorio.parcial", tamanho: 10, tipo: "parcial" },
+      ],
+    };
+    montar("/casos/c1/relatorios");
+    const gerados = await screen.findByRole("region", { name: "Relatórios gerados" });
+    const item = await within(gerados).findByRole("listitem", { name: "Relatório 2026-01-02_120000_relatorio.pdf" });
+    expect(await within(item).findByText("PDF alterado")).toBeInTheDocument();
+    const avulsos = within(gerados).getByLabelText("Arquivos sem registro");
+    expect(avulsos).toHaveTextContent("2 arquivos na pasta de relatórios sem registro no caso");
+    expect(avulsos).toHaveTextContent("2026-01-01_000000_relatorio.pdf · PDF sem registro");
+    expect(avulsos).toHaveTextContent("2026-01-01_000001_relatorio.parcial · gravação interrompida");
+    expect(within(avulsos).queryByRole("button")).not.toBeInTheDocument();
+    expect(args("conferir_pasta_relatorios")).toHaveLength(1);
   });
 });
