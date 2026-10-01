@@ -19,7 +19,7 @@ const NOVO: &str = include_str!("../../../testes/fixtures/whatsapp/msgstore_novo
 const WA: &str = include_str!("../../../testes/fixtures/whatsapp/wa.sql");
 const BANCOS: &str = "dados/com.whatsapp/databases";
 
-/// Mensagens da conversa grande (thread 1), 2 delas sem data.
+/// Mensagens da conversa grande (thread 1), 3 delas sem data (uma é marcador).
 const GRANDE: i64 = 1200;
 const BASE_MS: i64 = 1_767_225_600_000;
 
@@ -60,11 +60,12 @@ fn extracao(dir: &Path) {
         .prepare("INSERT INTO sms(_id, thread_id, address, date, type, body) VALUES (?1, ?2, ?3, ?4, ?5, ?6)")
         .unwrap();
     for i in 1..=GRANDE {
-        // Datas fora de ordem de id, para a posição depender da data.
-        let data = if i == 7 || i == 8 {
+        // Datas fora de ordem de id, para a posição depender da data, e de três em
+        // três iguais, para o desempate pelo id contar.
+        let data = if i == 7 || i == 8 || i == 300 {
             None
         } else {
-            Some(BASE_MS + ((i * 37) % GRANDE) * 60_000)
+            Some(BASE_MS + ((i * 37) % GRANDE) / 3 * 60_000)
         };
         let corpo = if i % 100 == 0 {
             format!("marcador sintético {i}")
@@ -279,7 +280,7 @@ fn posicao_e_localizar_seguem_a_ordem_da_conversa() {
         );
     }
     // Sem data vão para o fim.
-    assert!(todas[todas.len() - 2..]
+    assert!(todas[todas.len() - 3..]
         .iter()
         .all(|m| m.data_hora_ms.is_none()));
     // Registro de outra conversa não tem posição nesta.
@@ -319,6 +320,75 @@ fn posicao_e_localizar_seguem_a_ordem_da_conversa() {
             .total,
         0
     );
+}
+
+#[test]
+fn paginas_posicoes_e_trecho_batem_com_a_ordem_calculada_a_parte() {
+    let (_raiz, banco, _x) = preparado();
+    let grande = banco
+        .conversas_filtradas(&texto("+5511900000001"), 0, 10)
+        .unwrap()
+        .itens
+        .remove(0);
+    let todas = banco
+        .mensagens_conversa(grande.id, 0, GRANDE)
+        .unwrap()
+        .itens;
+
+    // A ordem esperada, calculada aqui: datadas por (data, id), depois sem data por id.
+    let mut esperada = todas.clone();
+    esperada.sort_by_key(|m| (m.data_hora_ms.is_none(), m.data_hora_ms, m.id));
+    let ids = |v: &[sied_armazenamento::extracoes::ArtefatoResumo]| {
+        v.iter().map(|m| m.id).collect::<Vec<_>>()
+    };
+    assert_eq!(ids(&todas), ids(&esperada));
+    assert!(todas
+        .windows(2)
+        .any(|w| w[0].data_hora_ms.is_some() && w[0].data_hora_ms == w[1].data_hora_ms));
+
+    // Páginas de 7, cruzando a divisa entre datadas e sem data, e além do fim.
+    let mut paginado = Vec::new();
+    let mut desloc = 0;
+    loop {
+        let p = banco.mensagens_conversa(grande.id, desloc, 7).unwrap();
+        assert_eq!(p.total, GRANDE);
+        if p.itens.is_empty() {
+            break;
+        }
+        desloc += p.itens.len() as i64;
+        paginado.extend(p.itens);
+    }
+    assert_eq!(ids(&paginado), ids(&esperada));
+    let fim = banco.mensagens_conversa(grande.id, GRANDE - 2, 50).unwrap();
+    assert_eq!(ids(&fim.itens), ids(&esperada[esperada.len() - 2..]));
+
+    // Posição de toda mensagem, inclusive empatadas e sem data.
+    for (i, m) in esperada.iter().enumerate() {
+        assert_eq!(
+            banco.posicao_mensagem(grande.id, m.id).unwrap(),
+            Some(i as i64)
+        );
+    }
+
+    // O marcador sem data é achado na posição dele, no fim.
+    let achados = banco
+        .localizar_na_conversa(grande.id, "marcador sintético 300", 10)
+        .unwrap();
+    assert_eq!(achados.total, 1);
+    assert!(achados.itens[0].posicao >= GRANDE - 3);
+    assert_eq!(
+        esperada[achados.itens[0].posicao as usize].id,
+        achados.itens[0].id
+    );
+
+    // Trecho cruzando a divisa (informado de trás para frente): as mesmas mensagens,
+    // na mesma ordem, com o hash de cada uma.
+    let (a, b) = (GRANDE as usize - 10, GRANDE as usize - 2);
+    let t = banco.trecho(esperada[b].id, esperada[a].id).unwrap();
+    assert_eq!(t.conversa_id, Some(grande.id));
+    let do_trecho: Vec<i64> = t.mensagens.iter().map(|(m, _)| m.id).collect();
+    assert_eq!(do_trecho, ids(&esperada[a..=b]));
+    assert!(t.mensagens.iter().all(|(_, h)| h.len() == 64));
 }
 
 #[test]

@@ -10,7 +10,7 @@
 //! conversa derivada, então um parser novo ou uma reimportação não deixa nome velho.
 
 use rusqlite::{
-    params, params_from_iter, types::Value as ValorSql, Connection, OptionalExtension, Row,
+    params, params_from_iter, types::Value as ValorSql, Connection, OptionalExtension, Row, ToSql,
 };
 use serde::{Deserialize, Serialize};
 use sied_dominio::ExtracaoId;
@@ -70,7 +70,7 @@ pub struct Conversa {
 const COLUNAS: &str = "c.id, c.extracao_id, c.app, c.id_externo, c.total_mensagens, c.enviadas,
     c.com_anexo, c.primeira_ms, c.ultima_ms,
     (SELECT COUNT(*) FROM conversa_participante p WHERE p.conversa_id = c.id),
-    (SELECT coalesce(a.conteudo, a.nome_arquivo) FROM artefato a INDEXED BY idx_artefato_conversa
+    (SELECT coalesce(a.conteudo, a.nome_arquivo) FROM artefato a INDEXED BY idx_artefato_conversa_ordem
       WHERE a.extracao_id = c.extracao_id AND a.app IS nullif(c.app, '')
         AND a.conversa_id_externo = c.id_externo
       ORDER BY a.data_hora_ms DESC, a.id DESC LIMIT 1),
@@ -288,7 +288,7 @@ pub fn obter(conn: &Connection, conversa_id: i64) -> Resultado<Conversa> {
 ///
 /// `a.app IS nullif(?2, '')` equivale a `coalesce(a.app, '') = ?2` (a conversa guarda
 /// app vazio quando o artefato não tem app, e o pipeline nunca grava app vazio, ver
-/// `NovoArtefato::normalizar`), mas usa o índice `idx_artefato_conversa`: com
+/// `NovoArtefato::normalizar`), mas usa o índice `idx_artefato_conversa_ordem`: com
 /// `coalesce` o SQLite percorria todos os artefatos da extração a cada conversa.
 const DA_CONVERSA: &str =
     "a.extracao_id = ?1 AND a.app IS nullif(?2, '') AND a.conversa_id_externo = ?3";
@@ -297,13 +297,20 @@ const DA_CONVERSA: &str =
 /// empatava este índice com `idx_artefato_id_externo (extracao_id, app)` e escolhia o
 /// segundo, percorrendo a extração inteira para abrir até uma conversa de 20
 /// mensagens (~100 ms com 200 mil mensagens; 0,1 ms com o índice certo).
-const ARTEFATOS_DA_CONVERSA: &str = "artefato a INDEXED BY idx_artefato_conversa";
+const ARTEFATOS_DA_CONVERSA: &str = "artefato a INDEXED BY idx_artefato_conversa_ordem";
 
-/// Ordem cronológica; sem data vão para o fim, pelo id. A posição de uma mensagem
-/// (usada para rolar a lista até ela) segue esta mesma ordem.
-const ORDEM_MENSAGENS: &str = "a.data_hora_ms IS NULL, a.data_hora_ms, a.id";
+/// Ordem das mensagens: cronológica; sem data vão para o fim, pelo id. A posição de
+/// uma mensagem (usada para rolar a lista até ela) segue esta mesma ordem. Ela é lida
+/// em duas partes que o índice entrega prontas, sem ordenar: primeiro as datadas
+/// (`data, id`), depois as sem data (`id`). Num `ORDER BY` único, o `IS NULL` na frente
+/// obrigava a ordenar a conversa inteira a cada página.
+const DATADAS: &str = "a.data_hora_ms IS NOT NULL ORDER BY a.data_hora_ms, a.id";
+const SEM_DATA: &str = "a.data_hora_ms IS NULL ORDER BY a.id";
 
-fn chave(conn: &Connection, conversa_id: i64) -> Resultado<(String, String, String)> {
+/// Chave de uma conversa: extração, app (vazio quando não há) e id externo.
+type Chave = (String, String, String);
+
+fn chave(conn: &Connection, conversa_id: i64) -> Resultado<Chave> {
     conn.query_row(
         "SELECT extracao_id, app, id_externo FROM conversa WHERE id = ?1",
         [conversa_id],
@@ -313,6 +320,95 @@ fn chave(conn: &Connection, conversa_id: i64) -> Resultado<(String, String, Stri
     .ok_or_else(|| ErroArmazenamento::NaoEncontrado("conversa".into()))
 }
 
+/// Registros da conversa que atendem `parte`; `?4` em diante vêm de `extra`.
+fn contar(conn: &Connection, k: &Chave, parte: &str, extra: &[&dyn ToSql]) -> Resultado<i64> {
+    let mut p: Vec<&dyn ToSql> = vec![&k.0, &k.1, &k.2];
+    p.extend_from_slice(extra);
+    Ok(conn.query_row(
+        &format!("SELECT COUNT(*) FROM {ARTEFATOS_DA_CONVERSA} WHERE {DA_CONVERSA} AND {parte}"),
+        p.as_slice(),
+        |r| r.get(0),
+    )?)
+}
+
+/// Quantas mensagens têm data (vêm primeiro na ordem) e o total da conversa.
+fn datadas_e_total(conn: &Connection, k: &Chave) -> Resultado<(i64, i64)> {
+    let datadas = contar(conn, k, "a.data_hora_ms IS NOT NULL", &[])?;
+    Ok((
+        datadas,
+        datadas + contar(conn, k, "a.data_hora_ms IS NULL", &[])?,
+    ))
+}
+
+/// `limite` mensagens a partir da posição `deslocamento`, na ordem da conversa, lidas
+/// das duas partes do índice (ver [`DATADAS`]). `colunas` vai no `SELECT`.
+fn intervalo<T>(
+    conn: &Connection,
+    k: &Chave,
+    datadas: i64,
+    colunas: &str,
+    deslocamento: i64,
+    limite: i64,
+    ler: impl Fn(&Row) -> rusqlite::Result<T>,
+) -> Resultado<Vec<T>> {
+    let (deslocamento, limite) = (deslocamento.max(0), limite.max(0));
+    let parte = |ordem: &str, desloc: i64, lim: i64| -> Resultado<Vec<T>> {
+        let mut stmt = conn.prepare_cached(&format!(
+            "SELECT {colunas} FROM {ARTEFATOS_DA_CONVERSA} WHERE {DA_CONVERSA}
+             AND {ordem} LIMIT ?4 OFFSET ?5"
+        ))?;
+        let v = stmt
+            .query_map(params![k.0, k.1, k.2, lim, desloc], &ler)?
+            .collect::<Result<_, _>>()?;
+        Ok(v)
+    };
+    let mut itens = Vec::new();
+    if deslocamento < datadas {
+        itens = parte(DATADAS, deslocamento, limite.min(datadas - deslocamento))?;
+    }
+    let falta = limite - itens.len() as i64;
+    if falta > 0 {
+        itens.extend(parte(SEM_DATA, (deslocamento - datadas).max(0), falta)?);
+    }
+    Ok(itens)
+}
+
+/// Posição (a partir de 0) de um registro na ordem da conversa, ou `None` se ele não
+/// pertence a ela. Cada contagem é um intervalo do índice (sem `OR`, que o SQLite não
+/// percorre pelo índice): antes vêm as datadas mais antigas e as de mesma data com id
+/// menor; antes de uma sem data, todas as datadas e as sem data de id menor.
+fn posicao(conn: &Connection, k: &Chave, artefato_id: i64) -> Resultado<Option<i64>> {
+    let alvo: Option<Option<i64>> = conn
+        .query_row(
+            &format!("SELECT a.data_hora_ms FROM artefato a WHERE {DA_CONVERSA} AND a.id = ?4"),
+            params![k.0, k.1, k.2, artefato_id],
+            |r| r.get(0),
+        )
+        .optional()?;
+    let Some(ms) = alvo else { return Ok(None) };
+    let antes = match ms {
+        Some(ms) => {
+            contar(conn, k, "a.data_hora_ms < ?4", &[&ms])?
+                + contar(
+                    conn,
+                    k,
+                    "a.data_hora_ms = ?4 AND a.id < ?5",
+                    &[&ms, &artefato_id],
+                )?
+        }
+        None => {
+            contar(conn, k, "a.data_hora_ms IS NOT NULL", &[])?
+                + contar(
+                    conn,
+                    k,
+                    "a.data_hora_ms IS NULL AND a.id < ?4",
+                    &[&artefato_id],
+                )?
+        }
+    };
+    Ok(Some(antes))
+}
+
 /// Registros da conversa em ordem cronológica (sem data vão para o fim, pelo id).
 pub fn mensagens(
     conn: &Connection,
@@ -320,19 +416,17 @@ pub fn mensagens(
     deslocamento: i64,
     limite: i64,
 ) -> Resultado<Pagina<ArtefatoResumo>> {
-    let (x, app, id) = chave(conn, conversa_id)?;
-    let total: i64 = conn.query_row(
-        &format!("SELECT COUNT(*) FROM {ARTEFATOS_DA_CONVERSA} WHERE {DA_CONVERSA}"),
-        params![x, app, id],
-        |r| r.get(0),
+    let k = chave(conn, conversa_id)?;
+    let (datadas, total) = datadas_e_total(conn, &k)?;
+    let itens = intervalo(
+        conn,
+        &k,
+        datadas,
+        COLUNAS_RESUMO,
+        deslocamento,
+        limite,
+        ler_resumo,
     )?;
-    let mut stmt = conn.prepare(&format!(
-        "SELECT {COLUNAS_RESUMO} FROM {ARTEFATOS_DA_CONVERSA} WHERE {DA_CONVERSA}
-         ORDER BY {ORDEM_MENSAGENS} LIMIT ?4 OFFSET ?5"
-    ))?;
-    let itens = stmt
-        .query_map(params![x, app, id, limite, deslocamento], ler_resumo)?
-        .collect::<Result<_, _>>()?;
     Ok(Pagina { total, itens })
 }
 
@@ -343,26 +437,7 @@ pub fn posicao_mensagem(
     conversa_id: i64,
     artefato_id: i64,
 ) -> Resultado<Option<i64>> {
-    let (x, app, id) = chave(conn, conversa_id)?;
-    let alvo: Option<Option<i64>> = conn
-        .query_row(
-            &format!("SELECT a.data_hora_ms FROM artefato a WHERE {DA_CONVERSA} AND a.id = ?4"),
-            params![x, app, id, artefato_id],
-            |r| r.get(0),
-        )
-        .optional()?;
-    let Some(ms) = alvo else { return Ok(None) };
-    let antes: i64 = conn.query_row(
-        &format!(
-            "SELECT COUNT(*) FROM {ARTEFATOS_DA_CONVERSA} WHERE {DA_CONVERSA} AND CASE
-               WHEN ?4 IS NULL THEN a.data_hora_ms IS NOT NULL OR a.id < ?5
-               ELSE a.data_hora_ms IS NOT NULL
-                    AND (a.data_hora_ms < ?4 OR (a.data_hora_ms = ?4 AND a.id < ?5)) END"
-        ),
-        params![x, app, id, ms, artefato_id],
-        |r| r.get(0),
-    )?;
-    Ok(Some(antes))
+    posicao(conn, &chave(conn, conversa_id)?, artefato_id)
 }
 
 /// Uma mensagem achada ao localizar texto dentro da conversa.
@@ -390,28 +465,28 @@ pub fn localizar(
             itens: Vec::new(),
         });
     }
-    let (x, app, id) = chave(conn, conversa_id)?;
-    let base = format!(
-        "SELECT a.id, a.conteudo, ROW_NUMBER() OVER (ORDER BY {ORDEM_MENSAGENS}) - 1 AS posicao
-         FROM {ARTEFATOS_DA_CONVERSA} WHERE {DA_CONVERSA}"
-    );
-    let total: i64 = conn.query_row(
-        &format!("SELECT COUNT(*) FROM ({base}) WHERE instr(sied_normal(conteudo), ?4) > 0"),
-        params![x, app, id, termo],
-        |r| r.get(0),
-    )?;
-    let mut stmt = conn.prepare(&format!(
-        "SELECT id, posicao FROM ({base}) WHERE instr(sied_normal(conteudo), ?4) > 0
-         ORDER BY posicao LIMIT ?5"
-    ))?;
-    let itens = stmt
-        .query_map(params![x, app, id, termo, limite], |r| {
-            Ok(PosicaoMensagem {
-                id: r.get(0)?,
-                posicao: r.get(1)?,
-            })
-        })?
-        .collect::<Result<_, _>>()?;
+    let k = chave(conn, conversa_id)?;
+    let (datadas, _) = datadas_e_total(conn, &k)?;
+    // Uma passada pela conversa na ordem do índice, sem ordenar nem copiar o texto: a
+    // posição é o número da linha dentro da parte (mais as datadas, para as sem data).
+    let mut achadas = Vec::new();
+    for (ordem, inicio) in [(DATADAS, 0), (SEM_DATA, datadas)] {
+        let mut stmt = conn.prepare(&format!(
+            "SELECT CASE WHEN instr(sied_normal(a.conteudo), ?4) > 0 THEN a.id END
+             FROM {ARTEFATOS_DA_CONVERSA} WHERE {DA_CONVERSA} AND {ordem}"
+        ))?;
+        let mut linhas = stmt.query(params![k.0, k.1, k.2, termo])?;
+        let mut posicao = inicio;
+        while let Some(r) = linhas.next()? {
+            if let Some(id) = r.get::<_, Option<i64>>(0)? {
+                achadas.push(PosicaoMensagem { id, posicao });
+            }
+            posicao += 1;
+        }
+    }
+    let total = achadas.len() as i64;
+    achadas.truncate(limite.max(0) as usize);
+    let itens = achadas;
     Ok(Pagina { total, itens })
 }
 
@@ -463,19 +538,11 @@ pub fn trecho(conn: &Connection, inicio_id: i64, fim_id: i64) -> Resultado<Trech
             "o início e o fim do trecho precisam ser da mesma conversa".into(),
         ));
     }
-    let base = format!(
-        "SELECT {COLUNAS_RESUMO}, a.hash_registro,
-                ROW_NUMBER() OVER (ORDER BY {ORDEM_MENSAGENS}) AS posicao
-         FROM {ARTEFATOS_DA_CONVERSA} WHERE {DA_CONVERSA}"
-    );
-    let posicao = |alvo: i64| -> Resultado<i64> {
-        Ok(conn.query_row(
-            &format!("SELECT posicao FROM ({base}) WHERE id = ?4"),
-            params![x, app, id, alvo],
-            |r| r.get(0),
-        )?)
+    let k = (x, app, id);
+    let posicao_de = |alvo: i64| -> Resultado<i64> {
+        posicao(conn, &k, alvo)?.ok_or_else(|| ErroArmazenamento::NaoEncontrado("registro".into()))
     };
-    let (mut p1, mut p2) = (posicao(inicio_id)?, posicao(fim_id)?);
+    let (mut p1, mut p2) = (posicao_de(inicio_id)?, posicao_de(fim_id)?);
     if p1 > p2 {
         std::mem::swap(&mut p1, &mut p2);
     }
@@ -485,14 +552,17 @@ pub fn trecho(conn: &Connection, inicio_id: i64, fim_id: i64) -> Resultado<Trech
             p2 - p1 + 1
         )));
     }
-    let mut stmt = conn.prepare(&format!(
-        "SELECT * FROM ({base}) WHERE posicao BETWEEN ?4 AND ?5 ORDER BY posicao"
-    ))?;
-    let mensagens = stmt
-        .query_map(params![x, app, id, p1, p2], |r| {
-            Ok((ler_resumo(r)?, r.get::<_, String>(N_RESUMO)?))
-        })?
-        .collect::<Result<_, _>>()?;
+    let (datadas, _) = datadas_e_total(conn, &k)?;
+    let mensagens = intervalo(
+        conn,
+        &k,
+        datadas,
+        &format!("{COLUNAS_RESUMO}, a.hash_registro"),
+        p1,
+        p2 - p1 + 1,
+        |r| Ok((ler_resumo(r)?, r.get::<_, String>(N_RESUMO)?)),
+    )?;
+    let (x, app, id) = k;
     let conversa_id = conn
         .query_row(
             "SELECT id FROM conversa WHERE extracao_id = ?1 AND app = ?2 AND id_externo = ?3",
@@ -504,4 +574,39 @@ pub fn trecho(conn: &Connection, inicio_id: i64, fim_id: i64) -> Resultado<Trech
         conversa_id,
         mensagens,
     })
+}
+
+#[cfg(test)]
+mod testes {
+    use super::*;
+    use crate::migracoes::{self, BANCO_CASO};
+
+    /// Plano de uma consulta, uma linha por passo.
+    fn plano(conn: &Connection, sql: &str) -> Vec<String> {
+        let mut stmt = conn.prepare(&format!("EXPLAIN QUERY PLAN {sql}")).unwrap();
+        stmt.query_map(params!["x", "", "c", 10, 0], |r| r.get::<_, String>(3))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap()
+    }
+
+    #[test]
+    fn paginas_da_conversa_saem_do_indice_sem_ordenar() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migracoes::preparar(&mut conn, std::path::Path::new(":memory:"), &BANCO_CASO).unwrap();
+        for ordem in [DATADAS, SEM_DATA] {
+            let p = plano(
+                &conn,
+                &format!(
+                    "SELECT {COLUNAS_RESUMO} FROM {ARTEFATOS_DA_CONVERSA} WHERE {DA_CONVERSA}
+                     AND {ordem} LIMIT ?4 OFFSET ?5"
+                ),
+            );
+            assert!(
+                p.iter().any(|l| l.contains("idx_artefato_conversa_ordem")),
+                "{p:?}"
+            );
+            assert!(!p.iter().any(|l| l.contains("TEMP B-TREE")), "{p:?}");
+        }
+    }
 }

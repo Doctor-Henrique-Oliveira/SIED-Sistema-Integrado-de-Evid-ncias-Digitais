@@ -35,7 +35,7 @@ Visão integral e permanente: `docs/VISAO.md`. Arquitetura aprovada (com ajustes
   evidências e relatório PDF (Typst embutido), e o hardening desta auditoria.
 - **Importador Avilla: só o contrato.** Responde `NaoImplementado`. Aguarda a árvore de uma
   extração real (§26).
-- Testes: 265 Rust (+3 medições ignoradas), 56 de interface (vitest), 1 roteiro E2E no app real
+- Testes: 267 Rust (+3 medições ignoradas), 56 de interface (vitest), 1 roteiro E2E no app real
   (com o importador ALEAPP/iLEAPP; 257 com o ADB; 248 com o PR #16; 222 e 50 com o PR #15; 201 e 43 após a auditoria).
   CI Linux e Windows.
 - Depois do handoff: design system global (PR #14, merge `132a8d5`), **agenda e registro de
@@ -207,6 +207,7 @@ conferida por hash (uma migração já aplicada não pode mudar de conteúdo).
 | caso | 3 | conversas_busca | `conversa`, `conversa_participante`, FTS5 `busca_artefato`/`busca_arquivo`, gatilhos de derivação, preenchimento |
 | caso | 4 | whatsapp | `artefato.anexo_vinculo`, índices `idx_arquivo_nome`, `idx_artefato_id_externo` |
 | caso | 5 | evidencias_relatorio | `evidencia` (alvo/hash imutáveis, sem `DELETE`), `relatorio` (somente inclusão) |
+| caso | 6 | ordem_conversa | índice `idx_artefato_conversa_ordem` no lugar de `idx_artefato_conversa` (só índice) |
 
 Regras:
 - Caso antigo migra ao abrir, **depois** da cópia `.antes-vN.bak` (nome livre: `-2`, `-3`...
@@ -215,8 +216,9 @@ Regras:
   código `versao_incompativel`). Migração já aplicada com conteúdo diferente do embutido:
   `MigracaoDivergente`.
 - Ao criar a migração N: os testes que simulam casos antigos (`tests/importacao.rs`, v1/v2)
-  precisam desfazer também a N (precedente da v3, v4 e v5).
-- Esta auditoria **não** criou migração.
+  precisam desfazer também a N (precedente da v3, v4, v5 e v6; os de `whatsapp.rs` e
+  `persistencia.rs` também).
+- A auditoria não criou migração; a 6 (01/10/2026) só troca um índice.
 
 ## 8. Contratos
 
@@ -527,7 +529,7 @@ não capturado.
 
 | Conjunto | Onde | Quantidade |
 |---|---|---|
-| Rust | `crates/*/src` (unitários, inclusive os que exportam os tipos TS) e `crates/*/tests` | 265 + 3 medições `#[ignore]` |
+| Rust | `crates/*/src` (unitários, inclusive os que exportam os tipos TS) e `crates/*/tests` | 267 + 3 medições `#[ignore]` |
 | Interface | `app/src/**/*.test.ts(x)` | 56 |
 | E2E | `testes/e2e/executar.sh` + `persistencia.mjs` | 1 roteiro (cria caso, importa, analisa, reabre; confere que a extração não mudou: hash e datas antes/depois) |
 
@@ -569,8 +571,10 @@ Da auditoria (baixo risco, documentados):
   o texto errado (só visual; o React escapa o texto).
 - **B7** Se o SIED cair entre renomear o PDF e registrá-lo, fica um PDF com `.sha256` sem linha
   em `relatorio` (órfão visível; nunca o contrário).
-- **B8** Conversa de 100 mil mensagens: página 79–185 ms, localizar ~0,5 s; busca por telefone
-  ~0,3 s com 200 mil registros.
+- **B8** Conversa de 100 mil mensagens (200 mil registros, release): desde a migração 6, página
+  7–14 ms, posição ~6 ms, localizar ~0,14 s, marcar trecho de 2.000 ~11 ms (eram 58–148 ms,
+  34 ms, 0,53 s e 0,5 s). Busca por telefone continua ~0,26 s (varre os registros; um índice
+  de dígitos seria nova tabela derivada).
 - **B9** A trava impede copiar a pasta **com o caso aberto** no Windows; copiar aberto também
   perderia o `-wal`. Copie o caso **fechado**.
 - Caso em compartilhamento de rede ou pasta sincronizada: WAL e trava não são confiáveis fora do
@@ -618,9 +622,9 @@ Mais detalhes e histórico: `docs/CONTINUIDADE.md` §7.
 
 | Item | Risco | Proposta |
 |---|---|---|
-| Conversas enormes sem índice de ordenação | lentidão acima de ~100 mil mensagens numa conversa (B8) | F1: índice `(extracao_id, app, conversa_id_externo, data_hora_ms)` e ordenação indexável (nova migração, com teste de caso antigo) |
+| ~~Conversas enormes sem índice de ordenação~~ | **feito em 01/10/2026 (F1):** migração 6 e leitura em duas partes do índice; números no B8 | — |
 | Sem comando de reconstrução dos derivados | se um gatilho mudar, derivados antigos não se ajustam | F2: reconstruir conversas/FTS e conferir consistência |
-| Sem `ANALYZE` | plano de consulta ruim em consultas novas | F4: `PRAGMA optimize` após importações grandes |
+| Sem `ANALYZE` | plano de consulta ruim em consultas novas | F4: **medido em 01/10/2026 sem ganho** em nenhuma consulta da medição (as críticas usam `INDEXED BY`); não adotado. Reavaliar se uma consulta nova sem `INDEXED BY` ficar lenta |
 | PDF sem assinatura; trilha ancorada só no próprio caso | quem reescreve banco e PDFs juntos não é detectado | F3: assinatura/carimbo de tempo; âncora externa |
 | Hash numa thread | importações grandes lentas | F6 |
 | PDF órfão após queda (B7) | confusão na pasta de relatórios | F9: varredura e aviso |
@@ -650,12 +654,12 @@ plano e pasta intacta, e importação completa no app real. Roteiro em
 Construção contínua (regra do usuário de 30/09/2026): cada fase vai para a `main` com a CI
 verde. Feitas: agenda e chamadas (PR #15), MMS, linha do tempo, console de importação e
 importador IPED (lista de itens), importador ADB (backup `.ab` e `.tar`), importador
-ALEAPP/iLEAPP (exportações TSV). Ordem seguinte:
+ALEAPP/iLEAPP (exportações TSV), conversas grandes pelo índice (F1). Ordem seguinte:
 
 1. **Importador Avilla**, quando a árvore real chegar (§26).
 2. **Conferência do WhatsApp, SMS/MMS, agenda, chamadas, da lista do IPED, do backup ADB e dos
    relatórios ALEAPP/iLEAPP** com dados de teste (não de investigação).
-3. Itens F1–F9 (§25), conforme a necessidade medida.
+3. Itens F2–F9 (§25), conforme a necessidade medida (F1 feito; F4 medido sem ganho).
 
 ## 28. Arquivos para ler primeiro
 
