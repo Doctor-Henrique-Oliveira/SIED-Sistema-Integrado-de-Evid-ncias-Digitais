@@ -13,6 +13,7 @@ import {
   nomeArquivo,
   ouNulo,
   servicoDeNuvem,
+  localDaPasta,
 } from "./formatar";
 
 describe("formatar", () => {
@@ -79,6 +80,13 @@ describe("duração e caminhos", () => {
     expect(servicoDeNuvem("C:\\SIED\\OneDriveAntigo\\Casos")).toBeNull();
     expect(servicoDeNuvem("/home/a/SIED/Casos")).toBeNull();
     expect(servicoDeNuvem("\\\\servidor\\casos")).toBe("compartilhamento de rede");
+  });
+
+  it("unidade mapeada só é reconhecida pela resposta do sistema", () => {
+    expect(localDaPasta("Z:\\Casos", undefined)).toBeNull();
+    expect(localDaPasta("Z:\\Casos", false)).toBeNull();
+    expect(localDaPasta("Z:\\Casos", true)).toBe("compartilhamento de rede");
+    expect(localDaPasta("Z:\\OneDrive\\Casos", true)).toBe("OneDrive");
   });
 
   it("data fora do intervalo do JavaScript não derruba a tela", () => {

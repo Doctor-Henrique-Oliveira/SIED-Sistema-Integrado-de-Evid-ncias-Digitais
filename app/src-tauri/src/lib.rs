@@ -8,6 +8,7 @@
 //! `SIED_PASTA_DADOS` e `SIED_PASTA_CASOS` substituem os padrões (modo portátil e testes).
 
 mod comandos;
+mod disco;
 mod erro;
 mod log;
 mod servico;
@@ -88,6 +89,7 @@ pub fn executar() {
             comandos::listar_dispositivos,
             comandos::listar_auditoria,
             comandos::verificar_auditoria,
+            comandos::pasta_em_rede,
             comandos::conferir_derivados,
             comandos::reconstruir_derivados,
             comandos::detectar_fonte,

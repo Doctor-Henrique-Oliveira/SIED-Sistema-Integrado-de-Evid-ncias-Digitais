@@ -177,6 +177,8 @@ export const api = {
   listarDispositivos: () => chamar<Dispositivo[]>("listar_dispositivos"),
   listarAuditoria: (limite: number) => chamar<RegistroAuditoria[]>("listar_auditoria", { limite }),
   verificarAuditoria: () => chamar<VerificacaoAuditoria>("verificar_auditoria"),
+  /** Pasta num compartilhamento de rede, inclusive unidade mapeada (Z:), que o caminho não revela. */
+  pastaEmRede: (caminho: string) => chamar<boolean>("pasta_em_rede", { caminho }),
   /** Confere conversas e índices de busca contra os registros importados. Só lê. */
   conferirDerivados: () => chamar<ConferenciaDerivados>("conferir_derivados"),
   /** Recalcula conversas e índices de busca a partir dos registros importados. */

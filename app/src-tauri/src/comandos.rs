@@ -81,6 +81,17 @@ pub async fn info_app(app_handle: AppHandle) -> ResultadoApp<InfoApp> {
     em_segundo_plano(app_handle, move |estado| estado.com(|s| s.info())).await
 }
 
+/// Pasta num compartilhamento de rede (inclusive unidade mapeada, que o caminho não
+/// revela). Fora da thread da janela: uma unidade de rede desconectada pode demorar.
+#[tauri::command]
+pub async fn pasta_em_rede(caminho: String) -> bool {
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::disco::em_rede(std::path::Path::new(&caminho))
+    })
+    .await
+    .unwrap_or(false)
+}
+
 #[tauri::command]
 pub async fn listar_casos(app_handle: AppHandle) -> ResultadoApp<Vec<CasoCatalogado>> {
     em_segundo_plano(app_handle, move |estado| estado.com(|s| s.listar_casos())).await

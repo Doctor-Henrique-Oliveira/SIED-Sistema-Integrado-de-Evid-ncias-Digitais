@@ -35,7 +35,7 @@ Visão integral e permanente: `docs/VISAO.md`. Arquitetura aprovada (com ajustes
   evidências e relatório PDF (Typst embutido), e o hardening desta auditoria.
 - **Importador Avilla: só o contrato.** Responde `NaoImplementado`. Aguarda a árvore de uma
   extração real (§26).
-- Testes: 282 Rust (+3 medições ignoradas), 59 de interface (vitest), 1 roteiro E2E no app real
+- Testes: 284 Rust (+3 medições ignoradas), 62 de interface (vitest), 1 roteiro E2E no app real
   (com o importador ALEAPP/iLEAPP; 257 com o ADB; 248 com o PR #16; 222 e 50 com o PR #15; 201 e 43 após a auditoria).
   CI Linux e Windows.
 - Depois do handoff: design system global (PR #14, merge `132a8d5`), **agenda e registro de
@@ -544,7 +544,7 @@ não capturado.
 
 | Conjunto | Onde | Quantidade |
 |---|---|---|
-| Rust | `crates/*/src` (unitários, inclusive os que exportam os tipos TS) e `crates/*/tests` | 282 + 3 medições `#[ignore]` |
+| Rust | `crates/*/src` (unitários, inclusive os que exportam os tipos TS) e `crates/*/tests` | 284 + 3 medições `#[ignore]` |
 | Interface | `app/src/**/*.test.ts(x)` | 57 |
 | E2E | `testes/e2e/executar.sh` + `persistencia.mjs` | 1 roteiro (cria caso, importa, analisa, reabre; confere que a extração não mudou: hash e datas antes/depois) |
 
@@ -593,7 +593,10 @@ Da auditoria (baixo risco, documentados):
 - **B9** A trava impede copiar a pasta **com o caso aberto** no Windows; copiar aberto também
   perderia o `-wal`. Copie o caso **fechado**.
 - Caso em compartilhamento de rede ou pasta sincronizada: WAL e trava não são confiáveis fora do
-  disco local. A tela avisa; unidade de rede mapeada (`Z:`) não é detectada.
+  disco local. A tela avisa (Novo caso e Alertas do Dashboard). Unidade de rede mapeada (`Z:`)
+  é reconhecida pelo sistema desde 01/10/2026: comando `pasta_em_rede` (`disco.rs`; Windows
+  `GetDriveTypeW` = `DRIVE_REMOTE`, Linux tipo do sistema de arquivos em
+  `/proc/self/mountinfo`).
 
 ## 23. Invariantes (não quebrar)
 
@@ -644,7 +647,7 @@ Mais detalhes e histórico: `docs/CONTINUIDADE.md` §7.
 | Hash numa thread | importações grandes lentas | F6: **medido em 01/10/2026 sem ganho que justifique**: SHA-256 de uma thread com instruções SHA da CPU passa de 1 GB/s, acima da leitura de um disco de evidência típico (USB/HD); o gargalo é o disco. Reavaliar com SSD NVMe e medição de importação real |
 | ~~PDF órfão após queda (B7)~~ | **feito em 01/10/2026 (F9):** conferência da pasta e aviso na tela de Relatórios | — |
 | ~~Marcadores de destaque no texto (B6)~~ | **feito em 01/10/2026 (F8):** trecho em pedaços montado no backend | — |
-| Unidade mapeada `Z:` não detectada | caso em rede sem aviso | F5 |
+| ~~Unidade mapeada `Z:` não detectada~~ | **feito em 01/10/2026 (F5):** `pasta_em_rede` pelo sistema operacional; aviso no Novo caso e nos Alertas do Dashboard | — |
 | WhatsApp sem banco real | esquemas reais podem ter variações | conferir com aparelho de teste |
 | `typescript` 7 / `vite` 8 recentes | quebra em atualizações | fixar versões ao atualizar; rodar toda a bateria |
 
@@ -670,14 +673,15 @@ Construção contínua (regra do usuário de 30/09/2026): cada fase vai para a `
 verde. Feitas: agenda e chamadas (PR #15), MMS, linha do tempo, console de importação e
 importador IPED (lista de itens), importador ADB (backup `.ab` e `.tar`), importador
 ALEAPP/iLEAPP (exportações TSV), conversas grandes pelo índice (F1), conferência da pasta de
-relatórios (F9), destaque da busca em pedaços (F8) e conferência/reconstrução dos dados
-derivados (F2). Ordem seguinte:
+relatórios (F9), destaque da busca em pedaços (F8), conferência/reconstrução dos dados
+derivados (F2) e aviso de unidade de rede mapeada (F5). Ordem seguinte:
 
 1. **Importador Avilla**, quando a árvore real chegar (§26).
 2. **Conferência do WhatsApp, SMS/MMS, agenda, chamadas, da lista do IPED, do backup ADB e dos
    relatórios ALEAPP/iLEAPP** com dados de teste (não de investigação).
-3. Itens F3 e F5 (§25), conforme a necessidade (F1, F2, F8 e F9 feitos; F4 e F6 medidos sem
-   ganho).
+3. Item F3 (§25: assinatura do PDF e âncora externa da trilha), que depende de decisões do
+   usuário (certificado, carimbo de tempo, onde ancorar). F1, F2, F5, F8 e F9 feitos; F4 e F6
+   medidos sem ganho.
 
 ## 28. Arquivos para ler primeiro
 

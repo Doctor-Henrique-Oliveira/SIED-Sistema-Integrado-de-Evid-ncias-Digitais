@@ -156,7 +156,7 @@ export function nomeArquivo(caminho: string): string {
  * Serviço de nuvem que sincroniza a pasta, pelo nome de algum componente do caminho
  * (no Windows 11 a pasta Documentos costuma ficar dentro do OneDrive), ou pasta de rede
  * (caminho UNC). `null` quando parece local. Unidade de rede mapeada (Z:) não é
- * reconhecível pelo caminho.
+ * reconhecível pelo caminho: `localDaPasta` junta a resposta do sistema operacional.
  */
 export function servicoDeNuvem(caminho: string): string | null {
   // Pasta de rede (\\servidor\pasta): o SQLite em modo WAL não é confiável fora do disco local.
@@ -169,6 +169,11 @@ export function servicoDeNuvem(caminho: string): string | null {
     if (p === "iclouddrive" || p === "icloud drive") return "iCloud";
   }
   return null;
+}
+
+/** Onde a pasta está, pelo caminho e pela resposta do sistema (`emRede`). `null` se local. */
+export function localDaPasta(caminho: string, emRede: boolean | undefined): string | null {
+  return servicoDeNuvem(caminho) ?? (emRede ? "compartilhamento de rede" : null);
 }
 
 /** Duração em segundos: "42 s", "2 min 05 s", "1 h 02 min 03 s". */
