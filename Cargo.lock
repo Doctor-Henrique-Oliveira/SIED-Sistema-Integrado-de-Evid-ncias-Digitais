@@ -4173,6 +4173,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sied-armazenamento",
+ "sied-documentos",
  "sied-dominio",
  "sied-ingestao",
  "sied-midia",

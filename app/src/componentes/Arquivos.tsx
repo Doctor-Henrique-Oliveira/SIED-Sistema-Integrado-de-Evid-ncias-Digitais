@@ -14,6 +14,7 @@ import { Aviso, Cartao, Carregando, entrada, Filtros, Hash, Paginacao, Selo, tab
 import { EvidenciaArquivo } from "./Evidencias";
 import { Icone, type NomeIcone } from "./Icone";
 import { MiniaturaArquivo, SobreMiniatura } from "./Miniatura";
+import { LeitorDocumento } from "./LeitorDocumento";
 
 export const iconeCategoria: Record<string, NomeIcone> = {
   banco_sqlite: "banco",
@@ -59,11 +60,13 @@ export function useExtracaoEscolhida(caso: Caso) {
   return { extracoes, id, setEscolhida };
 }
 
-function DetalheArquivo({ caso, f, parser, fechar }: {
+function DetalheArquivo({ caso, extracaoId, f, parser, fechar, documental }: {
   caso: Caso;
+  extracaoId: string;
   f: ArquivoExtracao;
   parser: string | undefined;
   fechar: () => void;
+  documental: boolean;
 }) {
   const fuso = caso.fuso_horario;
   const linha = (rotulo: string, valor: ReactNode, mono = false) => (
@@ -112,6 +115,7 @@ function DetalheArquivo({ caso, f, parser, fechar }: {
         {f.erro && linha("Erro de leitura", <span className="text-erro">{f.erro}</span>)}
       </dl>
       <EvidenciaArquivo caso={caso} arquivoId={f.id} sha256={f.sha256} />
+      {documental && <LeitorDocumento caso={caso} extracaoId={extracaoId} arquivo={f} />}
     </Cartao>
   );
 }
@@ -127,7 +131,14 @@ export function InventarioArquivos({ caso, extracaoId, midias }: { caso: Caso; e
   const [texto, setTexto] = useState("");
   const [busca, setBusca] = useState<string | null>(null);
   const [deslocamento, setDeslocamento] = useState(0);
-  const [selecionado, setSelecionado] = useState<ArquivoExtracao | null>(null);
+  const [selecao, setSelecao] = useState<{ casoId: string; extracaoId: string; arquivo: ArquivoExtracao } | null>(null);
+  // Oculta a seleção anterior já no primeiro render de outro contexto, antes do
+  // efeito de limpeza: um ID numérico não identifica o arquivo entre casos.
+  const selecionado = selecao?.casoId === caso.id && selecao.extracaoId === extracaoId ? selecao.arquivo : null;
+  const setSelecionado = (arquivo: ArquivoExtracao | null) => {
+    setSelecao(arquivo ? { casoId: caso.id, extracaoId, arquivo } : null);
+  };
+  useEffect(() => setSelecao(null), [caso.id, extracaoId]);
   const totais = useTotaisPorCategoria(extracaoId);
   const execucoes = useExecucoes(extracaoId);
   const arquivos = useArquivos(extracaoId, { categoria, texto: busca }, deslocamento, LIMITE);
@@ -182,7 +193,7 @@ export function InventarioArquivos({ caso, extracaoId, midias }: { caso: Caso; e
             />
           </form>
         </div>
-        {arquivos.isPending ? (
+        {arquivos.isPending || arquivos.isPlaceholderData ? (
           <div className="px-4">
             <Carregando />
           </div>
@@ -260,7 +271,7 @@ export function InventarioArquivos({ caso, extracaoId, midias }: { caso: Caso; e
         )}
       </Cartao>
       {selecionado && (
-        <DetalheArquivo caso={caso} f={selecionado} parser={parserDe(selecionado.caminho)} fechar={() => setSelecionado(null)} />
+        <DetalheArquivo caso={caso} extracaoId={extracaoId} f={selecionado} parser={parserDe(selecionado.caminho)} fechar={() => setSelecionado(null)} documental={!midias} />
       )}
     </div>
   );

@@ -1,6 +1,6 @@
 # SIED — Roadmap do Motor de Descoberta Forense Multimodal Local
 
-Data: 02/10/2026 · Status: **AI-0 EM VALIDAÇÃO SEPARADA; AI-1 INICIADA, NÃO VALIDADA** · Nome/sigla provisórios: **MDFML**.
+Data: 02/10/2026 · Status: **AI-0 EM VALIDAÇÃO SEPARADA; AI-1 PARCIALMENTE IMPLEMENTADA** · Nome/sigla provisórios: **MDFML**.
 
 Registro estratégico de produto solicitado pelo responsável pelo SIED. Entrada oficial de
 planejamento: [CONTINUIDADE.md §14.2](CONTINUIDADE.md#142-motor-de-descoberta-forense-multimodal-local-mdfml).
@@ -9,7 +9,9 @@ nem aprovação de modelos, dependências, fornecedores ou esquema de banco.
 Em 02/10/2026, o responsável autorizou explicitamente iniciar a AI-1. O primeiro incremento
 é uma biblioteca interna de leitura documental UTF-8 com origem conferida, sem OCR/PDF ou
 entidades implementados. A AI-0 continua separada, não integrada, no PR #24.
-Estado efetivo: [checkpoint AI-1](checkpoints/2026-10-02-ai1-fundacao-documental.md).
+Primeira entrega visível: leitura UTF-8 no detalhe de Arquivos, com origem conferida e
+proveniência. Estado efetivo: [fundação](checkpoints/2026-10-02-ai1-fundacao-documental.md)
+e [leitor documental](checkpoints/2026-10-02-ai1-leitor-documental.md).
 O grafo é experimental; exemplos de telas, consultas e categorias são conceituais, sem dados
 reais de caso e sem resultados produzidos pelo SIED nesta missão.
 
@@ -334,7 +336,7 @@ novas telas nem modificar o trabalho visual/premium atual como parte deste regis
 ## 18. Faseamento proposto AI-0 → AI-7
 
 AI-0 permanece em validação no PR #24, sem integração. AI-1 tem início autorizado e
-somente a fundação documental em implementação. AI-2–AI-7 continuam planejadas, sem início.
+a fundação documental e o leitor UTF-8 parcialmente implementados. AI-2–AI-7 continuam planejadas, sem início.
 As entregas abaixo são metas completas, não alegação de funcionalidades disponíveis.
 
 | Fase | Escopo planejado | Entrega a validar antes de avançar |

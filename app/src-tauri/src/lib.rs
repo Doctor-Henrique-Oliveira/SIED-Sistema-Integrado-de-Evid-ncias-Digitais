@@ -110,6 +110,7 @@ pub fn executar() {
             comandos::posicao_mensagem,
             comandos::localizar_na_conversa,
             comandos::miniatura,
+            comandos::ler_documento,
             comandos::obter_conversa,
             comandos::mensagens_conversa,
             comandos::conversa_do_artefato,

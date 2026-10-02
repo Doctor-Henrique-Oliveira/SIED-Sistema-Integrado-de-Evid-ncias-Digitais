@@ -24,17 +24,45 @@ use sied_armazenamento::linha_tempo::{FiltroLinhaTempo, ResumoLinhaTempo};
 use sied_armazenamento::relatorios::{ConferenciaPastaRelatorios, RelatorioRegistrado};
 use sied_armazenamento::resumo::{Identificador, ResumoCaso};
 use sied_armazenamento::CasoCatalogado;
+use sied_documentos::ResultadoDocumento;
 use sied_dominio::{CasoId, Dispositivo, DispositivoId, ExtracaoId, NovoCaso, NovoDispositivo};
 use sied_ingestao::eventos::EventoImportacao;
 use sied_ingestao::importador::Deteccao;
 use sied_midia::Miniatura;
 use sied_relatorio::PedidoRelatorio;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager};
 
 use crate::erro::{CodigoErro, ErroApp, ResultadoApp};
 use crate::servico::{CasoAberto, EstadoImportacao, InfoApp, Servico};
+
+/// Uma leitura documental por aplicativo; recusa imediata, sem fila de threads.
+static DOCUMENTO_EM_CURSO: AtomicBool = AtomicBool::new(false);
+
+#[derive(Debug)]
+struct GuardaLeituraDocumento<'a>(&'a AtomicBool);
+
+impl<'a> GuardaLeituraDocumento<'a> {
+    fn adquirir(em_curso: &'a AtomicBool) -> ResultadoApp<Self> {
+        em_curso
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .map_err(|_| {
+                ErroApp::novo(
+                    CodigoErro::Conflito,
+                    "há uma leitura documental em curso; aguarde sua conclusão e tente novamente",
+                )
+            })?;
+        Ok(Self(em_curso))
+    }
+}
+
+impl Drop for GuardaLeituraDocumento<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::Release);
+    }
+}
 
 pub struct Estado {
     pub servico: Mutex<Option<Servico>>,
@@ -408,6 +436,24 @@ pub async fn miniatura(app_handle: AppHandle, arquivo_id: i64) -> ResultadoApp<M
     .await
 }
 
+/// Resolve o inventário sob a trava; abre e interpreta a origem após soltá-la.
+/// O caso esperado é somente uma guarda contra troca/fechamento durante a navegação.
+#[tauri::command]
+pub async fn ler_documento(
+    app_handle: AppHandle,
+    arquivo_id: i64,
+    caso_id: CasoId,
+) -> ResultadoApp<ResultadoDocumento> {
+    let guarda = GuardaLeituraDocumento::adquirir(&DOCUMENTO_EM_CURSO)?;
+    em_segundo_plano(app_handle, move |estado| {
+        // A guarda permanece na thread mesmo se o frontend descartar a requisição.
+        let _guarda = guarda;
+        let pedido = estado.com(|s| s.pedido_documento(arquivo_id, caso_id))?;
+        Ok(pedido.executar())
+    })
+    .await
+}
+
 #[tauri::command]
 pub async fn obter_conversa(app_handle: AppHandle, conversa_id: i64) -> ResultadoApp<Conversa> {
     em_segundo_plano(app_handle, move |estado| {
@@ -627,4 +673,30 @@ pub async fn gerar_relatorio(
         estado.com(|s| s.gerar_relatorio(pedido))
     })
     .await
+}
+
+#[cfg(test)]
+mod testes_documento {
+    use super::*;
+
+    #[test]
+    fn leitura_documental_recusa_concorrencia_e_libera_ao_terminar() {
+        let em_curso = AtomicBool::new(false);
+        let primeira = GuardaLeituraDocumento::adquirir(&em_curso).unwrap();
+        let erro = GuardaLeituraDocumento::adquirir(&em_curso).unwrap_err();
+        assert!(matches!(erro.codigo, CodigoErro::Conflito));
+        drop(primeira);
+        assert!(GuardaLeituraDocumento::adquirir(&em_curso).is_ok());
+    }
+
+    #[test]
+    fn leitura_documental_libera_limite_apos_panico() {
+        let em_curso = AtomicBool::new(false);
+        let resultado = std::panic::catch_unwind(|| {
+            let _guarda = GuardaLeituraDocumento::adquirir(&em_curso).unwrap();
+            panic!("falha sintética");
+        });
+        assert!(resultado.is_err());
+        assert!(GuardaLeituraDocumento::adquirir(&em_curso).is_ok());
+    }
 }

@@ -645,7 +645,12 @@ ainda em validação no PR #24. Primeiro incremento: biblioteca interna `sied-do
 para leitura documental UTF-8 com origem/hash conferidos e recursos limitados, sem alterar
 parsers, banco, relatórios ou invariantes. Sem OCR/PDF/entidades implementados, sem nova UI
 ou comandos desktop. Ver [checkpoint AI-1](checkpoints/2026-10-02-ai1-fundacao-documental.md).
-AI-1 **iniciada, não validada nem concluída**; não fazer merge automaticamente.
+Em seguida foi implementada a primeira entrega visível: **leitor UTF-8 no detalhe de Arquivos**,
+com leitura sob demanda, origem conferida, proveniência e proteção contra troca de caso/seleção.
+O comando desktop resolve os metadados no inventário do caso; não aceita caminhos/hashes do frontend.
+Ver [checkpoint do leitor](checkpoints/2026-10-02-ai1-leitor-documental.md).
+AI-1 **parcialmente implementada, ainda não concluída**; validação desktop/Windows pendente,
+PDF/OCR/entidades futuros. Não fazer merge automaticamente.
 
 ---
 

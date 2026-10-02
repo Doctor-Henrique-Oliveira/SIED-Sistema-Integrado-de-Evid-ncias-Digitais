@@ -63,8 +63,14 @@ import type { ResumoLinhaTempo } from "./tipos/ResumoLinhaTempo";
 import type { ResumoChamadas } from "./tipos/ResumoChamadas";
 import type { TelefoneContato } from "./tipos/TelefoneContato";
 import type { TotalApp } from "./tipos/TotalApp";
+import type { EstadoDocumento } from "./tipos/EstadoDocumento";
+import type { TextoDocumento } from "./tipos/TextoDocumento";
+import type { ResultadoDocumento } from "./tipos/ResultadoDocumento";
 
 export type {
+  EstadoDocumento,
+  TextoDocumento,
+  ResultadoDocumento,
   Chamada,
   EventoImportacao,
   NivelEvento,
@@ -225,6 +231,9 @@ export const api = {
     chamar<Pagina<PosicaoMensagem>>("localizar_na_conversa", { conversaId, termo, limite }),
   /** Miniatura de uma imagem do inventário (lida da extração e conferida pelo SHA-256). */
   miniatura: async (arquivoId: number) => (await chamar<Miniatura | undefined>("miniatura", { arquivoId })) ?? null,
+  /** Texto nativo conferido contra o inventário. Caso esperado é só uma guarda de contexto. */
+  lerDocumento: (arquivoId: number, casoId: CasoId) =>
+    chamar<ResultadoDocumento>("ler_documento", { arquivoId, casoId }),
   obterConversa: (conversaId: number) => chamar<Conversa>("obter_conversa", { conversaId }),
   mensagensConversa: (conversaId: number, deslocamento: number, limite: number) =>
     chamar<Pagina<ArtefatoResumo>>("mensagens_conversa", { conversaId, deslocamento, limite }),

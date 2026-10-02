@@ -220,13 +220,14 @@ fn ler_arquivo(r: &Row) -> rusqlite::Result<ArquivoExtracao> {
 #[derive(Debug, Clone)]
 pub struct ArquivoComOrigem {
     pub arquivo: ArquivoExtracao,
+    pub extracao_id: ExtracaoId,
     pub origem_caminho: String,
 }
 
 pub fn arquivo_com_origem(conn: &Connection, arquivo_id: i64) -> Resultado<ArquivoComOrigem> {
     conn.query_row(
         &format!(
-            "SELECT {}, x.origem_caminho FROM arquivo a JOIN extracao x ON x.id = a.extracao_id
+            "SELECT {}, x.origem_caminho, x.id FROM arquivo a JOIN extracao x ON x.id = a.extracao_id
              WHERE a.id = ?1",
             COLUNAS_ARQUIVO
                 .split(", ")
@@ -238,6 +239,7 @@ pub fn arquivo_com_origem(conn: &Connection, arquivo_id: i64) -> Resultado<Arqui
         |r| {
             Ok(ArquivoComOrigem {
                 arquivo: ler_arquivo(r)?,
+                extracao_id: uuid(r.get(11)?)?,
                 origem_caminho: r.get(10)?,
             })
         },

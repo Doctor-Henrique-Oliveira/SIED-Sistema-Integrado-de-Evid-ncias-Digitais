@@ -20,6 +20,7 @@ serde.workspace = true
 serde_json.workspace = true
 sied-armazenamento.workspace = true
 sied-dominio.workspace = true
+sied-documentos.workspace = true
 sied-ingestao.workspace = true
 sied-midia.workspace = true
 sied-relatorio.workspace = true
