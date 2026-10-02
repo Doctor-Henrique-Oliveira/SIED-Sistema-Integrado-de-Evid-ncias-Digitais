@@ -248,10 +248,12 @@ export const api = {
   buscar: (filtro: FiltroBusca, deslocamento: number, limite: number) =>
     chamar<ResultadoBusca>("buscar", { filtro, deslocamento, limite }),
   /** Pesquisa local explícita: guarda configuração e audita a execução no caso. */
-  executarDescoberta: (pedido: PedidoDescoberta, vocabularioId: number | null) =>
-    chamar<ExecucaoDescoberta>("executar_descoberta", { pedido, vocabularioId }),
-  paginarDescoberta: (consultaId: number, deslocamento: number, limite: number) =>
-    chamar<ResultadoDescoberta>("paginar_descoberta", { consultaId, deslocamento, limite }),
+  executarDescoberta: (pedido: PedidoDescoberta, vocabularioId: number | null, operacaoId: string, casoId: CasoId) =>
+    chamar<ExecucaoDescoberta>("executar_descoberta", { pedido, vocabularioId, operacaoId, casoId }),
+  paginarDescoberta: (consultaId: number, deslocamento: number, limite: number, operacaoId: string, casoId: CasoId) =>
+    chamar<ResultadoDescoberta>("paginar_descoberta", { consultaId, deslocamento, limite, operacaoId, casoId }),
+  /** Sinal aceito não significa operação encerrada: aguarde a resposta original. */
+  cancelarDescoberta: (operacaoId: string) => chamar<boolean>("cancelar_descoberta", { operacaoId }),
   listarConsultasDescoberta: () => chamar<ConsultaDescobertaSalva[]>("listar_consultas_descoberta"),
   listarVocabulariosPesquisa: () => chamar<VersaoVocabularioPesquisa[]>("listar_vocabularios_pesquisa"),
   salvarVocabularioPesquisa: (dados: VocabularioPesquisa) =>

@@ -34,7 +34,7 @@ use sied_ingestao::importador::Deteccao;
 use sied_midia::Miniatura;
 use sied_relatorio::PedidoRelatorio;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Manager};
 
 use crate::erro::{CodigoErro, ErroApp, ResultadoApp};
@@ -42,6 +42,7 @@ use crate::servico::{CasoAberto, EstadoImportacao, InfoApp, Servico};
 
 pub struct Estado {
     pub servico: Mutex<Option<Servico>>,
+    pub(crate) descobertas: Arc<crate::descobertas::RegistroDescobertas>,
     /// Motivo da falha ao iniciar (ex.: banco global de versão mais nova).
     pub falha_inicial: Option<String>,
 }
@@ -107,6 +108,7 @@ pub async fn criar_caso(
     dados: NovoCaso,
     pasta_base: Option<String>,
 ) -> ResultadoApp<CasoAberto> {
+    app_handle.state::<Estado>().descobertas.cancelar_ativa();
     em_segundo_plano(app_handle, move |estado| {
         estado.com(|s| s.criar_caso(dados, pasta_base))
     })
@@ -115,6 +117,7 @@ pub async fn criar_caso(
 
 #[tauri::command]
 pub async fn abrir_caso(app_handle: AppHandle, caso_id: CasoId) -> ResultadoApp<CasoAberto> {
+    app_handle.state::<Estado>().descobertas.cancelar_ativa();
     em_segundo_plano(app_handle, move |estado| {
         estado.com(|s| s.abrir_caso(caso_id))
     })
@@ -123,6 +126,7 @@ pub async fn abrir_caso(app_handle: AppHandle, caso_id: CasoId) -> ResultadoApp<
 
 #[tauri::command]
 pub async fn abrir_pasta_caso(app_handle: AppHandle, pasta: String) -> ResultadoApp<CasoAberto> {
+    app_handle.state::<Estado>().descobertas.cancelar_ativa();
     em_segundo_plano(app_handle, move |estado| {
         estado.com(|s| s.abrir_pasta(&PathBuf::from(pasta)))
     })
@@ -131,6 +135,7 @@ pub async fn abrir_pasta_caso(app_handle: AppHandle, pasta: String) -> Resultado
 
 #[tauri::command]
 pub async fn fechar_caso(app_handle: AppHandle) -> ResultadoApp<()> {
+    app_handle.state::<Estado>().descobertas.cancelar_ativa();
     em_segundo_plano(app_handle, move |estado| estado.com(|s| s.fechar_caso())).await
 }
 
@@ -494,11 +499,18 @@ pub async fn exportar_vocabulario_pesquisa(app_handle: AppHandle, id: i64) -> Re
 #[tauri::command]
 pub async fn executar_descoberta(
     app_handle: AppHandle,
+    caso_id: CasoId,
+    operacao_id: String,
     pedido: PedidoDescoberta,
     vocabulario_id: Option<i64>,
 ) -> ResultadoApp<ExecucaoDescoberta> {
+    let operacao = app_handle
+        .state::<Estado>()
+        .descobertas
+        .iniciar(operacao_id)?;
     em_segundo_plano(app_handle, move |estado| {
-        estado.com(|s| s.executar_descoberta(pedido, vocabulario_id))
+        operacao.controle.verificar()?;
+        estado.com(|s| s.executar_descoberta(caso_id, pedido, vocabulario_id, &operacao.controle))
     })
     .await
 }
@@ -506,14 +518,38 @@ pub async fn executar_descoberta(
 #[tauri::command]
 pub async fn paginar_descoberta(
     app_handle: AppHandle,
+    caso_id: CasoId,
+    operacao_id: String,
     consulta_id: i64,
     deslocamento: i64,
     limite: i64,
 ) -> ResultadoApp<ResultadoDescoberta> {
+    let operacao = app_handle
+        .state::<Estado>()
+        .descobertas
+        .iniciar(operacao_id)?;
     em_segundo_plano(app_handle, move |estado| {
-        estado.com(|s| s.paginar_descoberta(consulta_id, deslocamento, limite))
+        operacao.controle.verificar()?;
+        estado.com(|s| {
+            s.paginar_descoberta(
+                caso_id,
+                consulta_id,
+                deslocamento,
+                limite,
+                &operacao.controle,
+            )
+        })
     })
     .await
+}
+
+/// A sinalização não adquire a trava do serviço ocupada pela consulta.
+#[tauri::command]
+pub async fn cancelar_descoberta(app_handle: AppHandle, operacao_id: String) -> ResultadoApp<bool> {
+    app_handle
+        .state::<Estado>()
+        .descobertas
+        .cancelar(&operacao_id)
 }
 
 #[tauri::command]

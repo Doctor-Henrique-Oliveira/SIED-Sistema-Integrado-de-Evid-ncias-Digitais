@@ -384,19 +384,19 @@ export function useSalvarVocabularioPesquisa(casoId: CasoId) {
 export function useExecutarDescoberta(casoId: CasoId) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ pedido, vocabularioId }: { pedido: PedidoDescoberta; vocabularioId: number | null }) =>
-      api.executarDescoberta(pedido, vocabularioId),
+    mutationFn: ({ pedido, vocabularioId, operacaoId }: { pedido: PedidoDescoberta; vocabularioId: number | null; operacaoId: string }) =>
+      api.executarDescoberta(pedido, vocabularioId, operacaoId, casoId),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["consultas-descoberta", casoId] });
-      void qc.invalidateQueries({ queryKey: chaves.auditoria(casoId) });
     },
+    onSettled: () => void qc.invalidateQueries({ queryKey: chaves.auditoria(casoId) }),
   });
 }
 
-export function usePaginarDescoberta() {
+export function usePaginarDescoberta(casoId: CasoId) {
   return useMutation({
-    mutationFn: ({ consultaId, deslocamento, limite }: { consultaId: number; deslocamento: number; limite: number }) =>
-      api.paginarDescoberta(consultaId, deslocamento, limite),
+    mutationFn: ({ consultaId, deslocamento, limite, operacaoId }: { consultaId: number; deslocamento: number; limite: number; operacaoId: string }) =>
+      api.paginarDescoberta(consultaId, deslocamento, limite, operacaoId, casoId),
   });
 }
 

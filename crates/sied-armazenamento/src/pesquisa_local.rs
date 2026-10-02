@@ -6,9 +6,11 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
+use std::sync::Arc;
 use ts_rs::TS;
 
 use crate::auditoria;
+use crate::controle_descoberta::ControleDescoberta;
 use crate::descoberta::{self, ModoDescoberta, PedidoDescoberta, ResultadoDescoberta};
 use crate::{ErroArmazenamento, Resultado, Sessao};
 
@@ -270,7 +272,9 @@ pub(crate) fn executar(
     sessao: &Sessao,
     pedido: PedidoDescoberta,
     vocabulario_id: Option<i64>,
+    controle: &Arc<ControleDescoberta>,
 ) -> Resultado<ExecucaoDescoberta> {
+    controle.verificar()?;
     if let Some(id) = vocabulario_id {
         let vocab = obter_vocabulario(conn, id)?;
         let termos_da_versao: Vec<String> = vocab
@@ -286,7 +290,7 @@ pub(crate) fn executar(
             ));
         }
     }
-    let resultado = descoberta::buscar(conn, &pedido, 0, 50)?;
+    let resultado = descoberta::buscar_com_controle(conn, &pedido, 0, 50, controle)?;
     let (ultimo_artefato_id, ultimo_arquivo_id) = universo(conn)?;
     let mut consulta = ConsultaDescobertaSalva {
         id: 0,
@@ -305,6 +309,10 @@ pub(crate) fn executar(
     };
     let texto = json_texto(&consulta)?;
     let hash = sha256(&texto);
+    // Fronteira atômica: se o cancelamento venceu, nenhum derivado/evento é salvo.
+    // Depois deste ponto o sinal é recusado e a transação termina normalmente.
+    // O progress handler da busca já foi removido, inclusive em caminhos de erro.
+    controle.concluir()?;
     conn.execute(
         "INSERT INTO consulta_descoberta(criada_em, dados, sha256, vocabulario_id) VALUES (?1, ?2, ?3, ?4)",
         params![consulta.criada_em, texto, hash, vocabulario_id],
@@ -361,7 +369,9 @@ pub(crate) fn paginar(
     id: i64,
     deslocamento: i64,
     limite: i64,
+    controle: &Arc<ControleDescoberta>,
 ) -> Resultado<ResultadoDescoberta> {
+    controle.verificar()?;
     let consulta = obter_consulta(conn, id)?;
     if consulta.versao_indice != 3 {
         return Err(recusado(
@@ -371,11 +381,12 @@ pub(crate) fn paginar(
     if universo(conn)? != (consulta.ultimo_artefato_id, consulta.ultimo_arquivo_id) {
         return Err(recusado("O caso recebeu novos registros/arquivos. Execute novamente para obter um novo snapshot."));
     }
-    let mut resultado = descoberta::buscar(
+    let mut resultado = descoberta::buscar_com_controle(
         conn,
         &consulta.pedido,
         deslocamento.max(0),
         limite.clamp(1, 200),
+        controle,
     )?;
     if resultado.algoritmo != consulta.algoritmo
         || resultado.termos_efetivos != consulta.termos_efetivos
@@ -385,5 +396,6 @@ pub(crate) fn paginar(
         return Err(recusado("A configuração ou os índices mudaram. Execute novamente para registrar uma nova consulta."));
     }
     resultado.executada_em = consulta.criada_em;
+    controle.concluir()?;
     Ok(resultado)
 }

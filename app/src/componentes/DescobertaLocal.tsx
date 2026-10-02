@@ -1,8 +1,8 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  api, type Caso, type ConsultaDescobertaSalva, type ExecucaoDescoberta, type FiltroBusca,
+  api, FalhaSied, type Caso, type ConsultaDescobertaSalva, type ExecucaoDescoberta, type FiltroBusca,
   type PedidoDescoberta, type ResultadoDescoberta, type VocabularioPesquisa, type VersaoVocabularioPesquisa,
 } from "../api/cliente";
 import {
@@ -28,6 +28,16 @@ const indicadores: [TipoIndicador, string][] = [
   ["ip", "IP"], ["email", "E-mail"], ["url", "URL"], ["dominio", "Domínio"],
   ["hash", "Hash"], ["telefone", "Telefone"], ["coordenada", "Coordenada"],
 ];
+type OperacaoLocal = { id: string; tipo: "execucao" | "pagina"; cancelamentoSolicitado: boolean };
+type InterrupcaoLocal = { tipo: "info" | "atencao"; mensagem: string };
+
+function motivoInterrupcao(e: unknown): "cancelada" | "limite" | null {
+  if (!(e instanceof FalhaSied)) return null;
+  // Classifica pelo código do backend, nunca pelo texto da mensagem. O tipo
+  // compartilhado é gerado a partir do Rust; não há DTO manual paralelo aqui.
+  const codigo: string = e.erro.codigo;
+  return codigo === "descoberta_cancelada" ? "cancelada" : codigo === "descoberta_limite" ? "limite" : null;
+}
 
 /** O formulário não dispara inferência ao digitar/trocar modo: somente submissão explícita. */
 export function DescobertaLocal({ caso, modo }: { caso: Caso; modo: ModoDescobertaLocal }) {
@@ -35,7 +45,7 @@ export function DescobertaLocal({ caso, modo }: { caso: Caso; modo: ModoDescober
   const vocabularios = useVocabulariosPesquisa(caso.id);
   const consultas = useConsultasDescoberta(caso.id);
   const executar = useExecutarDescoberta(caso.id);
-  const paginar = usePaginarDescoberta();
+  const paginar = usePaginarDescoberta(caso.id);
   const salvar = useSalvarVocabularioPesquisa(caso.id);
   const qc = useQueryClient();
   const exportar = useMutation({
@@ -57,8 +67,24 @@ export function DescobertaLocal({ caso, modo }: { caso: Caso; modo: ModoDescober
   const [resultado, setResultado] = useState<ResultadoDescoberta | null>(null);
   const [deslocamento, setDeslocamento] = useState(0);
   const [erroResultado, setErroResultado] = useState<string | null>(null);
+  const [operacao, setOperacao] = useState<OperacaoLocal | null>(null);
+  const emCurso = useRef<OperacaoLocal | null>(null);
+  const montado = useRef(true);
+  const [interrupcao, setInterrupcao] = useState<InterrupcaoLocal | null>(null);
+  const [erroCancelamento, setErroCancelamento] = useState<string | null>(null);
+  const [avisoCancelamento, setAvisoCancelamento] = useState<string | null>(null);
   useEffect(() => { setErroLocal(null); }, [modo]);
-  const ocupado = executar.isPending || paginar.isPending;
+  useEffect(() => {
+    montado.current = true;
+    return () => {
+      montado.current = false;
+      const antiga = emCurso.current;
+      emCurso.current = null;
+      // Só sinaliza a invocação desta montagem. Não cancela outra consulta/caso.
+      if (antiga) void api.cancelarDescoberta(antiga.id).catch(() => undefined);
+    };
+  }, []);
+  const ocupado = operacao !== null || executar.isPending || paginar.isPending;
   const vocabularioOcupado = salvar.isPending || exportar.isPending;
   const ativos = termosHabilitados(dados);
   const totalTermos = dados.ramos.reduce((n, ramo) => n + ramo.termos.filter((t) => t.trim()).length, 0);
@@ -88,16 +114,65 @@ export function DescobertaLocal({ caso, modo }: { caso: Caso; modo: ModoDescober
     try { editar(importarVocabularioPesquisa(json)); }
     catch (e) { setErroLocal(e instanceof Error ? e.message : String(e)); }
   }
+  function comecarOperacao(tipo: OperacaoLocal["tipo"]): OperacaoLocal | null {
+    if (emCurso.current || vocabularioOcupado || !montado.current) return null;
+    const nova: OperacaoLocal = { id: crypto.randomUUID(), tipo, cancelamentoSolicitado: false };
+    emCurso.current = nova; setOperacao(nova);
+    setInterrupcao(null); setErroCancelamento(null); setAvisoCancelamento(null);
+    return nova;
+  }
+  function atual(op: OperacaoLocal) { return montado.current && emCurso.current?.id === op.id; }
+  function terminarOperacao(op: OperacaoLocal) {
+    if (!atual(op)) return;
+    emCurso.current = null; setOperacao(null);
+    setErroCancelamento(null); setAvisoCancelamento(null);
+  }
+  function apresentarInterrupcao(motivo: "cancelada" | "limite", pagina: boolean) {
+    setInterrupcao({
+      tipo: motivo === "cancelada" ? "info" : "atencao",
+      mensagem: motivo === "cancelada"
+        ? (pagina ? "Leitura da próxima página cancelada. A página anterior confirmada foi preservada." : "Consulta cancelada. Nenhum resultado parcial foi apresentado; consultas anteriores permanecem no histórico.")
+        : (pagina ? "A leitura da próxima página atingiu o limite cooperativo. A página anterior confirmada foi preservada." : "A consulta atingiu o limite cooperativo. Restrinja extração, app, tipo ou período e execute novamente."),
+    });
+  }
+  async function cancelar() {
+    const op = emCurso.current;
+    if (!op || op.cancelamentoSolicitado) return;
+    const solicitada = { ...op, cancelamentoSolicitado: true };
+    emCurso.current = solicitada; setOperacao(solicitada); setErroCancelamento(null);
+    setAvisoCancelamento(null);
+    try {
+      const aceita = await api.cancelarDescoberta(op.id);
+      if (atual(op) && !aceita) {
+        emCurso.current = op; setOperacao(op);
+        setAvisoCancelamento("O sinal não foi aceito: a operação pode estar terminando ou ainda não estar registrada. Aguardando resposta final.");
+      }
+    } catch (e) {
+      if (!atual(op)) return;
+      emCurso.current = op; setOperacao(op);
+      setErroCancelamento(`Não foi possível solicitar cancelamento: ${e instanceof Error ? e.message : String(e)}. A consulta continua aguardando resposta.`);
+    }
+    // Não libera o formulário ao receber o sinal: somente a Promise original
+    // decide se houve cancelamento, limite ou sucesso (inclusive sucesso tardio).
+  }
   async function iniciar(pedido: PedidoDescoberta, id: number | null) {
     if (ocupado || vocabularioOcupado) return;
+    const op = comecarOperacao("execucao");
+    if (!op) return;
     setErroLocal(null); setErroResultado(null);
     // Remove resultados anteriores durante uma execução; nunca apresenta a página
     // antiga como se fosse a resposta da consulta que ainda está processando.
     setResultado(null); setExecucao(null);
     try {
-      const e = await executar.mutateAsync({ pedido, vocabularioId: id });
+      const e = await executar.mutateAsync({ pedido, vocabularioId: id, operacaoId: op.id });
+      if (!atual(op)) return;
       setExecucao(e); setResultado(e.resultado); setDeslocamento(0);
-    } catch (e) { setErroResultado(e instanceof Error ? e.message : String(e)); }
+    } catch (e) {
+      if (!atual(op)) return;
+      const motivo = motivoInterrupcao(e);
+      if (motivo) apresentarInterrupcao(motivo, false);
+      else setErroResultado(e instanceof Error ? e.message : String(e));
+    } finally { terminarOperacao(op); }
   }
   function buscar(e: FormEvent) {
     e.preventDefault();
@@ -117,11 +192,19 @@ export function DescobertaLocal({ caso, modo }: { caso: Caso; modo: ModoDescober
   }
   async function mudarPagina(proximo: number) {
     if (!execucao || ocupado || vocabularioOcupado) return;
+    const op = comecarOperacao("pagina");
+    if (!op) return;
     setErroResultado(null);
     try {
-      const r = await paginar.mutateAsync({ consultaId: execucao.consulta.id, deslocamento: proximo, limite: LIMITE });
+      const r = await paginar.mutateAsync({ consultaId: execucao.consulta.id, deslocamento: proximo, limite: LIMITE, operacaoId: op.id });
+      if (!atual(op)) return;
       setResultado(r); setDeslocamento(proximo);
-    } catch (e) { setResultado(null); setErroResultado(e instanceof Error ? e.message : String(e)); }
+    } catch (e) {
+      if (!atual(op)) return;
+      const motivo = motivoInterrupcao(e);
+      if (motivo) apresentarInterrupcao(motivo, true);
+      else { setResultado(null); setErroResultado(e instanceof Error ? e.message : String(e)); }
+    } finally { terminarOperacao(op); }
   }
 
   return (
@@ -161,6 +244,7 @@ export function DescobertaLocal({ caso, modo }: { caso: Caso; modo: ModoDescober
             <label className="flex items-center gap-2">Até <input aria-label="Data final da descoberta" type="date" className="entrada" value={ate} onChange={(e) => setAte(e.target.value)} /></label>
           </div>
           <p className="text-xs text-texto-3">Datas no fuso do caso ({caso.fuso_horario}). Sem rede, OCR, semântica ou leitura do conteúdo de PDFs/arquivos nesta etapa.</p>
+          <p className="text-xs text-texto-3">Limite cooperativo de execução: 20 s, verificado em pontos de controle do backend. Não é um timeout rígido.</p>
           {modo !== "indicadores" && (app || tipo || de || ate) && <p className="text-xs text-atencao-claro">Filtros de app, tipo e período se aplicam a registros. Com esses filtros, nomes de arquivo ficam fora da busca.</p>}
           {modo === "expansao" && <fieldset aria-label="Configuração do vocabulário" disabled={ocupado || vocabularioOcupado} className="min-w-0 border-t border-borda pt-3">
             <label className="mb-2 flex flex-wrap items-center gap-2 text-xs text-texto-2">Versão do vocabulário
@@ -224,9 +308,15 @@ export function DescobertaLocal({ caso, modo }: { caso: Caso; modo: ModoDescober
 
       {extracoes.isError && <Aviso>{extracoes.error.message}</Aviso>}
       <Aviso tipo="info">Resultados são candidatos para revisão humana. Nenhum achado é selecionado como evidência automaticamente. OCR, modelos de IA, correlações e consultas externas não fazem parte da AI-0.</Aviso>
-      {ocupado && <Carregando texto={executar.isPending ? "Executando consulta local…" : "Lendo página da consulta…"} />}
+      {ocupado && <div className="flex flex-wrap items-center gap-3">
+        <Carregando texto={operacao?.cancelamentoSolicitado ? "Cancelamento solicitado… aguardando encerramento." : operacao?.tipo === "pagina" ? "Lendo página da consulta…" : "Executando consulta local…"} />
+        {operacao && <Botao variante="secundario" tamanho="p" disabled={operacao.cancelamentoSolicitado} onClick={() => void cancelar()}>{operacao.cancelamentoSolicitado ? "Cancelamento solicitado" : "Cancelar consulta"}</Botao>}
+      </div>}
+      {erroCancelamento && <Aviso tipo="atencao">{erroCancelamento}</Aviso>}
+      {avisoCancelamento && <Aviso tipo="info">{avisoCancelamento}</Aviso>}
+      {interrupcao && <Aviso tipo={interrupcao.tipo}>{interrupcao.mensagem}</Aviso>}
       {erroResultado && <Aviso>{erroResultado} Execute a consulta novamente se o conjunto de dados do caso mudou.</Aviso>}
-      {!resultado && !ocupado && !erroResultado && <Vazio titulo="Escolha um mecanismo e pesquise" icone="busca">A execução é explícita; digitar, alternar modos ou abrir o histórico não inicia uma pesquisa.</Vazio>}
+      {!resultado && !ocupado && !erroResultado && !interrupcao && <Vazio titulo="Escolha um mecanismo e pesquise" icone="busca">A execução é explícita; digitar, alternar modos ou abrir o histórico não inicia uma pesquisa.</Vazio>}
       {resultado && execucao && <Resultados caso={caso} resultado={resultado} consulta={execucao.consulta} deslocamento={deslocamento} mudar={(p) => void mudarPagina(p)} />}
       <section className="painel p-4" aria-label="Histórico de descoberta">
         <h2 className="mb-2 text-sm font-semibold text-texto">Consultas salvas · últimas execuções do caso</h2>

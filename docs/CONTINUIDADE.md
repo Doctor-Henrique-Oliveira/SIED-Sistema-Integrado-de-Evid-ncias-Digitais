@@ -639,8 +639,9 @@ capacidade estratégica de diferenciação do SIED. Nome e sigla provisórios. E
 contexto de produto e planejamento; não autoriza implementação, instalação de modelos ou
 alteração da arquitetura vigente. Especificação: [ROADMAP-MDFML.md](ROADMAP-MDFML.md).
 
-Autorização posterior no chat iniciou somente um recorte AI-0 local em branch dedicada,
-sem merge e sem motores de IA. Contratos gerados, testes Rust, build e validação operacional
+Autorizações posteriores no chat iniciaram um recorte AI-0 local em branch dedicada e
+solicitaram continuar as pendências sem aguardar CI, sem merge e sem motores de IA
+implementados. Contratos gerados, testes Rust, build e validação operacional
 continuam pendentes; não tratar a fase como concluída. Ver
 [checkpoint AI-0](checkpoints/2026-10-02-ai0-busca-local.md).
 
@@ -657,7 +658,7 @@ se futuramente aprovada, será opcional, institucionalmente autorizada, identifi
 explicitamente solicitada e auditável; não integra o núcleo local nem modifica as permissões
 atuais do frontend.
 
-**Faseamento proposto; AI-0 iniciada e demais fases sem autorização de execução:** AI-0 (pesquisa tradicional,
+**Faseamento proposto; AI-0 iniciada e demais fases ainda não implementadas:** AI-0 (pesquisa tradicional,
 vocabulários, árvore de pesquisa, emojis e indicadores); AI-1 (OCR, PDFs/documentos e entidades);
 AI-2 (embeddings locais, semântica e ranking híbrido); AI-3 (visão, regiões e near-duplicates);
 AI-4 (multimodal); AI-5 (correlação, timeline assistida e grafo **experimental**); AI-6

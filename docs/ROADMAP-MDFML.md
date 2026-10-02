@@ -6,8 +6,9 @@ Registro estratégico de produto solicitado pelo responsável pelo SIED. Entrada
 planejamento: [CONTINUIDADE.md §14.2](CONTINUIDADE.md#142-motor-de-descoberta-forense-multimodal-local-mdfml).
 Este documento detalha uma capacidade futura; não é autorização para desenvolvimento nem
 aprovação de modelos, dependências, fornecedores, esquema de banco ou contratos executáveis.
-Após autorização posterior do responsável no chat, foi iniciado um recorte local da AI-0
-em branch dedicada. Não é entrega validada nem autorização para avançar AI-1–AI-7.
+Após autorizações posteriores do responsável no chat, foi iniciado um recorte local da AI-0
+em branch dedicada e solicitada a continuidade das pendências sem aguardar CI.
+Isso não equivale a entrega validada, aprovação técnica de modelos ou liberação pericial.
 Estado efetivo e pendências: [checkpoint AI-0](checkpoints/2026-10-02-ai0-busca-local.md).
 O grafo é experimental; exemplos de telas, consultas e categorias são conceituais, sem dados
 reais de caso e sem resultados produzidos pelo SIED nesta missão.
@@ -333,7 +334,8 @@ novas telas nem modificar o trabalho visual/premium atual como parte deste regis
 ## 18. Faseamento proposto AI-0 → AI-7
 
 AI-0 tem implementação inicial autorizada posteriormente, ainda sem validação completa;
-AI-1–AI-7 continuam **FUTURAS, NÃO IMPLEMENTADAS**, sem datas ou autorização de execução.
+AI-1–AI-7 continuam **PLANEJADAS, NÃO IMPLEMENTADAS**, sem datas; a continuidade foi
+autorizada no chat, mas cada entrega ainda exige desenho técnico e validação proporcionais.
 A existência de FTS/linha do tempo hoje é base, não conclusão da fase.
 
 | Fase | Escopo planejado | Entrega a validar antes de avançar |

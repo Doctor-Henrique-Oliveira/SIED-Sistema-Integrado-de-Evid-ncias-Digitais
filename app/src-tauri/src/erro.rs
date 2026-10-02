@@ -18,6 +18,8 @@ pub enum CodigoErro {
     Integridade,
     /// Recurso ainda não implementado (ex.: importador do Avilla).
     NaoSuportado,
+    DescobertaCancelada,
+    DescobertaLimite,
     Interno,
 }
 
@@ -99,6 +101,8 @@ impl From<ErroArmazenamento> for ErroApp {
             | E::MigracaoDivergente { .. }
             | E::TipoBancoIncorreto { .. } => CodigoErro::VersaoIncompativel,
             E::AuditoriaCorrompida { .. } | E::Inconsistente(_) => CodigoErro::Integridade,
+            E::DescobertaCancelada => CodigoErro::DescobertaCancelada,
+            E::DescobertaLimite => CodigoErro::DescobertaLimite,
             E::Sqlite(_) | E::Io(_) => CodigoErro::Interno,
         };
         match codigo {
@@ -160,6 +164,18 @@ pub type ResultadoApp<T> = Result<T, ErroApp>;
 #[cfg(test)]
 mod testes {
     use super::*;
+
+    #[test]
+    fn controle_da_descoberta_tem_codigos_distintos_de_falha_interna() {
+        assert!(matches!(
+            ErroApp::from(ErroArmazenamento::DescobertaCancelada).codigo,
+            CodigoErro::DescobertaCancelada
+        ));
+        assert!(matches!(
+            ErroApp::from(ErroArmazenamento::DescobertaLimite).codigo,
+            CodigoErro::DescobertaLimite
+        ));
+    }
 
     #[test]
     fn falhas_do_sqlite_viram_mensagens_em_portugues() {

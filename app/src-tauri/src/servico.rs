@@ -8,6 +8,7 @@ use sied_armazenamento::agenda::{
 use sied_armazenamento::auditoria::{RegistroAuditoria, VerificacaoAuditoria};
 use sied_armazenamento::busca::{AchadoArtefato, FiltroBusca, ResultadoBusca};
 use sied_armazenamento::caso::{nome_pasta_sugerido, NOME_ARQUIVO_CASO};
+use sied_armazenamento::controle_descoberta::ControleDescoberta;
 use sied_armazenamento::conversas::{AppConversas, Conversa, FiltroConversas, PosicaoMensagem};
 use sied_armazenamento::derivados::{ConferenciaDerivados, ReconstrucaoDerivados};
 use sied_armazenamento::descoberta::{PedidoDescoberta, ResultadoDescoberta};
@@ -611,24 +612,45 @@ impl Servico {
 
     pub fn executar_descoberta(
         &mut self,
+        caso_id: CasoId,
         pedido: PedidoDescoberta,
         vocabulario_id: Option<i64>,
+        controle: &Arc<ControleDescoberta>,
     ) -> ResultadoApp<ExecucaoDescoberta> {
+        controle.verificar()?;
         self.pesquisa_sem_importacao()?;
-        Ok(self.banco()?.executar_descoberta(pedido, vocabulario_id)?)
+        let banco = self.banco()?;
+        if banco.caso().id != caso_id {
+            return Err(ErroApp::novo(
+                CodigoErro::Conflito,
+                "o caso ativo mudou; abra a pesquisa no caso atual",
+            ));
+        }
+        Ok(banco.executar_descoberta_com_controle(pedido, vocabulario_id, controle)?)
     }
 
     pub fn paginar_descoberta(
         &mut self,
+        caso_id: CasoId,
         consulta_id: i64,
         deslocamento: i64,
         limite: i64,
+        controle: &Arc<ControleDescoberta>,
     ) -> ResultadoApp<ResultadoDescoberta> {
+        controle.verificar()?;
         self.pesquisa_sem_importacao()?;
-        Ok(self.banco()?.paginar_descoberta(
+        let banco = self.banco()?;
+        if banco.caso().id != caso_id {
+            return Err(ErroApp::novo(
+                CodigoErro::Conflito,
+                "o caso ativo mudou; abra a pesquisa no caso atual",
+            ));
+        }
+        Ok(banco.paginar_descoberta_com_controle(
             consulta_id,
             deslocamento.max(0),
             limite.clamp(1, 200),
+            controle,
         )?)
     }
 
@@ -795,6 +817,44 @@ mod testes {
             unidade: "DP".into(),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn descoberta_enfileirada_nao_pesquisa_outro_caso_ativo() {
+        let raiz = tempfile::tempdir().unwrap();
+        let mut s = servico(raiz.path());
+        let anterior = s.criar_caso(caso(), None).unwrap().caso.id;
+        s.fechar_caso().unwrap();
+        let mut novo = caso();
+        novo.numero_procedimento = Some("SINTETICO 2/2026".into());
+        let atual = s.criar_caso(novo, None).unwrap().caso.id;
+        let pedido = PedidoDescoberta {
+            filtro: FiltroBusca {
+                texto: "SINTÉTICO".into(),
+                ..Default::default()
+            },
+            modo: sied_armazenamento::descoberta::ModoDescoberta::Literal,
+            termos: vec![],
+            indicador: None,
+        };
+        let antes = s.verificar_auditoria().unwrap().registros;
+        let erro = s
+            .executar_descoberta(anterior, pedido.clone(), None, &ControleDescoberta::novo())
+            .unwrap_err();
+        assert!(matches!(erro.codigo, CodigoErro::Conflito));
+        let erro = s
+            .paginar_descoberta(anterior, 1, 0, 50, &ControleDescoberta::novo())
+            .unwrap_err();
+        assert!(matches!(erro.codigo, CodigoErro::Conflito));
+        assert!(s.listar_consultas_descoberta().unwrap().is_empty());
+        assert_eq!(s.verificar_auditoria().unwrap().registros, antes);
+        let controle = ControleDescoberta::novo();
+        assert!(controle.cancelar());
+        let erro = s
+            .executar_descoberta(atual, pedido, None, &controle)
+            .unwrap_err();
+        assert!(matches!(erro.codigo, CodigoErro::DescobertaCancelada));
+        assert!(s.listar_consultas_descoberta().unwrap().is_empty());
     }
 
     #[test]

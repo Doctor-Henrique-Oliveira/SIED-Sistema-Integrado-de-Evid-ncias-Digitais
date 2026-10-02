@@ -22,6 +22,7 @@ use sied_ingestao::eventos::{self, EventoImportacao};
 use sied_ingestao::pipeline::NOME_LOG;
 use sied_ingestao::InfoComponente;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use crate::agenda::{
     self, Chamada, ContatoAgenda, FiltroChamadas, FiltroContatos, ResumoChamadas, TotalApp,
@@ -30,6 +31,7 @@ use crate::auditoria::{self, RegistroAuditoria, VerificacaoAuditoria};
 use crate::busca::AchadoArtefato;
 use crate::busca::{self, FiltroBusca, ResultadoBusca};
 use crate::conexao::{self, Abertura};
+use crate::controle_descoberta::ControleDescoberta;
 use crate::conversas::{self, AppConversas, Conversa, FiltroConversas, PosicaoMensagem, Trecho};
 use crate::derivados::{self, ConferenciaDerivados, ReconstrucaoDerivados};
 use crate::descoberta::{PedidoDescoberta, ResultadoDescoberta};
@@ -470,10 +472,21 @@ impl BancoCaso {
         pedido: PedidoDescoberta,
         vocabulario_id: Option<i64>,
     ) -> Resultado<ExecucaoDescoberta> {
+        self.executar_descoberta_com_controle(pedido, vocabulario_id, &ControleDescoberta::novo())
+    }
+
+    pub fn executar_descoberta_com_controle(
+        &mut self,
+        pedido: PedidoDescoberta,
+        vocabulario_id: Option<i64>,
+        controle: &Arc<ControleDescoberta>,
+    ) -> Resultado<ExecucaoDescoberta> {
+        controle.verificar()?;
         let tx = self
             .conn
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let resultado = pesquisa_local::executar(&tx, &self.sessao, pedido, vocabulario_id)?;
+        let resultado =
+            pesquisa_local::executar(&tx, &self.sessao, pedido, vocabulario_id, controle)?;
         tx.commit()?;
         Ok(resultado)
     }
@@ -484,7 +497,23 @@ impl BancoCaso {
         deslocamento: i64,
         limite: i64,
     ) -> Resultado<ResultadoDescoberta> {
-        pesquisa_local::paginar(&self.conn, consulta_id, deslocamento, limite)
+        self.paginar_descoberta_com_controle(
+            consulta_id,
+            deslocamento,
+            limite,
+            &ControleDescoberta::novo(),
+        )
+    }
+
+    pub fn paginar_descoberta_com_controle(
+        &self,
+        consulta_id: i64,
+        deslocamento: i64,
+        limite: i64,
+        controle: &Arc<ControleDescoberta>,
+    ) -> Resultado<ResultadoDescoberta> {
+        controle.verificar()?;
+        pesquisa_local::paginar(&self.conn, consulta_id, deslocamento, limite, controle)
     }
 
     pub fn listar_consultas_descoberta(&self) -> Resultado<Vec<ConsultaDescobertaSalva>> {

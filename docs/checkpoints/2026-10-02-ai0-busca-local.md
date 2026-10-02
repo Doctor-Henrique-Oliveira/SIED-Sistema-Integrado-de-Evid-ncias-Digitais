@@ -5,7 +5,9 @@ Data: 02/10/2026. **EM IMPLEMENTAÇÃO; VALIDAÇÃO PENDENTE. NÃO LIBERADO PARA
 Branch: `feat/mdfml-ai0-busca-local`. Base oficial conferida:
 `f3123f548852ec6962c34f1c01e97e8ce09cef5c`. Registro do roadmap: `7f79835`.
 Após a missão documental, o responsável autorizou no chat iniciar a implementação.
-Este checkpoint não conclui a AI-0 nem autoriza AI-1–AI-7. Não há merge.
+Este checkpoint não conclui a AI-0. Posteriormente, o responsável autorizou continuar
+as pendências do planejamento sem aguardar a CI. Desenvolvimento e liberação validada
+são estados distintos; as fases AI-1–AI-7 seguem não implementadas. Não há merge.
 
 ## Recorte implementado, ainda não validado operacionalmente
 
@@ -30,6 +32,12 @@ Este checkpoint não conclui a AI-0 nem autoriza AI-1–AI-7. Não há merge.
 - Tudo fica no **caso atual**. Perfis institucionais e revisão persistida de
   indicadores ainda não estão implementados. O histórico está na Busca, não na
   futura aba genérica de Consultas salvas.
+- Execução e paginação agora possuem cancelamento explícito por identificador único
+  de invocação e prazo cooperativo padrão de 20 segundos. O frontend sinaliza a
+  operação, mas só apresenta cancelamento confirmado após a resposta original.
+  Erros de cancelamento/limite são estruturados, não reconhecidos pelo texto da mensagem.
+  Paginação interrompida preserva a página anterior confirmada; erros de universo ou
+  integridade continuam invalidando os resultados.
 
 ## Persistência, contratos e invariantes
 
@@ -63,6 +71,36 @@ A CI gera contratos do armazenamento antes do build da interface/instalador e of
 artifact `sied-contratos-typescript`. A conferência mantém o bloqueio de contratos
 alterados e agora também detecta contratos novos não versionados. O primeiro checkpoint
 precisa incorporar esses arquivos gerados antes de ter essa conferência verde.
+O artifact preliminar é substituído após os testes Rust do workspace, incluindo
+contratos exportados pelo desktop, como os novos códigos de erro.
+
+## Controle de execução e cancelamento
+
+O registro de operações fica em memória e usa uma trava separada do serviço. Há no
+máximo uma descoberta em execução/reservada. O cancelamento não tenta adquirir a
+trava que a própria pesquisa ocupa. Reserva RAII é liberada em sucesso, erro ou
+desempilhamento de panic; sinal tardio de outra operação não cancela a atual.
+O comando recebe também o ID do caso esperado, conferido já sob a trava do serviço,
+para não executar uma consulta enfileirada sobre outro caso.
+
+As varreduras usam o callback de progresso suportado pelo SQLite e verificações
+cooperativas no reconhecimento de indicadores. O callback é removido antes de
+retornar da busca, inclusive por erro. Não permanece ativo na gravação do snapshot,
+auditoria, rollback ou em comandos posteriores. Referência:
+[SQLite: progress handler](https://www.sqlite.org/c3ref/progress_handler.html).
+
+Antes de persistir, uma fronteira atômica decide entre cancelamento e finalização:
+se o sinal venceu, não há snapshot/evento parcial; se a finalização venceu, o sinal
+é recusado e a transação termina normalmente. A UI respeita o sucesso real, mesmo
+quando a solicitação de cancelamento chegou tarde. Cancelamento não gera um novo
+evento persistido próprio neste recorte.
+
+O prazo **não é timeout rígido de I/O nem interrupção da espera pelo mutex**. É medido
+desde a reserva, mas verificado ao iniciar/percorrer/finalizar a pesquisa. Leitura
+nativa, espera pelo serviço/disco ou a conclusão transacional podem excedê-lo.
+Não há timer global/`InterruptHandle` capaz de atingir a próxima operação por engano.
+Cancelar antes de o IPC registrar a invocação pode retornar `false`; a UI permite
+solicitar novamente, sem repetição automática, e aguarda sempre a resposta original.
 
 ## Limites e riscos pendentes
 
@@ -70,9 +108,10 @@ precisa incorporar esses arquivos gerados antes de ter essa conferência verde.
   até 200 itens (UI: 50), até 64 candidatos exibidos por artefato. Totais de indicadores
   contam artefatos, não valores distintos ou todas as ocorrências.
 - Indicadores e trechos literais varrem o escopo filtrado. Paginação limita resultados,
-  **não o tempo total da consulta**. Não há deadline/cancelamento da pesquisa nesta
-  entrega inicial; o serviço fica ocupado durante a chamada. Medir CPU/RAM/latência
-  em volume antes de liberar; não apresentar essa implementação como motor escalável.
+  **não bytes por campo/resultado**. O prazo/cancelamento cooperativos não eliminam
+  o custo linear nem garantem liberação imediata do serviço. Medir CPU/RAM/latência
+  em volume e definir orçamento de bytes antes de liberar; não apresentar esta
+  implementação como motor escalável.
 - Execução/paginação são recusadas durante importação ativa; não muda o cancelamento
   existente da ingestão. Não foram executadas migrações em casos reais ou no caso
   demonstrativo instalado; não abrir casos de produção com esta branch pendente.
@@ -81,7 +120,9 @@ precisa incorporar esses arquivos gerados antes de ter essa conferência verde.
 - Sem OCR, PDFs/documentos, embeddings, GPU, modelo de IA, inferência de significado,
   correlação, conectores, painel institucional ou alteração dos módulos premium.
 - Modelo de ameaças específico da fase tem armazenamento gerenciado pelo Codex Security,
-  com revisão independente de arquitetura. Não é auditoria de segurança concluída.
+  com revisão independente de arquitetura, referente ao checkpoint inicial. O novo
+  controle recebeu revisão de código independente, mas o modelo retido ainda precisa
+  ser revalidado para este incremento. Não é auditoria de segurança concluída.
 
 ## Validação do checkpoint
 
@@ -101,7 +142,25 @@ precisa incorporar esses arquivos gerados antes de ter essa conferência verde.
 - `cargo fmt --all --check` e `git diff --check`: aprovados. CI consultada no máximo
   uma vez, sem polling, sleeps ou espera por instaladores.
 
+### Incremento de controle de execução (02/10/2026)
+
+- `npm.cmd test -- --maxWorkers=2`: **103/103 testes**, 16 arquivos.
+- Descoberta/vocabulário: **33/33 testes direcionados**. Novos casos cobrem sinal
+  confirmado/recusado, erro ao sinalizar, prazo, paginação preservada, conclusão
+  anterior ao cancelamento e desmontagem/troca de caso com resposta tardia.
+- `npm.cmd exec -- vite build`: bundle de produção gerado, 117 módulos. Há aviso
+  não bloqueante de chunk acima de 500 kB. **Não substitui typecheck/build completo.**
+- `npm.cmd run build`: continua bloqueado pelos 8 imports de contratos ainda não
+  gerados e pelas tipagens derivadas; build completo não aprovado.
+- Regressões Rust adicionadas para estado terminal/prazo, disputa sinal/finalização,
+  interrupção durante SQL, limpeza/reuso da conexão, ausência de snapshot/evento parcial,
+  conservação de origem/hashes, liberação da reserva e recusa de caso divergente.
+  **Não executadas localmente**, pelo limite de toolchain já diagnosticado.
+- Não houve nova compilação Tauri, reparo/instalação de toolchain, alteração de política
+  corporativa, abertura de caso real ou espera pelo término de CI/instalador.
+
 Antes de concluir: incorporar contratos realmente gerados, executar testes Rust e
 Clippy nas plataformas suportadas, repetir build/interface, medir desempenho e FP/FN,
 validar manualmente com caso **SINTÉTICO** pelo fluxo oficial e revisar os riscos acima.
-Não iniciar a próxima fase ou fazer merge automaticamente.
+CI pendente não impede desenvolvimento independente autorizado. Não confundir
+progresso com validação concluída e não fazer merge automaticamente.

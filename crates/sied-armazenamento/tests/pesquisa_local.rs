@@ -1,9 +1,10 @@
 //! Configurações e consultas AI-0, somente com extração SINTÉTICA temporária.
 use rusqlite::Connection;
 use sied_armazenamento::busca::FiltroBusca;
+use sied_armazenamento::controle_descoberta::ControleDescoberta;
 use sied_armazenamento::descoberta::{ModoDescoberta, PedidoDescoberta};
 use sied_armazenamento::pesquisa_local::{RamoVocabulario, VocabularioPesquisa};
-use sied_armazenamento::BancoCaso;
+use sied_armazenamento::{BancoCaso, ErroArmazenamento};
 
 #[path = "../../../testes/rust/caso_sintetico.rs"]
 mod sintetico;
@@ -104,6 +105,106 @@ fn configuracao_invalida_e_vocabulario_incompativel_nao_gravam_nem_auditam() {
     assert!(banco.exportar_vocabulario_pesquisa(-1).is_err());
     assert_eq!(banco.verificar_auditoria().unwrap().registros, n);
     assert!(banco.listar_consultas_descoberta().unwrap().is_empty());
+}
+
+#[test]
+fn descoberta_cancelada_nao_publica_snapshot_nem_auditoria_e_conexao_continua_utilizavel() {
+    let (_raiz, origem, mut banco, x) = sintetico::preparado();
+    let v = banco.salvar_vocabulario_pesquisa(vocabulario()).unwrap();
+    let original = pedido();
+    let pedido_antes = serde_json::to_value(&original).unwrap();
+    let origem_antes = sintetico::retrato(&origem);
+    let extracao_antes = serde_json::to_value(banco.extracao(x.id).unwrap()).unwrap();
+    let artefatos = banco.artefatos(x.id, 0, 500).unwrap();
+    assert_eq!(artefatos.total, artefatos.itens.len() as i64);
+    let artefatos_antes = serde_json::to_value(&artefatos).unwrap();
+    let hashes_antes: Vec<_> = artefatos
+        .itens
+        .iter()
+        .map(|a| {
+            let conferencia = banco.conferir_registro(a.id).unwrap();
+            assert!(conferencia.confere());
+            (a.id, conferencia.gravado)
+        })
+        .collect();
+    let auditoria_antes = banco.verificar_auditoria().unwrap();
+
+    let controle = ControleDescoberta::novo();
+    assert!(controle.cancelar());
+    let cancelada = banco.executar_descoberta_com_controle(original.clone(), Some(v.id), &controle);
+    assert!(matches!(
+        cancelada,
+        Err(ErroArmazenamento::DescobertaCancelada)
+    ));
+    assert!(banco.listar_consultas_descoberta().unwrap().is_empty());
+    let auditoria_depois = banco.verificar_auditoria().unwrap();
+    assert_eq!(auditoria_depois.registros, auditoria_antes.registros);
+    assert_eq!(auditoria_depois.hash_final, auditoria_antes.hash_final);
+    assert_eq!(serde_json::to_value(&original).unwrap(), pedido_antes);
+    assert_eq!(sintetico::retrato(&origem), origem_antes);
+    assert_eq!(
+        serde_json::to_value(banco.extracao(x.id).unwrap()).unwrap(),
+        extracao_antes
+    );
+    assert_eq!(
+        serde_json::to_value(banco.artefatos(x.id, 0, 500).unwrap()).unwrap(),
+        artefatos_antes
+    );
+    for (id, hash_antes) in hashes_antes {
+        let conferencia = banco.conferir_registro(id).unwrap();
+        assert!(conferencia.confere());
+        assert_eq!(conferencia.gravado, hash_antes);
+    }
+    assert!(banco.conferir_derivados().unwrap().consistente);
+
+    // Um controle novo não herda o cancelamento e a transação anterior não fica aberta.
+    let nova = banco
+        .executar_descoberta_com_controle(original, Some(v.id), &ControleDescoberta::novo())
+        .unwrap();
+    assert_eq!(banco.listar_consultas_descoberta().unwrap().len(), 1);
+    assert_eq!(nova.consulta.vocabulario_id, Some(v.id));
+    assert_eq!(
+        banco.verificar_auditoria().unwrap().registros,
+        auditoria_antes.registros + 1
+    );
+    assert!(banco.paginar_descoberta(nova.consulta.id, 0, 50).is_ok());
+}
+
+#[test]
+fn paginacao_cancelada_preserva_snapshot_e_auditoria_sem_contaminar_nova_pagina() {
+    let (_raiz, origem, mut banco, _x) = sintetico::preparado();
+    let exec = banco.executar_descoberta(pedido(), None).unwrap();
+    let origem_antes = sintetico::retrato(&origem);
+    let consultas_antes =
+        serde_json::to_value(banco.listar_consultas_descoberta().unwrap()).unwrap();
+    let auditoria_antes = banco.verificar_auditoria().unwrap();
+    let controle = ControleDescoberta::novo();
+    assert!(controle.cancelar());
+
+    assert!(matches!(
+        banco.paginar_descoberta_com_controle(exec.consulta.id, 0, 50, &controle),
+        Err(ErroArmazenamento::DescobertaCancelada)
+    ));
+    assert_eq!(
+        serde_json::to_value(banco.listar_consultas_descoberta().unwrap()).unwrap(),
+        consultas_antes
+    );
+    let auditoria_depois = banco.verificar_auditoria().unwrap();
+    assert_eq!(auditoria_depois.registros, auditoria_antes.registros);
+    assert_eq!(auditoria_depois.hash_final, auditoria_antes.hash_final);
+    assert_eq!(sintetico::retrato(&origem), origem_antes);
+
+    let pagina = banco
+        .paginar_descoberta_com_controle(exec.consulta.id, 0, 50, &ControleDescoberta::novo())
+        .unwrap();
+    assert_eq!(
+        serde_json::to_value(pagina).unwrap(),
+        serde_json::to_value(exec.resultado).unwrap()
+    );
+    let auditoria_final = banco.verificar_auditoria().unwrap();
+    assert_eq!(auditoria_final.registros, auditoria_antes.registros);
+    assert_eq!(auditoria_final.hash_final, auditoria_antes.hash_final);
+    assert!(banco.conferir_derivados().unwrap().consistente);
 }
 
 #[test]

@@ -31,6 +31,13 @@ let rejeitarPagina = false;
 let total = 1;
 let adiarSalvar = false;
 let terminarSalvar: (() => void) | null = null;
+let adiarExecucao = false;
+let adiarPagina = false;
+let cancelamentoAceito = true;
+let falhaCancelar = false;
+let casoAtualId = "c1";
+type OperacaoPendente = { id: string; concluir: () => void; interromper: (codigo: string) => void };
+let pendente: OperacaoPendente | null = null;
 
 function resposta(pedido: PedidoDescoberta, vocabularioId: number | null, id = 1) {
   const termos = [pedido.filtro.texto, ...pedido.termos].filter(Boolean);
@@ -48,22 +55,35 @@ function resposta(pedido: PedidoDescoberta, vocabularioId: number | null, id = 1
 
 beforeEach(() => {
   historico = []; versoes = [vocab]; rejeitarPagina = false; total = 1; adiarSalvar = false; terminarSalvar = null;
+  adiarExecucao = false; adiarPagina = false; cancelamentoAceito = true; falhaCancelar = false; casoAtualId = "c1"; pendente = null;
   vi.mocked(invoke).mockReset();
   vi.mocked(invoke).mockImplementation(async (cmd: string, args?: unknown) => {
     const a = args as Record<string, unknown> | undefined;
     switch (cmd) {
-      case "caso_atual": return { caso, pasta: "C:/Casos/SINTETICO" };
+      case "caso_atual": return { caso: { ...caso, id: casoAtualId }, pasta: "C:/Casos/SINTETICO" };
       case "listar_extracoes": return [{ id: "x1", importador_nome: "Importador sintético", iniciada_em: "2026-01-01T00:00:00Z" }];
       case "listar_vocabularios_pesquisa": return versoes;
       case "listar_consultas_descoberta": return historico;
       case "buscar": return { modo: "texto", artefatos: { total: 1, itens: [achado] }, arquivos: { total: 0, itens: [] } };
       case "executar_descoberta": {
         const r = resposta(a!.pedido as PedidoDescoberta, a!.vocabularioId as number | null, historico.length + 1);
-        historico = [r.consulta, ...historico]; return r;
+        const concluir = () => { historico = [r.consulta, ...historico]; return r; };
+        if (adiarExecucao) return new Promise((resolve, reject) => {
+          pendente = { id: a!.operacaoId as string, concluir: () => resolve(concluir()), interromper: (codigo) => reject({ codigo, mensagem: "Interrupção sintética", campos: [] }) };
+        });
+        return concluir();
       }
       case "paginar_descoberta": {
         if (rejeitarPagina) throw { codigo: "validacao", mensagem: "O universo de dados mudou.", campos: [] };
-        return resposta(historico[0]!.pedido, historico[0]!.vocabulario_id).resultado;
+        const r = resposta(historico[0]!.pedido, historico[0]!.vocabulario_id).resultado;
+        if (adiarPagina) return new Promise((resolve, reject) => {
+          pendente = { id: a!.operacaoId as string, concluir: () => resolve(r), interromper: (codigo) => reject({ codigo, mensagem: "Interrupção sintética", campos: [] }) };
+        });
+        return r;
+      }
+      case "cancelar_descoberta": {
+        if (falhaCancelar) throw { codigo: "interno", mensagem: "Falha sintética ao sinalizar", campos: [] };
+        return cancelamentoAceito;
       }
       case "salvar_vocabulario_pesquisa": {
         const v = { ...vocab, id: 4, versao: 2, dados: a!.dados as typeof vocab.dados };
@@ -78,7 +98,7 @@ beforeEach(() => {
 });
 
 function montar(rota = "/casos/c1/busca") {
-  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}>
+  return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}>
     <MemoryRouter initialEntries={[rota]}><Routes><Route path="/casos/:casoId/busca" element={<PaginaBusca />} /></Routes></MemoryRouter>
   </QueryClientProvider>);
 }
@@ -111,7 +131,7 @@ describe("descoberta local AI-0", () => {
     expect(invoke).toHaveBeenCalledWith("salvar_vocabulario_pesquisa", { dados: { ...vocab.dados, ramos: [vocab.dados.ramos[0], { ...vocab.dados.ramos[1], habilitado: false }] } });
     await usuario.click(screen.getByRole("button", { name: "Pesquisar no caso" }));
     await screen.findByRole("region", { name: "Resultados da descoberta" });
-    expect(invoke).toHaveBeenCalledWith("executar_descoberta", { pedido: { filtro: { texto: "encontro" }, modo: "expansao", termos: ["reunião"] }, vocabularioId: 4 });
+    expect(invoke).toHaveBeenCalledWith("executar_descoberta", { pedido: { filtro: { texto: "encontro" }, modo: "expansao", termos: ["reunião"] }, vocabularioId: 4, operacaoId: expect.any(String), casoId: "c1" });
     expect(screen.getAllByText("encontro · reunião").length).toBeGreaterThan(0);
   });
 
@@ -121,7 +141,7 @@ describe("descoberta local AI-0", () => {
     await usuario.type(screen.getByRole("searchbox", { name: "Consulta original" }), "👨‍👩‍👧‍👦 🤝🏽");
     await usuario.click(screen.getByRole("button", { name: "Pesquisar no caso" }));
     const resultados = await screen.findByRole("region", { name: "Resultados da descoberta" });
-    expect(invoke).toHaveBeenCalledWith("executar_descoberta", { pedido: { filtro: { texto: "👨‍👩‍👧‍👦 🤝🏽" }, modo: "literal", termos: [] }, vocabularioId: null });
+    expect(invoke).toHaveBeenCalledWith("executar_descoberta", { pedido: { filtro: { texto: "👨‍👩‍👧‍👦 🤝🏽" }, modo: "literal", termos: [] }, vocabularioId: null, operacaoId: expect.any(String), casoId: "c1" });
     const lista = within(resultados).getByRole("list", { name: "Registros da descoberta" });
     expect(within(lista).getByRole("link")).toHaveAttribute("href", "/casos/c1/conversas/3?registro=9");
     await usuario.click(within(lista).getByText("Por que este resultado apareceu?"));
@@ -137,7 +157,7 @@ describe("descoberta local AI-0", () => {
     const lista = await screen.findByRole("list", { name: "Registros da descoberta" });
     await usuario.click(within(lista).getByText("Por que este resultado apareceu?"));
     expect(within(lista).getByText("192.0.2.1")).toBeVisible();
-    expect(invoke).toHaveBeenCalledWith("executar_descoberta", { pedido: { filtro: { texto: "" }, modo: "indicadores", termos: [], indicador: "ip" }, vocabularioId: null });
+    expect(invoke).toHaveBeenCalledWith("executar_descoberta", { pedido: { filtro: { texto: "" }, modo: "indicadores", termos: [], indicador: "ip" }, vocabularioId: null, operacaoId: expect.any(String), casoId: "c1" });
     expect(invoke).not.toHaveBeenCalledWith("adicionar_evidencia", expect.anything());
     expect(rede).not.toHaveBeenCalled(); rede.mockRestore();
   });
@@ -183,7 +203,7 @@ describe("descoberta local AI-0", () => {
     const resultados = await screen.findByRole("region", { name: "Resultados da descoberta" });
     expect(invoke).toHaveBeenCalledWith("executar_descoberta", { pedido: { modo: "literal", termos: [], filtro: {
       texto: "sintético", extracao_id: "x1", app: "whatsapp", tipo: "mensagem", de_ms: 1767236400000, ate_ms: 1767409199999,
-    } }, vocabularioId: null });
+    } }, vocabularioId: null, operacaoId: expect.any(String), casoId: "c1" });
     expect(within(resultados).getByText(/Nomes de arquivo fora do escopo/)).toBeInTheDocument();
     expect(within(resultados).queryByRole("table", { name: "Arquivos da descoberta" })).not.toBeInTheDocument();
   });
@@ -220,7 +240,7 @@ describe("descoberta local AI-0", () => {
     await screen.findByRole("region", { name: "Resultados da descoberta" });
     rejeitarPagina = true; await usuario.click(screen.getByRole("button", { name: "Próxima" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("universo de dados mudou");
-    expect(invoke).toHaveBeenCalledWith("paginar_descoberta", { consultaId: 1, deslocamento: 50, limite: 50 });
+    expect(invoke).toHaveBeenCalledWith("paginar_descoberta", { consultaId: 1, deslocamento: 50, limite: 50, operacaoId: expect.any(String), casoId: "c1" });
     expect(vi.mocked(invoke).mock.calls.filter(([cmd]) => cmd === "executar_descoberta")).toHaveLength(1);
     expect(screen.queryByRole("region", { name: "Resultados da descoberta" })).not.toBeInTheDocument();
   });
@@ -235,5 +255,106 @@ describe("descoberta local AI-0", () => {
     await usuario.click(screen.getByRole("button", { name: "Reexecutar consulta #1" }));
     await waitFor(() => expect(historico).toHaveLength(2));
     expect(historico.map((h) => h.id)).toEqual([2, 1]);
+  });
+});
+
+describe("consulta com limite cooperativo e cancelamento", () => {
+  async function iniciarPendente() {
+    adiarExecucao = true;
+    const usuario = userEvent.setup();
+    const montagem = montar();
+    await usuario.click(await screen.findByRole("tab", { name: "Literal / emojis" }));
+    await usuario.type(screen.getByRole("searchbox", { name: "Consulta original" }), "sintético");
+    await usuario.click(screen.getByRole("button", { name: "Pesquisar no caso" }));
+    await screen.findByRole("button", { name: "Cancelar consulta" });
+    expect(pendente).not.toBeNull();
+    return { usuario, montagem, op: pendente! };
+  }
+
+  it("sinal aceito mantém pendência até confirmação original e não publica parcial/histórico", async () => {
+    const { usuario, op } = await iniciarPendente();
+    await usuario.click(screen.getByRole("button", { name: "Cancelar consulta" }));
+    expect(invoke).toHaveBeenCalledWith("cancelar_descoberta", { operacaoId: op.id });
+    expect(screen.getByRole("button", { name: "Cancelamento solicitado" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Pesquisar no caso" })).toBeDisabled();
+    expect(screen.queryByText(/^Consulta cancelada/)).not.toBeInTheDocument();
+    expect(historico).toHaveLength(0);
+    await act(async () => { op.interromper("descoberta_cancelada"); });
+    expect(await screen.findByText(/^Consulta cancelada/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pesquisar no caso" })).toBeEnabled();
+    expect(screen.queryByRole("region", { name: "Resultados da descoberta" })).not.toBeInTheDocument();
+    expect(historico).toHaveLength(0);
+    expect(vi.mocked(invoke).mock.calls.filter(([cmd]) => cmd === "executar_descoberta")).toHaveLength(1);
+  });
+
+  it("classifica limite pelo código, sem timeout rígido, zero fictício ou reexecução automática", async () => {
+    const { op } = await iniciarPendente();
+    await act(async () => { op.interromper("descoberta_limite"); });
+    expect(await screen.findByText(/^A consulta atingiu o limite cooperativo/)).toBeInTheDocument();
+    expect(screen.getByText(/20 s.*Não é um timeout rígido/)).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Resultados da descoberta" })).not.toBeInTheDocument();
+    expect(historico).toHaveLength(0);
+    expect(vi.mocked(invoke).mock.calls.filter(([cmd]) => cmd === "executar_descoberta")).toHaveLength(1);
+  });
+
+  it.each(["descoberta_cancelada", "descoberta_limite"])("preserva a página confirmada e deslocamento ao paginar com %s", async (codigo) => {
+    total = 60;
+    const usuario = userEvent.setup(); montar();
+    await usuario.click(await screen.findByRole("tab", { name: "Literal / emojis" }));
+    await usuario.type(screen.getByRole("searchbox", { name: "Consulta original" }), "sintético");
+    await usuario.click(screen.getByRole("button", { name: "Pesquisar no caso" }));
+    await screen.findByRole("region", { name: "Resultados da descoberta" });
+    const primeira = vi.mocked(invoke).mock.calls.find(([cmd]) => cmd === "executar_descoberta")?.[1] as { operacaoId: string };
+    adiarPagina = true;
+    await usuario.click(screen.getByRole("button", { name: "Próxima" }));
+    const op = pendente!;
+    expect(op.id).not.toBe(primeira.operacaoId);
+    if (codigo === "descoberta_cancelada") await usuario.click(screen.getByRole("button", { name: "Cancelar consulta" }));
+    await act(async () => { op.interromper(codigo); });
+    expect(await screen.findByText(/A página anterior confirmada foi preservada/)).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Resultados da descoberta" })).toBeInTheDocument();
+    expect(screen.getByText("1–50 de 60")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Anterior" })).toBeDisabled();
+    expect(historico).toHaveLength(1);
+  });
+
+  it("sucesso original prevalece quando o cancelamento chega depois da conclusão", async () => {
+    cancelamentoAceito = false;
+    const { usuario, op } = await iniciarPendente();
+    await usuario.click(screen.getByRole("button", { name: "Cancelar consulta" }));
+    expect(await screen.findByText(/O sinal não foi aceito/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancelar consulta" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Pesquisar no caso" })).toBeDisabled();
+    expect(screen.queryByText(/^Consulta cancelada/)).not.toBeInTheDocument();
+    await act(async () => { op.concluir(); });
+    expect(await screen.findByRole("region", { name: "Resultados da descoberta" })).toBeInTheDocument();
+    expect(historico).toHaveLength(1);
+    expect(screen.queryByText(/^Consulta cancelada/)).not.toBeInTheDocument();
+  });
+
+  it("falha ao solicitar cancelamento não libera operação nem inventa encerramento", async () => {
+    falhaCancelar = true;
+    const { usuario, op } = await iniciarPendente();
+    await usuario.click(screen.getByRole("button", { name: "Cancelar consulta" }));
+    expect(await screen.findByText(/Não foi possível solicitar cancelamento/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pesquisar no caso" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Cancelar consulta" })).toBeEnabled();
+    expect(screen.queryByText(/^Consulta cancelada/)).not.toBeInTheDocument();
+    await act(async () => { op.concluir(); });
+    expect(await screen.findByRole("region", { name: "Resultados da descoberta" })).toBeInTheDocument();
+  });
+
+  it("desmontar cancela somente o ID ativo e uma resposta tardia não aparece em outro caso", async () => {
+    const { montagem, op, usuario } = await iniciarPendente();
+    montagem.unmount();
+    expect(invoke).toHaveBeenCalledWith("cancelar_descoberta", { operacaoId: op.id });
+    casoAtualId = "c2"; historico = []; versoes = [];
+    montar("/casos/c2/busca");
+    await usuario.click(await screen.findByRole("tab", { name: "Literal / emojis" }));
+    await act(async () => { op.concluir(); });
+    expect(screen.queryByRole("region", { name: "Resultados da descoberta" })).not.toBeInTheDocument();
+    expect(screen.queryByText(reg.conteudo!)).not.toBeInTheDocument();
+    expect(screen.getByRole("searchbox", { name: "Consulta original" })).toHaveValue("");
+    expect(vi.mocked(invoke).mock.calls.filter(([cmd]) => cmd === "cancelar_descoberta")).toHaveLength(1);
   });
 });

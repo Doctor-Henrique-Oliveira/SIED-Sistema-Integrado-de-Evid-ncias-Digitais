@@ -14,6 +14,7 @@ pub mod busca;
 pub mod caso;
 mod conexao;
 pub use conexao::{normalizar_busca, so_digitos};
+pub mod controle_descoberta;
 pub mod conversas;
 pub mod derivados;
 pub mod descoberta;
@@ -30,6 +31,7 @@ pub mod resumo;
 pub mod sessao;
 
 pub use caso::BancoCaso;
+pub use controle_descoberta::ControleDescoberta;
 pub use erro::{ErroArmazenamento, Resultado};
 pub use global::{CasoCatalogado, CatalogoGlobal};
 pub use sessao::Sessao;

@@ -9,14 +9,16 @@ use rusqlite::{functions::FunctionFlags, params_from_iter, types::Value as Valor
 use serde::{Deserialize, Serialize};
 use sied_dominio::{ErroCampo, ErrosValidacao};
 use std::net::IpAddr;
+use std::sync::Arc;
 use ts_rs::TS;
 
 use crate::busca::{
     colunas_achado, consulta_fts, digitos_telefone, ler_achado, AchadoArquivo, AchadoArtefato,
     FiltroBusca,
 };
+use crate::controle_descoberta::GuardaDescoberta;
 use crate::extracoes::{uuid, Pagina, N_RESUMO};
-use crate::{ErroArmazenamento, Resultado};
+use crate::{ControleDescoberta, ErroArmazenamento, Resultado};
 
 const MAX_TERMOS: usize = 32;
 const MAX_CARACTERES: usize = 200;
@@ -245,12 +247,57 @@ pub fn buscar(
     deslocamento: i64,
     limite: i64,
 ) -> Resultado<ResultadoDescoberta> {
+    buscar_com_controle(
+        conn,
+        pedido,
+        deslocamento,
+        limite,
+        &ControleDescoberta::novo(),
+    )
+}
+
+/// O controle pertence à requisição, não à conexão. O chamador mantém a exclusão
+/// do serviço durante a busca e decide o gate `concluir` antes de persistir.
+/// Nenhuma página parcial é retornada quando o controle aborta a operação.
+pub fn buscar_com_controle(
+    conn: &Connection,
+    pedido: &PedidoDescoberta,
+    deslocamento: i64,
+    limite: i64,
+    controle: &Arc<ControleDescoberta>,
+) -> Resultado<ResultadoDescoberta> {
+    controle.verificar()?;
+    let mut guarda = GuardaDescoberta::instalar(conn, controle);
+    let resultado = buscar_interno(conn, pedido, deslocamento, limite, controle, &mut guarda);
+    // A limpeza é feita também no erro; Drop cobre unwind e tenta novamente se
+    // a remoção de função falhar. Não substituir o erro original pelo de limpeza.
+    let limpeza = guarda.limpar();
+    match resultado {
+        Ok(resultado) => {
+            limpeza?;
+            controle.verificar()?;
+            Ok(resultado)
+        }
+        Err(erro) => Err(controle.traduzir_sqlite(erro)),
+    }
+}
+
+fn buscar_interno(
+    conn: &Connection,
+    pedido: &PedidoDescoberta,
+    deslocamento: i64,
+    limite: i64,
+    controle: &Arc<ControleDescoberta>,
+    guarda: &mut GuardaDescoberta<'_>,
+) -> Resultado<ResultadoDescoberta> {
     let efetivos = termos(pedido, deslocamento, limite)?;
+    controle.verificar()?;
     let mut valores = Vec::new();
     let filtro = filtros(pedido, &mut valores);
     let mut ramos = Vec::new();
     if pedido.modo == ModoDescoberta::Indicadores {
-        registrar_indicador(conn)?;
+        registrar_indicador(conn, controle)?;
+        guarda.indicador_registrado();
         let tipo = parametro(&mut valores, ValorSql::Integer(codigo(pedido.indicador)));
         let cond = CAMPOS.iter().map(|c| if *c == "destinatarios" {
             format!("EXISTS (SELECT 1 FROM json_each(a.destinatarios) d WHERE sied_ai0_indicador({tipo}, d.value))")
@@ -263,6 +310,7 @@ pub fn buscar(
         ramos.push(Ramo { cond, motivo: "Indicador sintático local nos campos existentes; candidato para revisão humana, sem consulta externa. Coordenadas estruturadas só em intervalos plausíveis. Não lê arquivos/OCR/documentos. Até 64 candidatos por artefato; total conta artefatos.".into(), campo_arquivo: None });
     } else {
         for t in &efetivos {
+            controle.verificar()?;
             ramos.push(ramo(t, pedido.modo, &mut valores));
         }
     }
@@ -277,6 +325,7 @@ pub fn buscar(
         params_from_iter(valores.iter()),
         |r| r.get(0),
     )?;
+    controle.verificar()?;
     let flags = ramos
         .iter()
         .map(|r| format!("coalesce(({}), 0)", r.cond))
@@ -285,7 +334,7 @@ pub fn buscar(
     let lim = parametro(&mut valores, ValorSql::Integer(limite));
     let off = parametro(&mut valores, ValorSql::Integer(deslocamento));
     let mut stmt = conn.prepare(&format!("SELECT {}, {flags} FROM artefato a WHERE {cond} ORDER BY a.data_hora_ms IS NULL, a.data_hora_ms DESC, a.id DESC LIMIT {lim} OFFSET {off}", colunas_achado()))?;
-    let itens = stmt
+    let mut itens = stmt
         .query_map(params_from_iter(valores.iter()), |r| {
             let achado = ler_achado(r, false)?;
             let motivos = ramos
@@ -297,19 +346,20 @@ pub fn buscar(
                     Err(e) => Some(Err(e)),
                 })
                 .collect::<rusqlite::Result<Vec<_>>>()?;
-            let indicadores = if pedido.modo == ModoDescoberta::Indicadores {
-                indicadores_achado(&achado, pedido.indicador)
-            } else {
-                Vec::new()
-            };
             Ok(AchadoDescoberta {
                 achado,
                 motivos,
-                indicadores,
+                indicadores: Vec::new(),
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     drop(stmt);
+    controle.verificar()?;
+    if pedido.modo == ModoDescoberta::Indicadores {
+        for item in &mut itens {
+            item.indicadores = indicadores_achado(&item.achado, pedido.indicador, controle)?;
+        }
+    }
     // Inventário não possui app/tipo/data. Excluí-lo, em vez de ignorar esses filtros.
     let arquivos = if pedido.modo == ModoDescoberta::Indicadores
         || pedido.filtro.app.as_ref().is_some_and(|v| !v.is_empty())
@@ -345,6 +395,7 @@ pub fn buscar(
                 params_from_iter(valores.iter()),
                 |r| r.get(0),
             )?;
+            controle.verificar()?;
             let mut stmt = conn.prepare(&format!("SELECT f.id, f.extracao_id, f.caminho, f.categoria, f.tamanho, f.sha256 FROM arquivo f WHERE {cond} ORDER BY f.caminho, f.id LIMIT {lim} OFFSET {off}"))?;
             let itens = stmt
                 .query_map(params_from_iter(valores.iter()), |r| {
@@ -358,6 +409,7 @@ pub fn buscar(
                     })
                 })?
                 .collect::<rusqlite::Result<Vec<_>>>()?;
+            controle.verificar()?;
             Pagina { total, itens }
         }
     };
@@ -384,12 +436,16 @@ fn codigo(tipo: Option<TipoIndicador>) -> i64 {
     }
 }
 
-fn registrar_indicador(conn: &Connection) -> rusqlite::Result<()> {
+fn registrar_indicador(
+    conn: &Connection,
+    controle: &Arc<ControleDescoberta>,
+) -> rusqlite::Result<()> {
+    let controle = Arc::clone(controle);
     conn.create_scalar_function(
         "sied_ai0_indicador",
         2,
         FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC,
-        |ctx| {
+        move |ctx| {
             let tipo: i64 = ctx.get(0)?;
             let texto = ctx.get_raw(1);
             let texto = match texto {
@@ -397,10 +453,18 @@ fn registrar_indicador(conn: &Connection) -> rusqlite::Result<()> {
                 _ => "",
             };
             let mut existe = false;
-            percorrer_indicadores(texto, tipo, |_, _| {
+            percorrer_indicadores(texto, tipo, &controle, |_, _| {
                 existe = true;
                 false
-            });
+            })
+            .map_err(|_| {
+                // O progress handler não executa dentro da UDF. Usar o mesmo
+                // código de interrupção, sem fabricar false ou contagem parcial.
+                rusqlite::Error::SqliteFailure(
+                    rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_INTERRUPT),
+                    None,
+                )
+            })?;
             Ok(existe)
         },
     )
@@ -486,88 +550,189 @@ fn porta(t: &str) -> bool {
         .is_some_and(|p| p.parse::<u16>().is_ok())
 }
 
+// O SQLite não chama o progress handler durante uma UDF. Os próprios percursos
+// de caracteres precisam ceder cooperativamente, inclusive em um único campo
+// enorme sem separadores. Uma interrupção nunca vira separador/indicador válido:
+// o controle é revalidado antes de consumir qualquer trecho produzido.
+fn interrompido_no_passo(controle: &ControleDescoberta, passos: &mut usize) -> bool {
+    *passos += 1;
+    if *passos == 1_024 {
+        *passos = 0;
+        controle.verificar().is_err()
+    } else {
+        false
+    }
+}
+
+fn aparar_inicio<'a>(
+    texto: &'a str,
+    controle: &ControleDescoberta,
+    mut remover: impl FnMut(char) -> bool,
+) -> Resultado<&'a str> {
+    controle.verificar()?;
+    let mut inicio = 0;
+    let mut passos = 0;
+    for (i, c) in texto.char_indices() {
+        if interrompido_no_passo(controle, &mut passos) {
+            controle.verificar()?;
+        }
+        if !remover(c) {
+            break;
+        }
+        inicio = i + c.len_utf8();
+    }
+    controle.verificar()?;
+    Ok(&texto[inicio..])
+}
+
+fn aparar_fim<'a>(
+    texto: &'a str,
+    controle: &ControleDescoberta,
+    mut remover: impl FnMut(char) -> bool,
+) -> Resultado<&'a str> {
+    controle.verificar()?;
+    let mut fim = texto.len();
+    let mut passos = 0;
+    for (i, c) in texto.char_indices().rev() {
+        if interrompido_no_passo(controle, &mut passos) {
+            controle.verificar()?;
+        }
+        if !remover(c) {
+            break;
+        }
+        fim = i;
+    }
+    controle.verificar()?;
+    Ok(&texto[..fim])
+}
+
+fn aparar<'a>(
+    texto: &'a str,
+    controle: &ControleDescoberta,
+    mut remover: impl FnMut(char) -> bool,
+) -> Resultado<&'a str> {
+    let texto = aparar_inicio(texto, controle, &mut remover)?;
+    aparar_fim(texto, controle, remover)
+}
+
+fn virgula(texto: &str, controle: &ControleDescoberta) -> Resultado<Option<usize>> {
+    for (i, parte) in texto.as_bytes().chunks(4_096).enumerate() {
+        controle.verificar()?;
+        if let Some(posicao) = parte.iter().position(|c| *c == b',') {
+            return Ok(Some(i * 4_096 + posicao));
+        }
+    }
+    controle.verificar()?;
+    Ok(None)
+}
+
 /// Reconhecimento conservador, sem regex/modelo, domínio DNS ou consulta externa.
 /// Strings encontradas são candidatas sintáticas, não identificações confirmadas.
 /// Callback `false` interrompe cedo (contagem não acumula resultados na memória).
 fn percorrer_indicadores(
     mut texto: &str,
     procurado: i64,
+    controle: &ControleDescoberta,
     mut emitir: impl FnMut(TipoIndicador, &str) -> bool,
-) {
+) -> Resultado<()> {
+    controle.verificar()?;
     let mut continuar = |tipo: TipoIndicador, valor: &str| {
         procurado != 0 && procurado != codigo(Some(tipo)) || emitir(tipo, valor)
     };
+    let mut passos = 0;
     for t in texto.split(|c: char| {
-        c.is_whitespace() || ['"', '\'', '<', '>', ';', ',', '(', ')', '{', '}'].contains(&c)
+        interrompido_no_passo(controle, &mut passos)
+            || c.is_whitespace()
+            || ['"', '\'', '<', '>', ';', ',', '(', ')', '{', '}'].contains(&c)
     }) {
-        let t = t.trim_matches(['.', '!', '?', '[', ']']);
+        controle.verificar()?;
+        let t = aparar(t, controle, |c| ['.', '!', '?', '[', ']'].contains(&c))?;
         if t.is_empty() || t.len() > 2048 {
             continue;
         }
         if t.parse::<IpAddr>().is_ok() && !continuar(TipoIndicador::Ip, t) {
-            return;
+            return controle.verificar();
         }
         if email(t) && !continuar(TipoIndicador::Email, t) {
-            return;
+            return controle.verificar();
         }
         if let Some(host) = host_url(t) {
             if !continuar(TipoIndicador::Url, t) {
-                return;
+                return controle.verificar();
             }
             if dominio(host) && !continuar(TipoIndicador::Dominio, host) {
-                return;
+                return controle.verificar();
             }
             if host.parse::<IpAddr>().is_ok() && !continuar(TipoIndicador::Ip, host) {
-                return;
+                return controle.verificar();
             }
         } else if dominio(t) && !continuar(TipoIndicador::Dominio, t) {
-            return;
+            return controle.verificar();
         }
         if matches!(t.len(), 32 | 40 | 64 | 128)
             && t.bytes().all(|c| c.is_ascii_hexdigit())
             && !continuar(TipoIndicador::Hash, t)
         {
-            return;
+            return controle.verificar();
         }
     }
     // Telefones: grupos com formatação ou 8–15 dígitos contíguos. Um grupo
     // inteiro fora desse intervalo não é truncado para fabricar um telefone.
     if procurado == 0 || procurado == 6 {
-        for grupo in texto.split(|c: char| !(c.is_ascii_digit() || "+-(). ".contains(c))) {
-            let g = grupo.trim_matches([' ', '.', '-', '(', ')']);
-            let digitos = g.bytes().filter(u8::is_ascii_digit).count();
+        let mut passos = 0;
+        for grupo in texto.split(|c: char| {
+            interrompido_no_passo(controle, &mut passos)
+                || !(c.is_ascii_digit() || "+-(). ".contains(c))
+        }) {
+            controle.verificar()?;
+            let g = aparar(grupo, controle, |c| [' ', '.', '-', '(', ')'].contains(&c))?;
+            let mut digitos = 0;
+            for parte in g.as_bytes().chunks(4_096) {
+                controle.verificar()?;
+                digitos += parte.iter().filter(|c| c.is_ascii_digit()).count();
+            }
             if (8..=15).contains(&digitos)
                 && !g.contains("..")
                 && !g.contains('.')
                 && !continuar(TipoIndicador::Telefone, g)
             {
-                return;
+                return controle.verificar();
             }
         }
     }
     // Pares decimais de latitude/longitude separados por vírgula, sem criar
     // localização a partir de inteiros/IDs ou de valores fora dos intervalos.
     if procurado == 0 || procurado == 7 {
-        while let Some(i) = texto.find(',') {
+        while let Some(i) = virgula(texto, controle)? {
             let esquerda = &texto[..i];
             let direita = &texto[i + 1..];
-            let inicio = esquerda
-                .trim_end()
+            let esquerda_aparada = aparar_fim(esquerda, controle, char::is_whitespace)?;
+            let direita_aparada = aparar_inicio(direita, controle, char::is_whitespace)?;
+            let mut passos = 0;
+            let inicio = esquerda_aparada
                 .char_indices()
                 .rev()
-                .find(|(_, c)| !(c.is_ascii_digit() || *c == '.' || *c == '-'))
+                .find(|(_, c)| {
+                    interrompido_no_passo(controle, &mut passos)
+                        || !(c.is_ascii_digit() || *c == '.' || *c == '-')
+                })
                 .map_or(0, |(i, c)| i + c.len_utf8());
-            let lat = esquerda[inicio..].trim();
-            let fim = direita
-                .trim_start()
-                .find(|c: char| !(c.is_ascii_digit() || c == '.' || c == '-'))
-                .unwrap_or(direita.trim_start().len());
-            let lon = &direita.trim_start()[..fim];
+            controle.verificar()?;
+            let lat = aparar(&esquerda[inicio..], controle, char::is_whitespace)?;
+            let mut passos = 0;
+            let fim = direita_aparada
+                .find(|c: char| {
+                    interrompido_no_passo(controle, &mut passos)
+                        || !(c.is_ascii_digit() || c == '.' || c == '-')
+                })
+                .unwrap_or(direita_aparada.len());
+            controle.verificar()?;
+            let lon = &direita_aparada[..fim];
             let limite_esquerdo = texto[..inicio]
                 .chars()
                 .next_back()
                 .is_none_or(|c| !c.is_alphanumeric());
-            let limite_direito = direita.trim_start()[fim..]
+            let limite_direito = direita_aparada[fim..]
                 .chars()
                 .next()
                 .is_none_or(|c| !c.is_alphanumeric() && !matches!(c, '.' | '-' | '+'));
@@ -586,20 +751,24 @@ fn percorrer_indicadores(
                             && (-180.0..=180.0).contains(&b)
                     })
             {
-                let fim_original = i + 1 + direita.len() - direita.trim_start().len() + fim;
+                controle.verificar()?;
+                let fim_original = i + 1 + direita.len() - direita_aparada.len() + fim;
                 if !continuar(TipoIndicador::Coordenada, &texto[inicio..fim_original]) {
-                    return;
+                    return controle.verificar();
                 }
             }
+            controle.verificar()?;
             texto = direita;
         }
     }
+    controle.verificar()
 }
 
 fn indicadores_achado(
     achado: &AchadoArtefato,
     tipo: Option<TipoIndicador>,
-) -> Vec<IndicadorDescoberta> {
+    controle: &ControleDescoberta,
+) -> Resultado<Vec<IndicadorDescoberta>> {
     let a = &achado.artefato;
     let mut v: Vec<IndicadorDescoberta> = Vec::new();
     for (campo, texto) in [
@@ -613,11 +782,12 @@ fn indicadores_achado(
             .iter()
             .map(|d| ("destinatarios", Some(d.as_str()))),
     ) {
+        controle.verificar()?;
         if v.len() >= MAX_INDICADORES {
             break;
         }
         if let Some(texto) = texto {
-            percorrer_indicadores(texto, codigo(tipo), |tipo, valor| {
+            percorrer_indicadores(texto, codigo(tipo), controle, |tipo, valor| {
                 if !v
                     .iter()
                     .any(|x| x.tipo == tipo && x.campo == campo && x.valor == valor)
@@ -629,7 +799,7 @@ fn indicadores_achado(
                     });
                 }
                 v.len() < MAX_INDICADORES
-            });
+            })?;
         }
     }
     if tipo.is_none_or(|t| t == TipoIndicador::Coordenada) && v.len() < MAX_INDICADORES {
@@ -646,18 +816,128 @@ fn indicadores_achado(
             });
         }
     }
-    v
+    controle.verificar()?;
+    Ok(v)
 }
 
 #[cfg(test)]
 mod testes {
     use super::*;
-    fn extrair(t: &str, tipo: TipoIndicador) -> Vec<String> {
-        let mut v = Vec::new();
-        percorrer_indicadores(t, codigo(Some(tipo)), |_, valor| {
-            v.push(valor.into());
+
+    #[test]
+    fn cancela_percurso_antes_de_consumir_campo_grande_sem_resultado_parcial() {
+        let controle = ControleDescoberta::novo();
+        let texto = format!("192.0.2.1 {} 198.51.100.1", "x".repeat(32_768));
+        let mut emitidos = 0;
+        let resultado = percorrer_indicadores(&texto, 1, &controle, |_, _| {
+            emitidos += 1;
+            controle.cancelar();
             true
         });
+        assert!(matches!(
+            resultado,
+            Err(ErroArmazenamento::DescobertaCancelada)
+        ));
+        assert_eq!(emitidos, 1);
+    }
+
+    #[test]
+    fn udf_interrompe_durante_sql_e_guarda_remove_captura() {
+        let conn = Connection::open_in_memory().unwrap();
+        let controle = ControleDescoberta::novo();
+        let fraco = Arc::downgrade(&controle);
+        let no_sql = Arc::clone(&controle);
+        conn.create_scalar_function(
+            "cancelar_no_sql",
+            0,
+            FunctionFlags::SQLITE_UTF8,
+            move |_| {
+                no_sql.cancelar();
+                Ok("192.0.2.1".to_string())
+            },
+        )
+        .unwrap();
+        let mut guarda = GuardaDescoberta::instalar(&conn, &controle);
+        registrar_indicador(&conn, &controle).unwrap();
+        guarda.indicador_registrado();
+        // Poucas operações: a interrupção vem da própria UDF, não do hook.
+        let erro = conn
+            .query_row("SELECT sied_ai0_indicador(1, cancelar_no_sql())", [], |r| {
+                r.get::<_, bool>(0)
+            })
+            .unwrap_err();
+        assert_eq!(
+            erro.sqlite_error_code(),
+            Some(rusqlite::ErrorCode::OperationInterrupted)
+        );
+        assert!(matches!(
+            controle.traduzir_sqlite(erro.into()),
+            ErroArmazenamento::DescobertaCancelada
+        ));
+        guarda.limpar().unwrap();
+        drop(guarda);
+        conn.remove_function("cancelar_no_sql", 0).unwrap();
+        assert_eq!(
+            conn.query_row("SELECT 7", [], |r| r.get::<_, i64>(0))
+                .unwrap(),
+            7
+        );
+        assert!(conn
+            .query_row("SELECT sied_ai0_indicador(1, '192.0.2.1')", [], |r| r
+                .get::<_, bool>(0))
+            .is_err());
+        drop(controle);
+        assert!(fraco.upgrade().is_none());
+    }
+
+    #[test]
+    fn funcao_e_hook_sao_limpos_no_retorno_normal_e_erro() {
+        fn executar(
+            conn: &Connection,
+            controle: &Arc<ControleDescoberta>,
+            sql: &str,
+        ) -> rusqlite::Result<bool> {
+            let mut guarda = GuardaDescoberta::instalar(conn, controle);
+            registrar_indicador(conn, controle)?;
+            guarda.indicador_registrado();
+            conn.query_row(sql, [], |r| r.get(0))
+        }
+        let conn = Connection::open_in_memory().unwrap();
+        for sql in [
+            "SELECT sied_ai0_indicador(1, '192.0.2.1')",
+            "SELECT * FROM tabela_ausente",
+        ] {
+            let controle = ControleDescoberta::novo();
+            let fraco = Arc::downgrade(&controle);
+            let resultado = executar(&conn, &controle, sql);
+            assert_eq!(resultado.is_ok(), sql.starts_with("SELECT sied"));
+            assert!(controle.cancelar());
+            assert!(conn
+                .query_row("SELECT sied_ai0_indicador(1, '192.0.2.1')", [], |r| r
+                    .get::<_, bool>(0))
+                .is_err());
+            assert_eq!(
+                conn.query_row("SELECT 1", [], |r| r.get::<_, i64>(0))
+                    .unwrap(),
+                1
+            );
+            drop(controle);
+            assert!(fraco.upgrade().is_none());
+        }
+    }
+
+    fn extrair(t: &str, tipo: TipoIndicador) -> Vec<String> {
+        let mut v = Vec::new();
+        percorrer_indicadores(
+            t,
+            codigo(Some(tipo)),
+            &ControleDescoberta::novo(),
+            |_, valor| {
+                v.push(valor.into());
+                true
+            },
+        )
+        .unwrap();
         v
     }
     #[test]

@@ -8,6 +8,7 @@
 //! `SIED_PASTA_DADOS` e `SIED_PASTA_CASOS` substituem os padrões (modo portátil e testes).
 
 mod comandos;
+mod descobertas;
 mod disco;
 mod erro;
 mod log;
@@ -15,7 +16,7 @@ mod servico;
 
 use sied_armazenamento::Sessao;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Manager, RunEvent, WindowEvent};
 
 use comandos::Estado;
@@ -64,6 +65,7 @@ pub fn executar() {
                 };
             app.manage(Estado {
                 servico: Mutex::new(servico),
+                descobertas: Arc::new(descobertas::RegistroDescobertas::default()),
                 falha_inicial,
             });
             if let Some(g) = guarda_log {
@@ -119,6 +121,7 @@ pub fn executar() {
             comandos::exportar_vocabulario_pesquisa,
             comandos::executar_descoberta,
             comandos::paginar_descoberta,
+            comandos::cancelar_descoberta,
             comandos::listar_consultas_descoberta,
             comandos::resumo_caso,
             comandos::listar_identificadores,
@@ -152,6 +155,7 @@ pub fn executar() {
 /// Fecha o caso aberto, se houver. Pode ser chamado mais de uma vez.
 fn encerrar(app: &AppHandle) {
     if let Some(estado) = app.try_state::<Estado>() {
+        estado.descobertas.cancelar_ativa();
         if let Ok(mut s) = estado.servico.lock() {
             if let Some(s) = s.as_mut() {
                 s.encerrar();
