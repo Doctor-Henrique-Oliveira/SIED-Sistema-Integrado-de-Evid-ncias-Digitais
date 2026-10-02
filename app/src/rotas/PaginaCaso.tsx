@@ -48,6 +48,7 @@ function PainelCaso({ caso, pasta }: { caso: Caso; pasta: string }) {
       <CabecalhoCaso caso={caso} pasta={pasta} />
       <Atalhos caso={caso} />
       <Indicadores caso={caso} r={resumo.data} />
+      <LeituraCaso r={resumo.data} />
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="min-w-0 space-y-4">
           <SecaoDispositivos caso={caso} compacto />
@@ -186,6 +187,26 @@ function Indicadores({ caso, r }: { caso: Caso; r: ResumoCaso | undefined }) {
         para={`${base}/localizacoes`}
       />
     </FaixaIndicadores>
+  );
+}
+
+function LeituraCaso({ r }: { r: ResumoCaso | undefined }) {
+  const processamento = r
+    ? r.execucoes_com_problema > 0
+      ? { tom: "atencao" as const, titulo: "Revisão necessária", detalhe: `${numero(r.execucoes_com_problema)} execução(ões) com problema` }
+      : { tom: "ok" as const, titulo: "Processamento estável", detalhe: `${numero(r.execucoes_parser)} execução(ões) registradas` }
+    : { tom: "neutro" as const, titulo: "Resumo em carregamento", detalhe: "Aguardando leitura do caso" };
+  const cobertura = r ? `${numero(r.registros)} registros interpretados` : "—";
+  const fontes = r ? `${numero(r.dispositivos)} dispositivo(s) · ${numero(r.extracoes)} extração(ões)` : "—";
+  return (
+    <section aria-label="Leitura rápida do caso" className="grid gap-4 rounded-xl border border-borda bg-sup/55 px-4 py-3 md:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1fr)]">
+      <div className="flex min-w-0 items-start gap-3">
+        <span className="mt-1 flex size-7 shrink-0 items-center justify-center rounded-md bg-ouro/10 text-ouro"><Icone nome="painel" className="size-4" /></span>
+        <div className="min-w-0"><p className="sobrelinha">Leitura rápida</p><p className="mt-1 truncate text-sm font-medium text-texto">Visão operacional do caso</p><p className="mt-0.5 truncate text-xs text-texto-3">{cobertura}</p></div>
+      </div>
+      <div className="border-l border-borda pl-3"><p className="sobrelinha">Fontes</p><p className="mt-1 truncate font-mono text-xs text-texto-2">{fontes}</p><p className="mt-0.5 text-xs text-texto-3">{r ? `${numero(r.arquivos)} arquivos inventariados` : "Resumo ainda não disponível"}</p></div>
+      <div className="border-l border-borda pl-3"><p className="sobrelinha">Processamento</p><div className="mt-1 flex items-center gap-2"><Selo tom={processamento.tom}>{processamento.titulo}</Selo></div><p className="mt-1 truncate text-xs text-texto-3">{processamento.detalhe}</p></div>
+    </section>
   );
 }
 
