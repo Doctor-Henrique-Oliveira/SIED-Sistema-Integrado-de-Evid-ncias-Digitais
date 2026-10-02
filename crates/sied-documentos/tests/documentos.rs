@@ -146,6 +146,10 @@ fn texto_do_inventario_preserva_bytes_proveniencia_e_origem() {
             texto.pagina, None,
             "texto plano não possui página observada"
         );
+        assert!(
+            texto.total_paginas.is_none(),
+            "texto plano não inventa contagem de páginas"
+        );
         let serializado = serde_json::to_value(&texto).unwrap();
         assert!(serializado.get("regiao").is_none());
         assert!(serializado.get("confianca").is_none());
@@ -354,7 +358,6 @@ impl Read for LeitorSimulado {
 #[test]
 fn formatos_sem_suporte_e_ocr_recusam_antes_de_acessar_a_fonte() {
     for caminho in [
-        "documento.pdf",
         "documento.doc",
         "documento.docx",
         "planilha.xls",

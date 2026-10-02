@@ -443,13 +443,14 @@ pub async fn ler_documento(
     app_handle: AppHandle,
     arquivo_id: i64,
     caso_id: CasoId,
+    pagina: Option<u32>,
 ) -> ResultadoApp<ResultadoDocumento> {
     let guarda = GuardaLeituraDocumento::adquirir(&DOCUMENTO_EM_CURSO)?;
     em_segundo_plano(app_handle, move |estado| {
         // A guarda permanece na thread mesmo se o frontend descartar a requisição.
         let _guarda = guarda;
         let pedido = estado.com(|s| s.pedido_documento(arquivo_id, caso_id))?;
-        Ok(pedido.executar())
+        Ok(pedido.executar_pagina(pagina))
     })
     .await
 }

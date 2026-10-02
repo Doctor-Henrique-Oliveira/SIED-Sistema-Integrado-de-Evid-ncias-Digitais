@@ -12,6 +12,7 @@ Roteiro curto:
 2. Expanda **Proveniência do texto** e confira a distinção explícita de motor de prévia.
 3. Alterne CSV, Markdown/HTML inerte e arquivo vazio.
 4. Alterne os casos A/B: o texto anterior deve ser ocultado.
-5. Inspecione ausência de hash, PDF sem suporte e respostas sintéticas de divergência, codificação recusada e falha IPC.
+5. Selecione `PDF-MULTIPAGINA-SINTETICO.pdf`: leia, use **Próxima/Anterior** e confira a página sem texto nativo. As três páginas são declaradas no cenário visual, não extraídas de um PDF real.
+6. Inspecione ausência de hash, PDF recusado e respostas sintéticas de divergência, codificação recusada e falha IPC.
 
-Os hashes e tamanhos são calculados dos conteúdos UTF-8 reais desta prévia usando WebCrypto/TextEncoder. Nenhum percentual ou processo forense é simulado. O fluxo normal de produção e seu build não importam esta entrada.
+Os hashes e tamanhos são calculados dos conteúdos UTF-8 reais desta prévia usando WebCrypto/TextEncoder. No cenário PDF, o hash da origem é o do conteúdo de cenário explicitamente **não PDF**, e o hash do texto corresponde à string da página apresentada. O cenário não executa parser, OCR ou conferência de evidência. Nenhum percentual ou processo forense é simulado. O fluxo normal de produção e seu build não importam esta entrada.

@@ -48,12 +48,17 @@ pub struct LeituraDocumento {
 }
 
 impl LeituraDocumento {
+    #[cfg(test)]
     pub fn executar(self) -> ResultadoDocumento {
+        self.executar_pagina(None)
+    }
+
+    pub fn executar_pagina(self, pagina: Option<u32>) -> ResultadoDocumento {
         let fonte = FonteDocumento {
             pasta: self.pasta_extracao,
             caminho: self.pedido.caminho.clone(),
         };
-        sied_documentos::analisar(&fonte, &self.pedido, &ControleDocumento::novo())
+        sied_documentos::analisar_pagina(&fonte, &self.pedido, &ControleDocumento::novo(), pagina)
     }
 }
 

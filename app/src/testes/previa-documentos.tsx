@@ -11,12 +11,13 @@ import { LeitorDocumento } from "../componentes/LeitorDocumento";
 import { nomeArquivo, tamanho } from "../util/formatar";
 import "../estilos.css";
 
-type Cenario = "texto" | "vazio" | "pdf" | "sem_hash" | "divergencia" | "sem_suporte" | "erro";
+type Cenario = "texto" | "vazio" | "pdf" | "pdf_recusado" | "sem_hash" | "divergencia" | "sem_suporte" | "erro";
 type DocumentoSintetico = {
   arquivo: ArquivoExtracao;
   conteudo: string;
   cenario: Cenario;
   descricao: string;
+  paginas?: string[];
 };
 
 const criadoEm = new Date().toISOString();
@@ -36,7 +37,7 @@ const casos: Caso[] = ["A", "B"].map((sufixo) => ({
   observacoes: "Nenhum caso real está aberto. O backend não está conectado.",
 }));
 
-const especificacoes: { caminho: string; conteudo: string; cenario: Cenario; descricao: string }[] = [
+const especificacoes: { caminho: string; conteudo: string; cenario: Cenario; descricao: string; paginas?: string[] }[] = [
   {
     caminho: "documentos/NOTA-SINTETICA.txt",
     cenario: "texto",
@@ -57,7 +58,18 @@ const especificacoes: { caminho: string; conteudo: string; cenario: Cenario; des
   },
   { caminho: "documentos/VAZIO-SINTETICO.txt", cenario: "vazio", descricao: "Estado de arquivo vazio", conteudo: "" },
   { caminho: "documentos/SEM-HASH-SINTETICO.txt", cenario: "sem_hash", descricao: "Leitura bloqueada por ausência de hash", conteudo: "Conteúdo SINTÉTICO não disponibilizado por ausência de hash no cenário." },
-  { caminho: "documentos/PDF-NAO-SUPORTADO-SINTETICO.pdf", cenario: "pdf", descricao: "Formato ainda sem leitor documental", conteudo: "%PDF-CENARIO-VISUAL-SINTETICO\nNão é um PDF real.\n" },
+  {
+    caminho: "documentos/PDF-MULTIPAGINA-SINTETICO.pdf",
+    cenario: "pdf",
+    descricao: "Navegação por 3 páginas sintéticas; não é um PDF real nem executa parser",
+    conteudo: "CENÁRIO VISUAL EXCLUSIVAMENTE SINTÉTICO DE PDF\nEste conteúdo não é um PDF real. Nenhum parser foi executado.\n",
+    paginas: [
+      "PÁGINA 1 — EXCLUSIVAMENTE SINTÉTICA\n\nEsta página testa a apresentação de texto derivado por página.\nO total e os números são dados declarados do cenário de teste, não resultados de uma análise de PDF.\n\nUse Próxima para examinar a segunda página; a terceira representa uma página sem texto nativo.\n",
+      'PÁGINA 2 — EXCLUSIVAMENTE SINTÉTICA\n\n<script>window.__execucaoIndevida = true</script>\n[Link inerte](https://nao-acessar.invalid/)\n\nNenhuma marcação é executada. O hash do texto desta página difere do hash do conteúdo de origem do cenário.\n',
+      "",
+    ],
+  },
+  { caminho: "documentos/PDF-RECUSADO-SINTETICO.pdf", cenario: "pdf_recusado", descricao: "Recusa sintética de recurso PDF sem apresentar texto parcial", conteudo: "CENÁRIO EXCLUSIVAMENTE SINTÉTICO DE PDF RECUSADO\nNão é um PDF real.\n" },
   { caminho: "documentos/RECUSA-INTEGRIDADE-SINTETICA.txt", cenario: "divergencia", descricao: "Recusa sintética sem publicar texto parcial", conteudo: "Texto exclusivamente SINTÉTICO que não será apresentado na recusa de integridade." },
   { caminho: "documentos/CODIFICACAO-RECUSADA-SINTETICA.txt", cenario: "sem_suporte", descricao: "Resposta de formato sem suporte (cenário simulado)", conteudo: "Conteúdo SINTÉTICO reservado para o cenário de recusa do leitor." },
   { caminho: "documentos/FALHA-IPC-SINTETICA.txt", cenario: "erro", descricao: "Erro recuperável de comunicação (cenário simulado)", conteudo: "Conteúdo exclusivamente SINTÉTICO da resposta de erro simulado." },
@@ -74,6 +86,7 @@ const documentos: DocumentoSintetico[] = await Promise.all(especificacoes.map(as
   conteudo: d.conteudo,
   cenario: d.cenario,
   descricao: d.descricao,
+  paginas: d.paginas,
   arquivo: {
     id: indice + 1,
     caminho: d.caminho,
@@ -82,15 +95,15 @@ const documentos: DocumentoSintetico[] = await Promise.all(especificacoes.map(as
     modificado_em: null,
     criado_em: null,
     assinatura: null,
-    mime: d.cenario === "pdf" ? "application/pdf" : "text/plain",
-    categoria: d.cenario === "pdf" ? "documento" : "texto",
+    mime: d.cenario.startsWith("pdf") ? "application/pdf" : "text/plain",
+    categoria: d.cenario.startsWith("pdf") ? "documento" : "texto",
     erro: null,
   },
 })));
 
 let casoDaPrevia = casos[0]!;
 
-api.lerDocumento = async (arquivoId, casoId): Promise<ResultadoDocumento> => {
+api.lerDocumento = async (arquivoId, casoId, pagina): Promise<ResultadoDocumento> => {
   const casoNoPedido = casoDaPrevia;
   const d = documentos.find((item) => item.arquivo.id === arquivoId);
   if (!d || casoId !== casoNoPedido.id) throw new Error("Cenário SINTÉTICO: contexto da prévia não corresponde à seleção.");
@@ -98,13 +111,16 @@ api.lerDocumento = async (arquivoId, casoId): Promise<ResultadoDocumento> => {
   if (d.cenario === "divergencia") {
     return { estado: "origem_divergente", texto: null, motivo: "Cenário SINTÉTICO de divergência de origem. Nenhum dado real foi lido ou alterado." };
   }
-  if (d.cenario === "sem_suporte" || d.cenario === "pdf") {
+  if (d.cenario === "sem_suporte" || d.cenario === "pdf_recusado") {
     return { estado: "sem_suporte", texto: null, motivo: "Cenário SINTÉTICO de formato/codificação sem suporte. Nenhum motor real foi executado." };
   }
   if (d.cenario === "sem_hash") {
     return { estado: "hash_ausente", texto: null, motivo: "Cenário SINTÉTICO sem hash no inventário de demonstração." };
   }
   const hash = await hashUtf8(d.conteudo);
+  const numeroPagina = d.cenario === "pdf" ? (pagina ?? 1) : null;
+  const conteudo = numeroPagina === null ? d.conteudo : d.paginas?.[numeroPagina - 1];
+  if (conteudo === undefined) return { estado: "sem_suporte", texto: null, motivo: "Página não disponível no cenário SINTÉTICO da prévia." };
   return {
     estado: "pronto",
     motivo: null,
@@ -114,12 +130,13 @@ api.lerDocumento = async (arquivoId, casoId): Promise<ResultadoDocumento> => {
       arquivo_id: arquivoId,
       caminho: d.arquivo.caminho,
       sha256: hash,
-      sha256_texto: hash,
+      sha256_texto: await hashUtf8(conteudo),
       motor_id: "previa_sintetica_sem_backend",
       motor_versao: "0.0.0",
       executado_em: new Date().toISOString(),
-      texto: d.conteudo,
-      pagina: null,
+      texto: conteudo,
+      pagina: numeroPagina,
+      total_paginas: numeroPagina === null ? null : d.paginas!.length,
     },
   };
 };
@@ -190,7 +207,7 @@ function PreviaDocumentos() {
             <LeitorDocumento caso={caso} extracaoId={`extracao-SINTETICA-${caso.id}`} arquivo={documento.arquivo} />
           </Cartao>
         </div>
-        <footer className="mt-6 border-t border-borda pt-3 text-xs leading-relaxed text-texto-3">Avaliação visual: leitura, ocultação, proveniência, troca de arquivo/caso, arquivo vazio, formato sem suporte, ausência de hash e recusas sintéticas. Não há rede externa, shell, criação de evidência ou gravação de dados.</footer>
+        <footer className="mt-6 border-t border-borda pt-3 text-xs leading-relaxed text-texto-3">Avaliação visual: leitura, ocultação, proveniência, troca de arquivo/caso, arquivo vazio, páginas sintéticas de PDF, formato sem suporte, ausência de hash e recusas sintéticas. Não há parser de PDF nesta prévia, rede externa, shell, criação de evidência ou gravação de dados.</footer>
       </main>
     </div>
   );

@@ -39,8 +39,8 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       # Exportação genuína por ts-rs, recuperável pelo log sem depender da quota
       # de artifacts. Os gates completos de testes/tipos abaixo são preservados.
-      - name: Gerar contratos documentais a partir do Rust
-        run: cargo test --locked -p sied-documentos --lib -- --nocapture --test-threads=1
+      - name: Gerar contratos pelo Rust e testar leitores documentais
+        run: cargo test --locked -p sied-documentos -- --nocapture --test-threads=1
 
   rust-e-interface:
     name: Testes (Linux)
@@ -71,6 +71,8 @@ jobs:
         run: cargo clippy --locked -p sied-documentos --all-targets -- -D warnings
       - name: Medir leitura documental sintética AI-1
         run: cargo test --locked --release -p sied-documentos --test documentos medicao_20_leituras_reais_de_texto_sintetico_de_2mib -- --ignored --exact --nocapture
+      - name: Medir leitura PDF nativa sintética AI-1
+        run: cargo test --locked --release -p sied-documentos --test pdf medicao_20_leituras_reais_de_pdf_sintetico -- --ignored --exact --nocapture
       - name: Build da interface (necessário para compilar o app Tauri)
         run: npm run build
         working-directory: app

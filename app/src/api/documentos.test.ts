@@ -28,6 +28,13 @@ describe("fronteira documental", () => {
     });
   });
 
+  it("solicita uma página de PDF sem enviar caminho/hash ou parâmetros de parser", async () => {
+    const resultado = { estado: "sem_suporte", texto: null, motivo: "PDF SINTÉTICO de recusa." };
+    vi.mocked(invoke).mockResolvedValue(resultado);
+    expect(await api.lerDocumento(21, "caso-sintetico", 2)).toEqual(resultado);
+    expect(invoke).toHaveBeenCalledExactlyOnceWith("ler_documento", { arquivoId: 21, casoId: "caso-sintetico", pagina: 2 });
+  });
+
   it("normaliza uma falha de transporte sem tratá-la como leitura pronta", async () => {
     vi.mocked(invoke).mockRejectedValue(new Error("Transporte sintético indisponível."));
     await expect(api.lerDocumento(21, "caso-sintetico")).rejects.toBeInstanceOf(FalhaSied);

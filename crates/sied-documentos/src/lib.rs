@@ -1,12 +1,12 @@
-//! Primeiro incremento da análise local de documentos: texto nativo UTF-8.
+//! Leitura documental local: texto UTF-8 fiel e texto nativo de páginas PDF.
 //!
 //! A origem só é acessada por [`FonteSomenteLeitura`]. O confinamento da origem é
 //! responsabilidade dessa implementação; esta biblioteca não resolve caminhos,
 //! percorre pastas nem acessa arquivos por outros meios. Não há escrita, cache,
-//! banco, processo externo, rede, PDF, OCR ou modelo de IA neste incremento.
+//! banco, processo externo, rede, OCR ou modelo de IA neste incremento.
 //!
 //! Os bytes e o tamanho são conferidos contra o inventário antes de interpretar
-//! o conteúdo. Um resultado pronto preserva integralmente os bytes UTF-8,
+//! o conteúdo. Um resultado UTF-8 pronto preserva integralmente os bytes,
 //! incluindo BOM, finais de linha e caracteres não ASCII. Não há normalização,
 //! truncamento, conversão com perdas ou resultado parcial.
 //!
@@ -27,14 +27,18 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 use ts_rs::TS;
 
+mod pdf;
+
 /// Máximo de bytes da origem e do texto publicado: 2 MiB.
 pub const TAMANHO_MAXIMO: u64 = 2 * 1024 * 1024;
 /// Prazo cooperativo máximo por chamada, contado desde o início de [`analisar`].
 pub const PRAZO_PADRAO: Duration = Duration::from_secs(5);
-/// Identificador estável do único motor disponível neste incremento.
+/// Identificador estável do motor de texto UTF-8.
 pub const MOTOR_ID: &str = "texto_utf8_nativo";
 /// Versão semântica da interpretação, independente da origem do documento.
 pub const MOTOR_VERSAO: &str = "0.1.0";
+pub const MOTOR_PDF_ID: &str = pdf::MOTOR_ID;
+pub const MOTOR_PDF_VERSAO: &str = pdf::MOTOR_VERSAO;
 
 const TAMANHO_CHUNK: usize = 16 * 1024;
 
@@ -83,10 +87,11 @@ pub enum EstadoDocumento {
 /// Texto derivado com a identidade completa da origem e do motor.
 ///
 /// `sha256_texto` considera somente os bytes de `texto`: horário, identidade e
-/// demais metadados não participam desse hash. Neste motor os bytes do texto são
-/// idênticos aos da origem verificada, portanto os dois hashes coincidem.
-/// Texto nativo não informa página, região ou confiança de OCR: `pagina` é
-/// sempre `None` e não há campos de região ou confiança neste contrato.
+/// demais metadados não participam desse hash. No motor UTF-8 os bytes são
+/// idênticos à origem. No PDF, este é o hash do texto DERIVADO da página, não
+/// o hash do PDF nem uma garantia de ordem visual ou reprodução do layout.
+/// Somente PDF informa página e contagem observadas; texto plano usa `None`.
+/// Não há região nem confiança de OCR neste contrato.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct TextoDocumento {
@@ -102,6 +107,7 @@ pub struct TextoDocumento {
     pub sha256_texto: String,
     pub texto: String,
     pub pagina: Option<u32>,
+    pub total_paginas: Option<u32>,
 }
 
 /// Só `Pronto` traz texto. Toda outra saída informa motivo fixo, sem caminhos,
@@ -115,7 +121,7 @@ pub struct ResultadoDocumento {
 }
 
 impl ResultadoDocumento {
-    fn sem(estado: EstadoDocumento, motivo: &str) -> Self {
+    pub(crate) fn sem(estado: EstadoDocumento, motivo: &str) -> Self {
         Self {
             estado,
             texto: None,
@@ -150,7 +156,7 @@ impl ControleDocumento {
         self.cancelado.store(true, Ordering::Release);
     }
 
-    fn interrupcao(&self, inicio: Instant) -> Option<ResultadoDocumento> {
+    pub(crate) fn interrupcao(&self, inicio: Instant) -> Option<ResultadoDocumento> {
         if self.cancelado.load(Ordering::Acquire) {
             Some(ResultadoDocumento::sem(
                 EstadoDocumento::Cancelado,
@@ -175,12 +181,13 @@ impl Default for ControleDocumento {
 
 /// Analisa integralmente um arquivo inventariado sem modificar a origem.
 ///
-/// Só são aceitas as extensões `txt`, `csv`, `tsv`, `json`, `xml`, `md` e `log`
-/// em modo automático. Contêineres, PDF, Office, imagens e OCR são explicitamente
+/// São aceitas as extensões `txt`, `csv`, `tsv`, `json`, `xml`, `md`, `log` e
+/// um subconjunto conservador de PDF nativo. PDF usa a primeira página por padrão.
+/// Contêineres, Office, imagens e OCR são explicitamente
 /// sem suporte, sem abertura da fonte e sem alegação de integridade verificada.
 /// Para formatos admitidos, hash e tamanho do inventário são obrigatórios e são
-/// conferidos antes da decodificação UTF-8 estrita. Assinaturas PDF/ZIP e
-/// controles binários também impedem a publicação de texto.
+/// conferidos antes da interpretação. No motor UTF-8, assinaturas PDF/ZIP e
+/// controles binários impedem publicar um binário renomeado como texto.
 ///
 /// O chamador deve resolver o pedido no inventário do caso aberto, vinculando
 /// caso, extração, arquivo e fonte. Esta biblioteca não consulta o banco nem
@@ -190,6 +197,18 @@ pub fn analisar(
     fonte: &dyn FonteSomenteLeitura,
     p: &PedidoDocumento,
     controle: &ControleDocumento,
+) -> ResultadoDocumento {
+    analisar_pagina(fonte, p, controle, None)
+}
+
+/// Seleciona uma página real do PDF, numerada a partir de 1. Texto plano não
+/// aceita paginação. Os mesmos limites e conferência de origem de [`analisar`]
+/// se aplicam a cada leitura; não há cache persistente nem publicação parcial.
+pub fn analisar_pagina(
+    fonte: &dyn FonteSomenteLeitura,
+    p: &PedidoDocumento,
+    controle: &ControleDocumento,
+    pagina: Option<u32>,
 ) -> ResultadoDocumento {
     use EstadoDocumento::*;
 
@@ -215,13 +234,22 @@ pub fn analisar(
             "Documentos dentro de contêineres não são analisados neste incremento.",
         );
     }
+    let eh_pdf = p.caminho.extensao().as_deref() == Some("pdf");
     if !matches!(
         p.caminho.extensao().as_deref(),
-        Some("txt" | "csv" | "tsv" | "json" | "xml" | "md" | "log")
+        Some("txt" | "csv" | "tsv" | "json" | "xml" | "md" | "log" | "pdf")
     ) {
         return ResultadoDocumento::sem(
             SemSuporte,
             "A extensão do documento não tem motor disponível neste incremento.",
+        );
+    }
+    if (eh_pdf && !(1..=pdf::MAXIMO_PAGINAS).contains(&pagina.unwrap_or(1)))
+        || (!eh_pdf && pagina.is_some())
+    {
+        return ResultadoDocumento::sem(
+            Falhou,
+            "A página solicitada não é válida para este documento.",
         );
     }
     let Some(sha256_esperado) = p.sha256.as_deref() else {
@@ -307,6 +335,48 @@ pub fn analisar(
             "O SHA-256 ou o tamanho da origem difere do inventário. Nenhum texto foi gerado.",
         );
     }
+    if eh_pdf {
+        // Pânico do parser vira falha sem texto. Isto não isola o processo nem
+        // contém OOM: os limites do motor são um envelope conservador, não RSS.
+        let extracao = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            pdf::extrair(&bytes, pagina.unwrap_or(1), controle, inicio)
+        }));
+        if let Some(resultado) = controle.interrupcao(inicio) {
+            return resultado;
+        }
+        let (texto, total_paginas) = match extracao {
+            Ok(Ok(texto)) => texto,
+            Ok(Err(resultado)) => return resultado,
+            Err(_) => {
+                return ResultadoDocumento::sem(
+                    Falhou,
+                    "O motor PDF não conseguiu concluir a leitura. Nenhum texto foi publicado.",
+                )
+            }
+        };
+        let sha256_texto = hex::encode(Sha256::digest(texto.as_bytes()));
+        if let Some(resultado) = controle.interrupcao(inicio) {
+            return resultado;
+        }
+        return ResultadoDocumento {
+            estado: Pronto,
+            texto: Some(TextoDocumento {
+                caso_id: p.caso_id,
+                extracao_id: p.extracao_id,
+                arquivo_id: p.arquivo_id,
+                caminho: p.caminho.clone(),
+                sha256: sha256_esperado.to_owned(),
+                motor_id: MOTOR_PDF_ID.to_owned(),
+                motor_versao: MOTOR_PDF_VERSAO.to_owned(),
+                executado_em: Utc::now(),
+                sha256_texto,
+                texto,
+                pagina: Some(pagina.unwrap_or(1)),
+                total_paginas: Some(total_paginas),
+            }),
+            motivo: None,
+        };
+    }
     let conteudo_sem_suporte = assinatura_sem_suporte(&bytes) || possui_controles_binarios(&bytes);
     if let Some(resultado) = controle.interrupcao(inicio) {
         return resultado;
@@ -350,6 +420,7 @@ pub fn analisar(
             sha256_texto: sha256_lido,
             texto,
             pagina: None,
+            total_paginas: None,
         }),
         motivo: None,
     };

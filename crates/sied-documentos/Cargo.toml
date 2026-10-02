@@ -1,6 +1,6 @@
 [package]
 name = "sied-documentos"
-description = "Análise local e somente leitura de documentos UTF-8, com integridade e limites cooperativos."
+description = "Leitura local de UTF-8 e PDF nativo por página, com origem conferida e limites cooperativos."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,6 +9,7 @@ publish.workspace = true
 [dependencies]
 chrono.workspace = true
 hex.workspace = true
+lopdf = { version = "=0.45.0", default-features = false }
 serde.workspace = true
 sha2.workspace = true
 sied-dominio.workspace = true

@@ -41,6 +41,7 @@ function pronto(conteudo = "Documento exclusivamente SINTÉTICO.", mudancas: Par
       sha256_texto: arquivo.sha256!,
       texto: conteudo,
       pagina: null,
+      total_paginas: null,
       ...mudancas,
     },
   };
@@ -199,8 +200,8 @@ describe("leitor documental local", () => {
     expect(screen.queryByRole("region", { name: "Texto documental" })).not.toBeInTheDocument();
   });
 
-  it("explica formato sem suporte sem abrir PDF, imagem ou contêiner", () => {
-    for (const caminho of ["sintetico.pdf", "sintetico.docx", "sintetico.jpg", "pasta.zip!/nota.txt"]) {
+  it("explica formato sem suporte sem abrir Office, imagem ou contêiner", () => {
+    for (const caminho of ["sintetico.docx", "sintetico.jpg", "pasta.zip!/nota.txt", "pasta.zip!/sintetico.pdf"]) {
       const tela = montar({ ...arquivo, caminho });
       expect(screen.getByText(/Este formato ainda não possui leitor documental/)).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Ler documento" })).not.toBeInTheDocument();
@@ -294,5 +295,181 @@ describe("leitor documental local", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ler documento" })).toBeEnabled();
+  });
+});
+
+describe("leitura nativa de PDF por página", () => {
+  const pdfArquivo: ArquivoExtracao = { ...arquivo, caminho: "documentos/PDF-SINTETICO.pdf", mime: "application/pdf", categoria: "documento" };
+  function paginaPronta(pagina = 1, conteudo = `PÁGINA ${pagina} EXCLUSIVAMENTE SINTÉTICA`, mudancas: Partial<TextoDocumento> = {}) {
+    return pronto(conteudo, { caminho: pdfArquivo.caminho, motor_id: "pdf_nativo", pagina, total_paginas: 3, ...mudancas });
+  }
+
+  it("solicita a primeira página explicitamente e navega somente por páginas reais", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce(paginaPronta(1)).mockResolvedValueOnce(paginaPronta(2)).mockResolvedValueOnce(paginaPronta(3)).mockResolvedValueOnce(paginaPronta(2));
+    montar(pdfArquivo);
+    expect(invoke).not.toHaveBeenCalled();
+    expect(screen.queryByRole("navigation", { name: "Páginas do documento" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Ler documento" }));
+    expect(invoke).toHaveBeenNthCalledWith(1, "ler_documento", { arquivoId: 27, casoId: caso.id, pagina: 1 });
+    const navegacao = await screen.findByRole("navigation", { name: "Páginas do documento" });
+    expect(navegacao).toHaveTextContent("1 de 3");
+    expect(within(navegacao).getByRole("button", { name: "Anterior" })).toBeDisabled();
+    await userEvent.click(within(navegacao).getByRole("button", { name: "Próxima" }));
+    expect(invoke).toHaveBeenNthCalledWith(2, "ler_documento", { arquivoId: 27, casoId: caso.id, pagina: 2 });
+    expect(await screen.findByRole("region", { name: "Texto documental" })).toHaveTextContent("PÁGINA 2 EXCLUSIVAMENTE SINTÉTICA");
+    await userEvent.click(within(navegacao).getByRole("button", { name: "Próxima" }));
+    expect(await screen.findByRole("region", { name: "Texto documental" })).toHaveTextContent("PÁGINA 3 EXCLUSIVAMENTE SINTÉTICA");
+    expect(within(navegacao).getByRole("button", { name: "Próxima" })).toBeDisabled();
+    await userEvent.click(within(navegacao).getByRole("button", { name: "Anterior" }));
+    expect(invoke).toHaveBeenNthCalledWith(4, "ler_documento", { arquivoId: 27, casoId: caso.id, pagina: 2 });
+    expect(await screen.findByRole("region", { name: "Texto documental" })).toHaveTextContent("PÁGINA 2 EXCLUSIVAMENTE SINTÉTICA");
+  });
+
+  it("limpa a página anterior durante a leitura e não duplica navegação pendente", async () => {
+    const pendente = promessa();
+    vi.mocked(invoke).mockResolvedValueOnce(paginaPronta(1)).mockReturnValueOnce(pendente.resultado);
+    montar(pdfArquivo);
+    await userEvent.click(screen.getByRole("button", { name: "Ler documento" }));
+    await screen.findByRole("region", { name: "Texto documental" });
+    await userEvent.click(screen.getByRole("button", { name: "Próxima" }));
+    expect(screen.queryByRole("region", { name: "Texto documental" })).not.toBeInTheDocument();
+    expect(screen.queryByText("ORIGEM CONFERIDA")).not.toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Páginas do documento" })).toHaveTextContent("Página solicitada 2 de 3");
+    expect(screen.getByRole("button", { name: "Anterior" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Próxima" })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "Próxima" }));
+    expect(invoke).toHaveBeenCalledTimes(2);
+    await act(async () => pendente.resolver(paginaPronta(2)));
+    expect(screen.getByRole("region", { name: "Texto documental" })).toHaveTextContent("PÁGINA 2 EXCLUSIVAMENTE SINTÉTICA");
+  });
+
+  it("não interpreta marcação HTML e mostra página/hash de texto derivados, não uma renderização do PDF", async () => {
+    const conteudo = '<script>window.__siedPdfExecutou = true</script>\n[link](https://nao-acessar.invalid/)';
+    vi.mocked(invoke).mockResolvedValue(paginaPronta(1, conteudo, { sha256_texto: "cd".repeat(32) }));
+    montar(pdfArquivo);
+    await userEvent.click(screen.getByRole("button", { name: "Ler documento" }));
+    const regiao = await screen.findByRole("region", { name: "Texto documental" });
+    expect(regiao.textContent).toBe(conteudo);
+    expect(regiao.querySelector("script, img, a")).toBeNull();
+    expect("__siedPdfExecutou" in window).toBe(false);
+    expect(screen.getByText("TEXTO DERIVADO")).toBeInTheDocument();
+    expect(screen.getByText(/ordem de leitura do PDF pode diferir/)).toBeInTheDocument();
+    await userEvent.click(screen.getByText("Proveniência do texto · derivado local"));
+    const origem = screen.getByLabelText("Proveniência documental");
+    expect(within(origem).getByText("1 de 3")).toBeInTheDocument();
+    expect(within(origem).getByText("SHA-256 do texto da página")).toBeInTheDocument();
+    expect(within(origem).getByText("cd".repeat(32))).toBeInTheDocument();
+    expect(within(origem).getByText(arquivo.sha256!)).toBeInTheDocument();
+  });
+
+  it("explica página sem texto nativo sem sugerir que OCR foi executado", async () => {
+    vi.mocked(invoke).mockResolvedValue(paginaPronta(1, ""));
+    montar(pdfArquivo);
+    await userEvent.click(screen.getByRole("button", { name: "Ler documento" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Página sem texto nativo; OCR não disponível.");
+    expect(screen.getByRole("navigation", { name: "Páginas do documento" })).toHaveTextContent("1 de 3");
+    expect(screen.queryByRole("region", { name: "Texto documental" })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["página diferente", { pagina: 2 }],
+    ["página ausente", { pagina: null }],
+    ["total ausente", { total_paginas: null }],
+    ["total zero", { total_paginas: 0 }],
+    ["total negativo", { total_paginas: -1 }],
+    ["total fracionário", { total_paginas: 1.5 }],
+    ["total excedido", { total_paginas: 513 }],
+  ])("recusa %s sem publicar texto nem inventar navegação", async (_, mudancas) => {
+    vi.mocked(invoke).mockResolvedValue(paginaPronta(1, "TEXTO PDF NÃO PUBLICADO", mudancas));
+    montar(pdfArquivo);
+    await userEvent.click(screen.getByRole("button", { name: "Ler documento" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("A paginação do resultado não corresponde à leitura solicitada.");
+    expect(screen.queryByText("TEXTO PDF NÃO PUBLICADO")).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Páginas do documento" })).not.toBeInTheDocument();
+  });
+
+  it("recusa total menor que a página solicitada sem manter a página anterior", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce(paginaPronta(1)).mockResolvedValueOnce(paginaPronta(2, "TEXTO FORA DO TOTAL", { total_paginas: 1 }));
+    montar(pdfArquivo);
+    await userEvent.click(screen.getByRole("button", { name: "Ler documento" }));
+    await screen.findByRole("region", { name: "Texto documental" });
+    await userEvent.click(screen.getByRole("button", { name: "Próxima" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("A paginação do resultado não corresponde à leitura solicitada.");
+    expect(screen.queryByRole("region", { name: "Texto documental" })).not.toBeInTheDocument();
+  });
+
+  it("aceita o limite real de 512 páginas sem habilitar página posterior", async () => {
+    vi.mocked(invoke).mockResolvedValue(paginaPronta(1, "PDF SINTÉTICO", { total_paginas: 512 }));
+    montar(pdfArquivo);
+    await userEvent.click(screen.getByRole("button", { name: "Ler documento" }));
+    expect(await screen.findByRole("navigation", { name: "Páginas do documento" })).toHaveTextContent("1 de 512");
+  });
+
+  it("não aceita mudar o total de páginas para os mesmos bytes de origem", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce(paginaPronta(1)).mockResolvedValueOnce(paginaPronta(2, "PAGINAÇÃO INCONSISTENTE", { total_paginas: 4 }));
+    montar(pdfArquivo);
+    await userEvent.click(screen.getByRole("button", { name: "Ler documento" }));
+    await screen.findByRole("region", { name: "Texto documental" });
+    await userEvent.click(screen.getByRole("button", { name: "Próxima" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("A paginação do resultado não corresponde à leitura solicitada.");
+    expect(screen.queryByText("PAGINAÇÃO INCONSISTENTE")).not.toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Páginas do documento" })).toHaveTextContent("2 de 3");
+  });
+
+  it("apresenta recusa do motor sem texto parcial e permite repetir a página ou voltar", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce(paginaPronta(1)).mockResolvedValueOnce({ estado: "sem_suporte", texto: null, motivo: "Recurso PDF não suportado no cenário sintético." }).mockResolvedValueOnce(paginaPronta(2));
+    montar(pdfArquivo);
+    await userEvent.click(screen.getByRole("button", { name: "Ler documento" }));
+    await screen.findByRole("region", { name: "Texto documental" });
+    await userEvent.click(screen.getByRole("button", { name: "Próxima" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Recurso PDF não suportado");
+    expect(screen.queryByRole("region", { name: "Texto documental" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Anterior" })).toBeEnabled();
+    await userEvent.click(screen.getByRole("button", { name: "Ler documento" }));
+    expect(invoke).toHaveBeenNthCalledWith(3, "ler_documento", { arquivoId: 27, casoId: caso.id, pagina: 2 });
+    expect(await screen.findByRole("region", { name: "Texto documental" })).toHaveTextContent("PÁGINA 2 EXCLUSIVAMENTE SINTÉTICA");
+  });
+
+  it("ocultar reinicia a primeira página e descarta uma página tardia de uma sessão anterior", async () => {
+    const antiga = promessa();
+    vi.mocked(invoke).mockResolvedValueOnce(paginaPronta(1)).mockReturnValueOnce(antiga.resultado).mockResolvedValueOnce(paginaPronta(1, "PRIMEIRA PÁGINA NOVA"));
+    montar(pdfArquivo);
+    await userEvent.click(screen.getByRole("button", { name: "Ler documento" }));
+    await screen.findByRole("region", { name: "Texto documental" });
+    await userEvent.click(screen.getByRole("button", { name: "Próxima" }));
+    await userEvent.click(screen.getByRole("button", { name: "Ocultar leitura" }));
+    expect(screen.queryByRole("navigation", { name: "Páginas do documento" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Ler documento" }));
+    expect(invoke).toHaveBeenNthCalledWith(3, "ler_documento", { arquivoId: 27, casoId: caso.id, pagina: 1 });
+    await screen.findByText("PRIMEIRA PÁGINA NOVA");
+    await act(async () => antiga.resolver(paginaPronta(2, "PÁGINA TARDIA DESCARTADA")));
+    expect(screen.queryByText("PÁGINA TARDIA DESCARTADA")).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Texto documental" })).toHaveTextContent("PRIMEIRA PÁGINA NOVA");
+  });
+
+  it("trocar de caso reinicia paginação e descarta uma página tardia do caso anterior", async () => {
+    const antiga = promessa();
+    const outroCaso = { ...caso, id: "outro-caso-pdf-sintetico" };
+    vi.mocked(invoke).mockResolvedValueOnce(paginaPronta(1)).mockReturnValueOnce(antiga.resultado).mockResolvedValueOnce(paginaPronta(1, "PDF DO CASO NOVO", { caso_id: outroCaso.id, total_paginas: 1 }));
+    const tela = montar(pdfArquivo);
+    await userEvent.click(screen.getByRole("button", { name: "Ler documento" }));
+    await screen.findByRole("region", { name: "Texto documental" });
+    await userEvent.click(screen.getByRole("button", { name: "Próxima" }));
+    tela.rerender(<LeitorDocumento caso={outroCaso} extracaoId="extracao-sintetica" arquivo={pdfArquivo} />);
+    expect(screen.queryByRole("navigation", { name: "Páginas do documento" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Ler documento" }));
+    expect(invoke).toHaveBeenNthCalledWith(3, "ler_documento", { arquivoId: 27, casoId: outroCaso.id, pagina: 1 });
+    expect(await screen.findByRole("navigation", { name: "Páginas do documento" })).toHaveTextContent("1 de 1");
+    await act(async () => antiga.resolver(paginaPronta(2, "PDF DE OUTRO CASO DESCARTADO")));
+    expect(screen.queryByText("PDF DE OUTRO CASO DESCARTADO")).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Texto documental" })).toHaveTextContent("PDF DO CASO NOVO");
+  });
+
+  it("não inventa paginação para texto UTF-8", async () => {
+    vi.mocked(invoke).mockResolvedValue(pronto("TEXTO NÃO PUBLICADO", { pagina: 1, total_paginas: 1 }));
+    montar();
+    await userEvent.click(screen.getByRole("button", { name: "Ler documento" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("A paginação do resultado não corresponde à leitura solicitada.");
+    expect(screen.queryByText("TEXTO NÃO PUBLICADO")).not.toBeInTheDocument();
   });
 });

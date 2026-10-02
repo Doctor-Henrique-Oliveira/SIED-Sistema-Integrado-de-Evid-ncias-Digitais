@@ -231,9 +231,9 @@ export const api = {
     chamar<Pagina<PosicaoMensagem>>("localizar_na_conversa", { conversaId, termo, limite }),
   /** Miniatura de uma imagem do inventário (lida da extração e conferida pelo SHA-256). */
   miniatura: async (arquivoId: number) => (await chamar<Miniatura | undefined>("miniatura", { arquivoId })) ?? null,
-  /** Texto nativo conferido contra o inventário. Caso esperado é só uma guarda de contexto. */
-  lerDocumento: (arquivoId: number, casoId: CasoId) =>
-    chamar<ResultadoDocumento>("ler_documento", { arquivoId, casoId }),
+  /** Texto conferido contra o inventário; PDF admite página real. Não recebe caminho ou hash do frontend. */
+  lerDocumento: (arquivoId: number, casoId: CasoId, pagina?: number) =>
+    chamar<ResultadoDocumento>("ler_documento", { arquivoId, casoId, ...(pagina === undefined ? {} : { pagina }) }),
   obterConversa: (conversaId: number) => chamar<Conversa>("obter_conversa", { conversaId }),
   mensagensConversa: (conversaId: number, deslocamento: number, limite: number) =>
     chamar<Pagina<ArtefatoResumo>>("mensagens_conversa", { conversaId, deslocamento, limite }),
