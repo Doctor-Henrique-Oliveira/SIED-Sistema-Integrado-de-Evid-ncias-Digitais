@@ -483,6 +483,11 @@ function Chat({
               {rotuloApp(c.app)} · {numero(c.total_mensagens)} mensagens ({numero(c.enviadas)} enviadas) ·{" "}
               {dataHoraMs(c.primeira_ms, caso.fuso_horario)} a {dataHoraMs(c.ultima_ms, caso.fuso_horario)}
             </p>
+            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+              <Selo tom="neutro">{rotuloTipoConversa(c)}</Selo>
+              <Selo tom="info">{numero(c.total_participantes)} participante(s)</Selo>
+              {c.com_anexo > 0 && <Selo tom="ouro"><Icone nome="midias" className="size-3" /> {numero(c.com_anexo)} anexo(s)</Selo>}
+            </div>
           </div>
           <div role="group" aria-label="Modo de visualização" className="flex rounded-md ring-1 ring-borda-2">
             {botaoModo(false, "Visão normal")}
