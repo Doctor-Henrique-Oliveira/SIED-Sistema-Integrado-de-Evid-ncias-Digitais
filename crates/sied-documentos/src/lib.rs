@@ -25,6 +25,7 @@ use sied_ingestao::fonte::{CaminhoFonte, FonteSomenteLeitura, SEPARADOR_CONTEINE
 use std::io::ErrorKind;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
+use ts_rs::TS;
 
 /// Máximo de bytes da origem e do texto publicado: 2 MiB.
 pub const TAMANHO_MAXIMO: u64 = 2 * 1024 * 1024;
@@ -60,8 +61,9 @@ pub struct PedidoDocumento {
     pub modo: ModoDocumento,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
+#[ts(export)]
 pub enum EstadoDocumento {
     Pronto,
     /// Motor, extensão ou codificação indisponível; não implica origem verificada.
@@ -85,10 +87,12 @@ pub enum EstadoDocumento {
 /// idênticos aos da origem verificada, portanto os dois hashes coincidem.
 /// Texto nativo não informa página, região ou confiança de OCR: `pagina` é
 /// sempre `None` e não há campos de região ou confiança neste contrato.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 pub struct TextoDocumento {
     pub caso_id: CasoId,
     pub extracao_id: ExtracaoId,
+    #[ts(type = "number")]
     pub arquivo_id: i64,
     pub caminho: CaminhoFonte,
     pub sha256: String,
@@ -102,7 +106,8 @@ pub struct TextoDocumento {
 
 /// Só `Pronto` traz texto. Toda outra saída informa motivo fixo, sem caminhos,
 /// conteúdo da evidência ou detalhes de erro fornecidos pela origem.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 pub struct ResultadoDocumento {
     pub estado: EstadoDocumento,
     pub texto: Option<TextoDocumento>,
@@ -383,4 +388,33 @@ fn possui_controles_binarios(bytes: &[u8]) -> bool {
     bytes
         .iter()
         .any(|&byte| (byte < b' ' && !matches!(byte, b'\t' | b'\n' | b'\r')) || byte == 0x7f)
+}
+
+#[cfg(test)]
+mod contratos {
+    use super::*;
+
+    /// A CI publica o texto realmente gerado pelo Rust no log para recuperação
+    /// dos contratos quando o toolchain nativo não estiver disponível localmente.
+    #[test]
+    fn exportar_contratos_documentais() {
+        for (nome, conteudo) in [
+            (
+                "EstadoDocumento.ts",
+                EstadoDocumento::export_to_string().unwrap(),
+            ),
+            (
+                "TextoDocumento.ts",
+                TextoDocumento::export_to_string().unwrap(),
+            ),
+            (
+                "ResultadoDocumento.ts",
+                ResultadoDocumento::export_to_string().unwrap(),
+            ),
+        ] {
+            println!("SIED_CONTRATO_INICIO:{nome}");
+            print!("{conteudo}");
+            println!("\nSIED_CONTRATO_FIM:{nome}");
+        }
+    }
 }

@@ -28,6 +28,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  contratos-documentais:
+    name: Contratos documentais (Rust)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      # Exportação genuína por ts-rs, recuperável pelo log sem depender da quota
+      # de artifacts. Os gates completos de testes/tipos abaixo são preservados.
+      - name: Gerar contratos documentais a partir do Rust
+        run: cargo test --locked -p sied-documentos --lib -- --nocapture --test-threads=1
+
   rust-e-interface:
     name: Testes (Linux)
     runs-on: ubuntu-24.04

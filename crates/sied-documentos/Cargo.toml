@@ -13,6 +13,7 @@ serde.workspace = true
 sha2.workspace = true
 sied-dominio.workspace = true
 sied-ingestao.workspace = true
+ts-rs.workspace = true
 
 [dev-dependencies]
 rusqlite.workspace = true
