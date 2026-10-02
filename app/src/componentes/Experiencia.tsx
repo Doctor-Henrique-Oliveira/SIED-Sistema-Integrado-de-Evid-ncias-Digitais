@@ -60,8 +60,8 @@ export function ForensicBootConsole({ aberto, info, aoPronto, aoErro }: {
   const [auditoria, setAuditoria] = useState<VerificacaoAuditoria | null>(null);
   const [etapaAtiva, setEtapaAtiva] = useState(0);
   const [pronto, setPronto] = useState(false);
-  const fluxoEsquerdo = ["FLOW / AUX", "LAYER / 01", "TRACE / VISUAL", "SIGNAL / DEPTH", "VECTOR / 03"];
-  const fluxoDireito = ["CHANNEL / LOCAL", "STREAM / AUX", "INDEX / VISUAL", "TRACE / DEPTH", "PULSE / 02"];
+  const fluxoEsquerdo = ["CASE_DB", "FTS5", "MEDIA", "AUDIT", "RECORD"];
+  const fluxoDireito = ["SQLITE", "INDEX", "CONVERSATION", "LOCAL_SESSION", "DEVICE"];
 
   useEffect(() => {
     let ativo = true;
@@ -134,7 +134,7 @@ export function ForensicBootConsole({ aberto, info, aoPronto, aoErro }: {
             <div><span>RECORDS</span><strong>{auditoria ? numero(auditoria.registros) : "—"}</strong></div>
           </div>
           <ol className="boot-forense__eventos" role="log" aria-live="polite" aria-label="Etapas de inicialização">
-            {eventos.slice(0, Math.min(etapaAtiva + 1, eventos.length)).map((evento, indice) => (
+            {eventos.map((evento, indice) => (
               <li key={evento.id} className={`boot-forense__evento boot-forense__evento--${evento.estado}`}>
                 <span className="boot-forense__trilho" aria-hidden><i /></span>
                 <span className="boot-forense__indice">{String(indice + 1).padStart(2, "0")}</span>
