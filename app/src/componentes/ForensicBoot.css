@@ -1,0 +1,134 @@
+/* Cena de boot: uma única viewport, seis slots constantes, movimento só em CSS. */
+.boot-forense {
+  position: fixed;
+  inset: 0;
+  isolation: isolate;
+  display: grid;
+  grid-template-rows: 76px minmax(0, 1fr) 64px;
+  overflow: hidden;
+  color: var(--color-texto);
+  background: var(--color-fundo);
+}
+.boot-forense::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 24% 45%, color-mix(in srgb, var(--color-sup-3) 60%, transparent), transparent 58%);
+}
+.boot-forense__topo, .boot-forense__rodape {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding-inline: clamp(24px, 4vw, 64px);
+  position: relative;
+  z-index: 1;
+}
+.boot-forense__topo { border-bottom: 1px solid color-mix(in srgb, var(--color-borda) 70%, transparent); }
+.boot-forense__marca { display: flex; align-items: center; gap: 12px; font-size: 22px; font-weight: 650; letter-spacing: .15em; }
+.boot-forense__marca > svg { width: 23px; height: 23px; color: var(--color-ouro); }
+.boot-forense__marca > span { margin-left: 10px; padding-left: 22px; border-left: 1px solid var(--color-borda-2); color: var(--color-texto-2); font: 10px var(--font-mono); letter-spacing: .16em; }
+.boot-forense__modo { display: flex; align-items: center; gap: 8px; color: var(--color-texto-2); font: 10px var(--font-mono); letter-spacing: .1em; }
+.boot-forense__modo i { width: 5px; height: 5px; border-radius: 50%; background: var(--color-texto-3); }
+.boot-forense__cena {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr);
+  align-items: center;
+  gap: clamp(32px, 6vw, 92px);
+  width: min(1160px, 100%);
+  min-height: 0;
+  margin-inline: auto;
+  padding: 20px clamp(36px, 6vw, 84px);
+}
+.boot-forense__identidade { min-width: 0; }
+.boot-forense__emblema { position: relative; display: grid; place-items: center; width: 128px; height: 128px; margin-bottom: 18px; }
+.boot-forense__orbita { position: absolute; inset: 0; width: 100%; height: 100%; fill: none; }
+.boot-forense__orbita circle:first-child { stroke: var(--color-borda-2); stroke-width: .7; }
+.boot-forense__orbita circle:nth-child(2) { stroke: var(--color-ouro); stroke-width: .8; stroke-dasharray: 68 12 1 12; opacity: .55; transform-origin: center; animation: boot-orbita 18s linear infinite; }
+.boot-forense__orbita path { stroke: var(--color-ouro); stroke-width: 1; opacity: .7; }
+.boot-forense__emblema > span { display: grid; place-items: center; width: 82px; height: 82px; border: 1px solid color-mix(in srgb, var(--color-ouro) 24%, var(--color-borda)); border-radius: 23px; background: color-mix(in srgb, var(--color-sup) 80%, transparent); }
+.boot-forense__emblema > span svg { width: 38px; height: 38px; color: var(--color-ouro-claro); stroke-width: 1.15; }
+.boot-forense__sobrelinha { color: var(--color-ouro); font-size: 10px; font-weight: 600; letter-spacing: .17em; }
+.boot-forense__identidade h1 { height: 80px; margin-top: 12px; max-width: 330px; font-size: clamp(28px, 3.2vw, 38px); font-weight: 550; line-height: 1.12; letter-spacing: -.035em; }
+.boot-forense__caso { overflow: hidden; margin-top: 10px; color: var(--color-texto-2); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.boot-forense__pasta { overflow: hidden; margin-top: 7px; color: var(--color-texto-3); font: 10px/1.6 var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
+.boot-forense__marcos { display: flex; gap: 5px; max-width: 170px; margin-top: 26px; }
+.boot-forense__marcos span { flex: 1; height: 2px; background: var(--color-borda-2); transition: background 240ms; }
+.boot-forense__marcos span[data-estado="processando"] { background: var(--color-ouro); }
+.boot-forense__marcos span[data-estado="ok"] { background: color-mix(in srgb, var(--color-ok) 75%, var(--color-borda)); }
+.boot-forense__nota { margin-top: 12px; font-size: 11px; color: var(--color-texto-3); }
+.boot-forense__sequencia { min-width: 0; }
+.boot-forense__legenda { display: flex; justify-content: space-between; padding: 0 0 16px; color: var(--color-texto-3); font: 9px var(--font-mono); letter-spacing: .16em; }
+.boot-forense__eventos { display: grid; grid-template-rows: repeat(6, 65px); margin: 0; padding: 0; list-style: none; }
+.boot-forense__evento {
+  position: relative;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) 22px;
+  align-items: center;
+  gap: 14px;
+  min-height: 0;
+  border-top: 1px solid color-mix(in srgb, var(--color-borda) 72%, transparent);
+  transition: background 240ms;
+}
+.boot-forense__evento::before { content: ""; position: absolute; inset: 0 -12px; z-index: -1; border-left: 2px solid transparent; transition: background 240ms, border-color 240ms; }
+.boot-forense__evento--processando::before { border-color: var(--color-ouro); background: linear-gradient(90deg, color-mix(in srgb, var(--color-ouro) 8%, transparent), transparent 88%); }
+.boot-forense__indice { color: var(--color-texto-4); font: 13px var(--font-mono); transition: color 240ms; }
+.boot-forense__evento--processando .boot-forense__indice { color: var(--color-ouro-claro); }
+.boot-forense__evento--ok .boot-forense__indice { color: var(--color-texto-2); }
+.boot-forense__leitura { display: grid; grid-template-rows: 12px 21px 15px; min-width: 0; }
+.boot-forense__codigo { color: var(--color-texto-3); font: 9px var(--font-mono); letter-spacing: .13em; }
+.boot-forense__leitura strong { overflow: hidden; color: var(--color-texto-2); font-size: 13px; font-weight: 500; line-height: 21px; text-overflow: ellipsis; white-space: nowrap; }
+.boot-forense__leitura small { overflow: hidden; color: var(--color-texto-3); font: 10px/15px var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
+.boot-forense__evento--processando .boot-forense__codigo { color: var(--color-ouro); }
+.boot-forense__evento--processando .boot-forense__leitura strong, .boot-forense__evento--ok .boot-forense__leitura strong { color: var(--color-texto); }
+.boot-forense__evento--aguardando .boot-forense__leitura { opacity: .55; }
+.boot-forense__estado { display: grid; place-items: center; color: var(--color-texto-4); }
+.boot-forense__estado svg { width: 16px; height: 16px; color: var(--color-ok); }
+.boot-forense__estado i { display: block; width: 8px; height: 8px; border: 1px solid var(--color-ouro); transform: rotate(45deg); animation: boot-sinal 1.2s ease-in-out infinite; }
+.boot-forense__rodape { border-top: 1px solid var(--color-borda); background: color-mix(in srgb, var(--color-fundo) 94%, transparent); }
+.boot-forense__estacao-info { display: flex; gap: 24px; min-width: 0; color: var(--color-texto-3); font: 9px var(--font-mono); letter-spacing: .04em; }
+.boot-forense__estacao-info span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.boot-forense__estacao-info b { margin-left: 6px; font-weight: 400; color: var(--color-texto-2); }
+.boot-forense__conclusao { display: flex; align-items: center; gap: 10px; flex: none; color: var(--color-ouro); font: 10px var(--font-mono); letter-spacing: .12em; }
+.boot-forense__conclusao svg { width: 15px; height: 15px; }
+.boot-forense.is-ready .boot-forense__conclusao { color: var(--color-ok-claro); }
+.boot-forense__cursor { width: 4px; height: 10px; background: var(--color-ouro); animation: boot-sinal 1.2s ease-in-out infinite; }
+.boot-forense.is-ready .boot-forense__rodape::before { content: ""; position: absolute; height: 1px; inset: -1px 0 auto; background: var(--color-ouro); transform-origin: left; animation: boot-liberar 450ms ease-out both; }
+/* Quatro trilhas gráficas: nomes de subsistemas, sem resultados ou hashes inventados. */
+.boot-forense__stream { position: absolute; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; transition: opacity 420ms; }
+.boot-forense__stream > div { position: absolute; top: calc(17% + var(--stream-i) * 21%); left: 0; width: 100%; overflow: hidden; mask-image: linear-gradient(90deg, black, transparent 18%, transparent 82%, black); }
+.boot-forense__stream span { display: block; width: max-content; color: var(--color-texto-2); font: 10px var(--font-mono); letter-spacing: .18em; opacity: .19; animation: boot-dados calc(4s + var(--stream-i) * .7s) linear infinite; animation-delay: calc(var(--stream-i) * -1.3s); }
+.boot-forense__stream > div:nth-child(even) span { animation-direction: reverse; color: var(--color-ouro); opacity: .14; }
+.boot-forense.is-workspace-ready .boot-forense__stream { opacity: .45; }
+.boot-forense.is-ready .boot-forense__stream { opacity: 0; }
+.boot-forense.is-ready .boot-forense__orbita circle:nth-child(2) { animation-play-state: paused; }
+.boot-forense__terminal { align-self: center; justify-self: center; grid-row: 1 / -1; width: min(600px, calc(100% - 48px)); border-left: 2px solid var(--color-erro); background: var(--color-sup); }
+.boot-forense__cabecalho { padding: 24px 32px 0; color: var(--color-erro-claro); font-size: 15px; font-weight: 600; }
+@keyframes boot-orbita { to { transform: rotate(360deg); } }
+@keyframes boot-sinal { 50% { opacity: .3; } }
+@keyframes boot-liberar { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes boot-dados { from { transform: translateX(-45%); } to { transform: translateX(25%); } }
+@media (max-height: 650px) {
+  .boot-forense { grid-template-rows: 60px minmax(0, 1fr) 50px; }
+  .boot-forense__emblema { width: 104px; height: 104px; margin-bottom: 12px; }
+  .boot-forense__emblema > span { width: 66px; height: 66px; border-radius: 18px; }
+  .boot-forense__eventos { grid-template-rows: repeat(6, 59px); }
+  .boot-forense__identidade h1 { font-size: 28px; height: 64px; }
+}
+@media (max-width: 760px) {
+  .boot-forense__cena { gap: 22px; padding-inline: 24px; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); }
+  .boot-forense__marca > span { display: none; }
+  .boot-forense__identidade h1 { font-size: 26px; }
+  .boot-forense__sobrelinha { font-size: 8px; }
+  .boot-forense__evento { gap: 8px; grid-template-columns: 24px minmax(0, 1fr) 16px; }
+  .boot-forense__estacao-info span:last-child { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .boot-forense__orbita circle:nth-child(2), .boot-forense__estado i, .boot-forense__cursor, .boot-forense.is-ready .boot-forense__rodape::before { animation: none; }
+  .boot-forense__stream { display: none; }
+  .boot-forense__evento, .boot-forense__evento::before, .boot-forense__indice { transition: none; }
+}
