@@ -138,6 +138,26 @@ fn duas_paginas() -> Vec<u8> {
     .bytes()
 }
 
+fn conteudo_com_imagem_inline(corrompida: bool) -> Vec<u8> {
+    let mut bytes = conteudo(b"SINTETICO texto legitimo antes da imagem");
+    if corrompida {
+        // O filtro não é suportado pelo parser de imagens inline do lopdf.
+        // Seu fallback procura o primeiro EI delimitado por espaço dentro dos
+        // bytes opacos e passa a interpretar o restante como operadores.
+        bytes.extend_from_slice(
+            b"\nBI /W 1 /H 1 /BPC 8 /CS /Gray /F /FlateDecode ID\n\x78\x9c\xff EI\n",
+        );
+        bytes.extend_from_slice(&conteudo(
+            b"SINTETICO falso texto localizado dentro dos bytes da imagem",
+        ));
+    } else {
+        // Uma imagem inline válida, não comprimida, de um pixel cinza.
+        bytes.extend_from_slice(b"\nBI /W 1 /H 1 /BPC 8 /CS /Gray ID\n\x80\nEI\n");
+        bytes.extend_from_slice(&conteudo(b"SINTETICO texto legitimo depois da imagem"));
+    }
+    bytes
+}
+
 struct FonteMemoria {
     caminho: CaminhoFonte,
     bytes: Arc<[u8]>,
@@ -331,14 +351,27 @@ fn pdf_importado_nao_altera_origem_inventario_auditoria_ou_hashes_forenses() {
 fn pagina_sem_texto_e_vazia_nao_dispara_ocr_nem_inventa_conteudo() {
     let fonte = FonteMemoria::nova(
         "vazio-sintetico.pdf",
-        PdfSintetico::novo(vec![vec![]], false).bytes(),
+        PdfSintetico::novo(
+            vec![vec![], vec![conteudo(b"SINTETICO texto na segunda pagina")]],
+            false,
+        )
+        .bytes(),
     );
     let resultado = analisar(&fonte, &fonte.pedido(), &ControleDocumento::novo());
-    assert!(resultado
-        .motivo
-        .as_deref()
-        .is_some_and(|motivo| motivo.contains("OCR")));
-    recusa(resultado, EstadoDocumento::SemSuporte);
+    assert_eq!(resultado.estado, EstadoDocumento::Pronto, "{resultado:?}");
+    let texto = resultado.texto.unwrap();
+    assert_eq!(texto.texto, "");
+    assert_eq!(texto.sha256_texto, hash(b""));
+    assert_eq!(texto.pagina, Some(1));
+    assert_eq!(texto.total_paginas, Some(2));
+    assert_eq!(texto.motor_id, "pdf_nativo_lopdf");
+    assert_eq!(Some(texto.sha256), fonte.pedido().sha256);
+    let resultado = analisar_pagina(&fonte, &fonte.pedido(), &ControleDocumento::novo(), Some(2));
+    assert_eq!(resultado.estado, EstadoDocumento::Pronto, "{resultado:?}");
+    let texto = resultado.texto.unwrap();
+    assert_eq!(texto.texto, "SINTETICO texto na segunda pagina\n");
+    assert_eq!(texto.pagina, Some(2));
+    assert_eq!(texto.total_paginas, Some(2));
 }
 
 #[test]
@@ -675,6 +708,211 @@ fn filtro_comprimido_corrompido_nao_faz_fallback_para_bytes_crus() {
         analisar(&fonte, &fonte.pedido(), &ControleDocumento::novo()),
         EstadoDocumento::Falhou,
     );
+}
+
+#[test]
+fn filter_malformado_nao_e_ignorado_como_stream_sem_filtro() {
+    let mut pdf = PdfSintetico::novo(vec![vec![]], false);
+    let conteudo_id = pdf.documento.add_object(Stream::new(
+        dictionary! { "Filter" => 19 },
+        conteudo(b"SINTETICO com filtro invalido"),
+    ));
+    pdf.documento
+        .get_dictionary_mut(pdf.paginas[0])
+        .unwrap()
+        .set("Contents", conteudo_id);
+    let fonte = FonteMemoria::nova("filter-malformado-sintetico.pdf", pdf.bytes());
+    recusa(
+        analisar(&fonte, &fonte.pedido(), &ControleDocumento::novo()),
+        EstadoDocumento::Falhou,
+    );
+}
+
+#[test]
+fn checksum_flate_corrompido_recusa_ate_quando_texto_poderia_ser_extraido() {
+    let texto = b"SINTETICO prefixo nao pode sair. ".repeat(32);
+    let mut stream = Stream::new(dictionary! {}, conteudo(&texto));
+    stream.compress().unwrap();
+    assert!(stream.dict.has(b"Filter"), "fixture precisa de Flate real");
+    let ultimo = stream.content.len() - 1;
+    stream.content[ultimo] ^= 1;
+    let mut pdf = PdfSintetico::novo(vec![vec![]], false);
+    let conteudo_id = pdf.documento.add_object(stream);
+    pdf.documento
+        .get_dictionary_mut(pdf.paginas[0])
+        .unwrap()
+        .set("Contents", conteudo_id);
+    let fonte = FonteMemoria::nova("checksum-flate-invalido-sintetico.pdf", pdf.bytes());
+    recusa(
+        analisar(&fonte, &fonte.pedido(), &ControleDocumento::novo()),
+        EstadoDocumento::Falhou,
+    );
+}
+
+#[test]
+fn operando_textual_invalido_nao_e_ignorado_publicando_prefixo() {
+    let mut operacoes = operacoes_texto(b"SINTETICO prefixo nao pode sair");
+    operacoes.push(Operation::new("BT", vec![]));
+    operacoes.push(Operation::new("Tf", vec!["F1".into(), 12.into()]));
+    operacoes.push(Operation::new("Tj", vec![123.into()]));
+    operacoes.push(Operation::new("ET", vec![]));
+    let fonte = FonteMemoria::nova(
+        "tj-invalido-sintetico.pdf",
+        PdfSintetico::novo(
+            vec![vec![Content {
+                operations: operacoes,
+            }
+            .encode()
+            .unwrap()]],
+            false,
+        )
+        .bytes(),
+    );
+    recusa(
+        analisar(&fonte, &fonte.pedido(), &ControleDocumento::novo()),
+        EstadoDocumento::Falhou,
+    );
+}
+
+#[test]
+fn objetos_comprimidos_objstm_recusam_documento_sem_falso_sucesso() {
+    let mut pdf = PdfSintetico::novo(vec![vec![conteudo(b"SINTETICO ObjStm")]], true);
+    let mut bytes = Vec::new();
+    pdf.documento.save_modern(&mut bytes).unwrap();
+    assert!(bytes.windows(6).any(|janela| janela == b"ObjStm"));
+    let fonte = FonteMemoria::nova("objstm-sintetico.pdf", bytes);
+    recusa(
+        analisar(&fonte, &fonte.pedido(), &ControleDocumento::novo()),
+        EstadoDocumento::SemSuporte,
+    );
+}
+
+#[test]
+fn streams_sem_suporte_nao_aceitam_resultado_leniente_da_biblioteca() {
+    let mut pdf = PdfSintetico::novo(vec![vec![]], false);
+    let conteudo_id = pdf.documento.add_object(Stream::new(
+        dictionary! { "Filter" => "RunLengthDecode" },
+        vec![128],
+    ));
+    pdf.documento
+        .get_dictionary_mut(pdf.paginas[0])
+        .unwrap()
+        .set("Contents", conteudo_id);
+    let fonte = FonteMemoria::nova("runlength-sem-suporte-sintetico.pdf", pdf.bytes());
+    recusa(
+        analisar(&fonte, &fonte.pedido(), &ControleDocumento::novo()),
+        EstadoDocumento::SemSuporte,
+    );
+}
+
+#[test]
+fn glifo_sem_mapeamento_nao_e_descartado_silenciosamente() {
+    for codificacao in ["StandardEncoding", "WinAnsiEncoding", "MacRomanEncoding"] {
+        let mut pdf =
+            PdfSintetico::novo(vec![vec![conteudo(b"SINTETICO prefixo \0 final")]], false);
+        pdf.documento
+            .get_dictionary_mut(pdf.fonte_id)
+            .unwrap()
+            .set("Encoding", codificacao);
+        let fonte = FonteMemoria::nova("glifo-sem-mapeamento-sintetico.pdf", pdf.bytes());
+        recusa(
+            analisar(&fonte, &fonte.pedido(), &ControleDocumento::novo()),
+            EstadoDocumento::SemSuporte,
+        );
+    }
+}
+
+#[test]
+fn imagem_inline_recusa_pagina_inteira_sem_prefixo_nem_texto_dos_bytes_opacos() {
+    for corrompida in [false, true] {
+        let bytes_conteudo = conteudo_com_imagem_inline(corrompida);
+        let operacoes = Content::decode_strict(&bytes_conteudo).unwrap();
+        let imagem = operacoes
+            .operations
+            .iter()
+            .find(|operacao| operacao.operator == "BI")
+            .expect("fixture deve exercer o operador BI real do parser");
+        if corrompida {
+            assert!(imagem.operands.is_empty(), "fixture exerce o fallback EI");
+            assert!(operacoes.operations.iter().any(|operacao| {
+                operacao.operator == "Tj"
+                    && operacao.operands.first().is_some_and(|objeto| {
+                        objeto.as_str().ok()
+                            == Some(
+                                b"SINTETICO falso texto localizado dentro dos bytes da imagem"
+                                    .as_slice(),
+                            )
+                    })
+            }));
+        } else {
+            assert!(matches!(imagem.operands.first(), Some(Object::Stream(_))));
+        }
+        let fonte = FonteMemoria::nova(
+            "inline-imagem-sintetica.pdf",
+            PdfSintetico::novo(vec![vec![bytes_conteudo]], false).bytes(),
+        );
+        let original = fonte.bytes.to_vec();
+        let pedido = fonte.pedido();
+        recusa(
+            analisar(&fonte, &pedido, &ControleDocumento::novo()),
+            EstadoDocumento::SemSuporte,
+        );
+        assert_eq!(&*fonte.bytes, original);
+        assert_eq!(Some(hash(&fonte.bytes)), pedido.sha256);
+    }
+}
+
+#[test]
+fn recusa_de_inline_importada_preserva_origem_mtime_inventario_e_auditoria() {
+    let raiz = tempfile::tempdir().unwrap();
+    let origem = raiz.path().join("Extracao-INLINE-PDF-SINTETICA");
+    comum::extracao(&origem);
+    let caminho = "imagem-inline-corrompida-sintetica.pdf";
+    fs::write(
+        origem.join(caminho),
+        PdfSintetico::novo(vec![vec![conteudo_com_imagem_inline(true)]], false).bytes(),
+    )
+    .unwrap();
+    let origem_antes = comum::retrato(&origem);
+    let (banco, dispositivo) = comum::caso(raiz.path());
+    let extracao = comum::importar(&banco, &dispositivo, &origem);
+    assert_eq!(extracao.status, "concluida", "{:?}", extracao.erro);
+    let inventario = banco.arquivos(extracao.id, None, None, 0, 500).unwrap();
+    let inventario_antes = serde_json::to_value(&inventario).unwrap();
+    let auditoria_antes = serde_json::to_value(banco.auditoria(500).unwrap()).unwrap();
+    let cadeia_antes = banco.verificar_auditoria().unwrap();
+    let arquivo = inventario
+        .itens
+        .into_iter()
+        .find(|arquivo| arquivo.caminho == caminho)
+        .unwrap();
+    let pedido = PedidoDocumento {
+        caso_id: banco.caso().id,
+        extracao_id: extracao.id,
+        arquivo_id: arquivo.id,
+        caminho: CaminhoFonte::novo(&arquivo.caminho).unwrap(),
+        sha256: arquivo.sha256,
+        tamanho: arquivo.tamanho.try_into().unwrap(),
+        modo: ModoDocumento::Automatico,
+    };
+    let fonte = PastaSomenteLeitura::abrir(&origem).unwrap();
+    recusa(
+        analisar(&fonte, &pedido, &ControleDocumento::novo()),
+        EstadoDocumento::SemSuporte,
+    );
+    assert_eq!(comum::retrato(&origem), origem_antes);
+    assert_eq!(
+        serde_json::to_value(banco.arquivos(extracao.id, None, None, 0, 500).unwrap()).unwrap(),
+        inventario_antes,
+    );
+    assert_eq!(
+        serde_json::to_value(banco.auditoria(500).unwrap()).unwrap(),
+        auditoria_antes
+    );
+    let cadeia_depois = banco.verificar_auditoria().unwrap();
+    assert_eq!(cadeia_depois.registros, cadeia_antes.registros);
+    assert_eq!(cadeia_depois.hash_final, cadeia_antes.hash_final);
+    assert!(banco.registros_que_nao_conferem(None).unwrap().is_empty());
 }
 
 #[test]

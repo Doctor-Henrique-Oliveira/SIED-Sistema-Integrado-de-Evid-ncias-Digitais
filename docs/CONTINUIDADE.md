@@ -649,8 +649,11 @@ Em seguida foi implementada a primeira entrega visível: **leitor UTF-8 no detal
 com leitura sob demanda, origem conferida, proveniência e proteção contra troca de caso/seleção.
 O comando desktop resolve os metadados no inventário do caso; não aceita caminhos/hashes do frontend.
 Ver [checkpoint do leitor](checkpoints/2026-10-02-ai1-leitor-documental.md).
-AI-1 **parcialmente implementada, ainda não concluída**; validação desktop/Windows pendente,
-PDF/OCR/entidades futuros. Não fazer merge automaticamente.
+Próximo incremento implementado: **PDF nativo por página em Arquivos**, com contagem
+real e hash do texto derivado separado da origem. Suporte inicial conservador, sem OCR.
+Ver [checkpoint PDF](checkpoints/2026-10-02-ai1-pdf-nativo.md) para formatos, limites e
+validações efetivamente realizadas. AI-1 **parcialmente implementada, ainda não concluída**;
+validação desktop/Windows, OCR/entidades/indexação documental pendentes. Não fazer merge automaticamente.
 
 ---
 

@@ -14,6 +14,7 @@
 //! isolamento de processo para uma garantia rígida de disponibilidade.
 
 use super::{ControleDocumento, EstadoDocumento, ResultadoDocumento, TAMANHO_MAXIMO};
+use flate2::{Decompress, FlushDecompress, Status};
 use lopdf::content::{Content, Operation};
 use lopdf::{
     DecompressError, Dictionary, Document, Encoding, Error, LoadOptions, Object, ObjectId,
@@ -61,6 +62,20 @@ pub(super) fn extrair(
     )
     .map_err(erro_motor)?;
     verificar_controle(controle, inicio)?;
+
+    if !matches!(
+        documento.reference_table.cross_reference_type,
+        lopdf::xref::XrefType::CrossReferenceTable
+    ) {
+        return Err(sem_suporte(
+            "O PDF utiliza xref streams, ainda sem validação estrita neste motor. São admitidas tabelas xref clássicas.",
+        ));
+    }
+    for objeto in documento.objects.values() {
+        if let Object::Stream(stream) = objeto {
+            validar_filtros(&stream.dict)?;
+        }
+    }
 
     if documento.is_encrypted() || documento.encryption_state.is_some() {
         return Err(sem_suporte(
@@ -158,11 +173,6 @@ pub(super) fn extrair(
     if texto.len() as u64 > TAMANHO_MAXIMO {
         return Err(limite(
             "O texto derivado da página excede o limite de 2 MiB.",
-        ));
-    }
-    if texto.trim().is_empty() {
-        return Err(sem_suporte(
-            "A página não contém texto nativo extraível por este motor. OCR não está disponível.",
         ));
     }
     Ok((texto, total))
@@ -313,12 +323,15 @@ fn fontes_da_pagina(
             for (nome, objeto) in dicionario.iter() {
                 let fonte = resolver_dicionario(documento, objeto)?;
                 // Coincide com a resolução oficial: a fonte mais próxima vence.
-                if !fontes.contains_key(nome) {
+                let limite_atingido = fontes.len() >= MAXIMO_FONTES;
+                if let std::collections::btree_map::Entry::Vacant(entrada) =
+                    fontes.entry(nome.clone())
+                {
                     validar_fonte(fonte)?;
-                    if fontes.len() >= MAXIMO_FONTES {
+                    if limite_atingido {
                         return Err(limite("A página do PDF excede o limite de 64 fontes."));
                     }
-                    fontes.insert(nome.clone(), fonte);
+                    entrada.insert(fonte);
                 }
             }
         }
@@ -358,9 +371,37 @@ fn validar_fonte(fonte: &Dictionary) -> Result<(), ResultadoDocumento> {
         || !base_admitida
         || !codificacao
         || fonte.has(b"ToUnicode")
+        || fonte.has(b"FontDescriptor")
     {
         return Err(sem_suporte(
             "A página usa fontes ou mapeamentos ainda sem suporte. Este motor admite Type1 Latin Base14 com StandardEncoding, WinAnsiEncoding ou MacRomanEncoding, sem ToUnicode.",
+        ));
+    }
+    Ok(())
+}
+
+fn validar_filtros(dicionario: &Dictionary) -> Result<(), ResultadoDocumento> {
+    match dicionario.get(b"Filter") {
+        Err(Error::DictKey(_)) => {}
+        Ok(Object::Name(_)) => {}
+        Ok(Object::Array(filtros))
+            if !filtros.is_empty()
+                && filtros.len() <= 4
+                && filtros
+                    .iter()
+                    .all(|filtro| matches!(filtro, Object::Name(_))) => {}
+        Ok(Object::Array(filtros)) if filtros.len() > 4 => {
+            return Err(limite(
+                "O PDF excede o limite de quatro filtros por stream.",
+            ));
+        }
+        _ => return Err(falhou("O PDF possui uma declaração de filtros inválida.")),
+    }
+    // Preditores/parametrizações ainda não têm envelope estrito definido aqui.
+    // Evita reinterpretar parâmetros inválidos como ausência de parâmetros.
+    if dicionario.has(b"DecodeParms") {
+        return Err(sem_suporte(
+            "O PDF utiliza parâmetros de decodificação de streams ainda sem suporte.",
         ));
     }
     Ok(())
@@ -403,14 +444,62 @@ fn conteudo_estrito(
             .get_object(id)
             .and_then(Object::as_stream)
             .map_err(erro_motor)?;
-        let bytes = stream
-            .decompressed_content_with_limit(restante - 1)
-            .map_err(erro_motor)?;
+        let bytes = descomprimir_conteudo_estrito(stream, restante - 1)?;
         verificar_controle(controle, inicio)?;
         conteudo.extend_from_slice(&bytes);
         conteudo.push(b'\n');
     }
     Ok(conteudo)
+}
+
+fn descomprimir_conteudo_estrito(
+    stream: &lopdf::Stream,
+    limite_bytes: usize,
+) -> Result<Vec<u8>, ResultadoDocumento> {
+    validar_filtros(&stream.dict)?;
+    let filtro = match stream.dict.get(b"Filter") {
+        Err(Error::DictKey(_)) => None,
+        Ok(Object::Name(nome)) => Some(nome.as_slice()),
+        Ok(Object::Array(filtros)) if filtros.len() == 1 => {
+            Some(filtros[0].as_name().map_err(erro_motor)?)
+        }
+        Ok(Object::Array(_)) => {
+            return Err(sem_suporte(
+                "O conteúdo da página usa encadeamento de filtros, ainda sem suporte estrito.",
+            ))
+        }
+        _ => return Err(falhou("O PDF possui uma declaração de filtros inválida.")),
+    };
+    match filtro {
+        None => {
+            if stream.content.len() > limite_bytes {
+                return Err(limite("O conteúdo descomprimido da página excede 256 KiB."));
+            }
+            Ok(stream.content.clone())
+        }
+        Some(b"FlateDecode") => {
+            // Codec publicado, não parser PDF: exige StreamEnd/checksum válidos
+            // e consumo integral, sem o raw-deflate/output-parcial fallback do
+            // lopdf. Buffer fixo inclui só um sentinela para detectar o excesso.
+            let mut decoder = Decompress::new(true);
+            let mut bytes = vec![0_u8; limite_bytes + 1];
+            let status = decoder.decompress(&stream.content, &mut bytes, FlushDecompress::Finish);
+            if decoder.total_out() > limite_bytes as u64 {
+                return Err(limite("O conteúdo descomprimido da página excede 256 KiB."));
+            }
+            let status = status.map_err(|_| falhou(
+                "O stream FlateDecode do PDF é inválido. Nenhum texto parcial foi publicado.",
+            ))?;
+            if status != Status::StreamEnd || decoder.total_in() != stream.content.len() as u64 {
+                return Err(falhou("O stream FlateDecode do PDF é incompleto ou inconsistente. Nenhum texto parcial foi publicado."));
+            }
+            bytes.truncate(decoder.total_out() as usize);
+            Ok(bytes)
+        }
+        Some(_) => Err(sem_suporte(
+            "O conteúdo da página usa um filtro ainda sem suporte estrito. São admitidos somente conteúdo sem filtro ou FlateDecode.",
+        )),
+    }
 }
 
 fn validar_operacoes(
@@ -427,6 +516,14 @@ fn validar_operacoes(
     for operacao in operacoes {
         verificar_controle(controle, inicio)?;
         match operacao.operator.as_str() {
+            "BI" => {
+                // O parser de conteúdo também recupera inline images lenientes
+                // em decode_strict. Recusar impede que um falso delimitador EI
+                // faça bytes opacos serem interpretados como texto documental.
+                return Err(sem_suporte(
+                    "A página contém imagem inline, ainda sem suporte neste motor. Nenhum texto parcial foi publicado.",
+                ));
+            }
             "q" => {
                 if estados_graficos.len() >= MAXIMO_PROFUNDIDADE {
                     return Err(limite("A página excede o limite de estados gráficos."));
@@ -516,7 +613,8 @@ fn validar_operacoes(
 }
 
 fn numero(objeto: &Object) -> bool {
-    matches!(objeto, Object::Integer(_) | Object::Real(_))
+    matches!(objeto, Object::Integer(_))
+        || matches!(objeto, Object::Real(valor) if valor.is_finite())
 }
 
 fn validar_texto(operacao: &Operation, encoding: &Encoding<'_>) -> Result<(), ResultadoDocumento> {

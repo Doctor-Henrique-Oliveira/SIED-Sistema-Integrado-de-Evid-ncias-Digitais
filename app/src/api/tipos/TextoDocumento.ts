@@ -7,9 +7,10 @@ import type { ExtracaoId } from "./ExtracaoId";
  * Texto derivado com a identidade completa da origem e do motor.
  *
  * `sha256_texto` considera somente os bytes de `texto`: horário, identidade e
- * demais metadados não participam desse hash. Neste motor os bytes do texto são
- * idênticos aos da origem verificada, portanto os dois hashes coincidem.
- * Texto nativo não informa página, região ou confiança de OCR: `pagina` é
- * sempre `None` e não há campos de região ou confiança neste contrato.
+ * demais metadados não participam desse hash. No motor UTF-8 os bytes são
+ * idênticos à origem. No PDF, este é o hash do texto DERIVADO da página, não
+ * o hash do PDF nem uma garantia de ordem visual ou reprodução do layout.
+ * Somente PDF informa página e contagem observadas; texto plano usa `None`.
+ * Não há região nem confiança de OCR neste contrato.
  */
-export type TextoDocumento = { caso_id: CasoId, extracao_id: ExtracaoId, arquivo_id: number, caminho: CaminhoFonte, sha256: string, motor_id: string, motor_versao: string, executado_em: string, sha256_texto: string, texto: string, pagina: number | null, };
+export type TextoDocumento = { caso_id: CasoId, extracao_id: ExtracaoId, arquivo_id: number, caminho: CaminhoFonte, sha256: string, motor_id: string, motor_versao: string, executado_em: string, sha256_texto: string, texto: string, pagina: number | null, total_paginas: number | null, };
