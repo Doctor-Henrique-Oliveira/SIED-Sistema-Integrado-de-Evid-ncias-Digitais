@@ -10,6 +10,8 @@ Após autorizações posteriores do responsável no chat, foi iniciado um recort
 em branch dedicada e solicitada a continuidade das pendências sem aguardar CI.
 Isso não equivale a entrega validada, aprovação técnica de modelos ou liberação pericial.
 Estado efetivo e pendências: [checkpoint AI-0](checkpoints/2026-10-02-ai0-busca-local.md).
+Missão atual: validar somente a AI-0, sem iniciar AI-1 e sem merge; resultados e
+dependências estão no [checkpoint de validação](checkpoints/2026-10-02-ai0-validacao.md).
 O grafo é experimental; exemplos de telas, consultas e categorias são conceituais, sem dados
 reais de caso e sem resultados produzidos pelo SIED nesta missão.
 

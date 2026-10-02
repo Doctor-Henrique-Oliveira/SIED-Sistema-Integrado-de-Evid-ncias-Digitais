@@ -10,6 +10,7 @@ use rusqlite::{functions::FunctionFlags, params, Connection, OpenFlags};
 use sied_armazenamento::busca::FiltroBusca;
 use sied_armazenamento::descoberta::{self, ModoDescoberta, PedidoDescoberta, TipoIndicador};
 use sied_armazenamento::{normalizar_busca, so_digitos, BancoCaso};
+use std::collections::BTreeSet;
 use std::fs;
 
 const TEXTOS: &[&str] = &[
@@ -517,4 +518,163 @@ fn limites_recusam_consultas_nao_limitadas() {
     p.filtro.de_ms = Some(10);
     p.filtro.ate_ms = Some(9);
     assert!(descoberta::buscar(&conn, &p, 0, 20).is_err());
+}
+
+// Ground truth limitado à gramática conservadora documentada da AI-0, não a
+// identidades nem à validade externa desses dados. Nenhum endereço é consultado.
+// Domínios .invalid e IPs de documentação são strings exclusivamente SINTÉTICAS.
+const CORPUS_INDICADORES: &[(TipoIndicador, &str, &[&str])] = &[
+    (
+        TipoIndicador::Ip,
+        "192.0.2.45 [2001:db8::45]",
+        &["192.0.2.45", "2001:db8::45"],
+    ),
+    (TipoIndicador::Ip, "999.1.2.3 192.0.2.256 2001:db8::zz", &[]),
+    (
+        TipoIndicador::Email,
+        "teste+laboratorio@example.invalid analista.teste@sub.example.invalid",
+        &["teste+laboratorio@example.invalid", "analista.teste@sub.example.invalid"],
+    ),
+    (
+        TipoIndicador::Email,
+        "nome..teste@example.invalid err@@example.invalid nome@-example.invalid",
+        &[],
+    ),
+    (
+        TipoIndicador::Url,
+        "http://192.0.2.5:8080/a https://example.invalid/arquivo?q=1",
+        &["http://192.0.2.5:8080/a", "https://example.invalid/arquivo?q=1"],
+    ),
+    (
+        TipoIndicador::Url,
+        "javascript:alert(1) ftp://example.invalid/a https://example.invalid:abc/a https://user@example.invalid/a",
+        &[],
+    ),
+    (
+        TipoIndicador::Dominio,
+        "example.invalid sub.example.invalid",
+        &["example.invalid", "sub.example.invalid"],
+    ),
+    (
+        TipoIndicador::Dominio,
+        "-example.invalid example-.invalid example..invalid 192.0.2.1",
+        &[],
+    ),
+    (
+        TipoIndicador::Hash,
+        "0123456789abcdef0123456789abcdef ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789",
+        &["0123456789abcdef0123456789abcdef", "ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789"],
+    ),
+    (
+        TipoIndicador::Hash,
+        "0123456789abcdef0123456789abcde 0123456789abcdef0123456789abcdef0 0123456789abcdef0123456789abcdeg",
+        &[],
+    ),
+    (
+        TipoIndicador::Telefone,
+        "+55-11-90000-0045\n11900000045",
+        &["+55-11-90000-0045", "11900000045"],
+    ),
+    (TipoIndicador::Telefone, "1234567\n1234567890123456\n12.345.678", &[]),
+    (
+        TipoIndicador::Coordenada,
+        "📍 -23.55052, -46.633308; 0.0, 180.0",
+        &["-23.55052, -46.633308", "0.0, 180.0"],
+    ),
+    (
+        TipoIndicador::Coordenada,
+        "91.0, 0.0; -23.0, 181.0; 12, 21; abc12.3, 21.4; 12.3, 21.4e400",
+        &[],
+    ),
+];
+
+#[test]
+fn corpus_rotulado_confere_conjuntos_exatos_das_sete_classes_sem_extrapolar_recall() {
+    let raiz = tempfile::tempdir().unwrap();
+    let origem = raiz.path().join("Extracao-SINTETICA-GROUND-TRUTH-AI0");
+    extracao(&origem);
+    fs::create_dir_all(origem.join("sms")).unwrap();
+    let mut fonte = Connection::open(origem.join("sms/mmssms.db")).unwrap();
+    fonte
+        .execute_batch(
+            "CREATE TABLE sms(_id INTEGER PRIMARY KEY, thread_id, address, date, type, body);",
+        )
+        .unwrap();
+    let tx = fonte.transaction().unwrap();
+    for (indice, (_, texto, _)) in CORPUS_INDICADORES.iter().enumerate() {
+        // Rótulos e fonte são construídos ANTES da importação. O remetente
+        // neutro impede que telefones da fixture virem positivos por outro campo.
+        tx.execute(
+            "INSERT INTO sms VALUES (?1, 1, 'REMETENTE-SINTETICO', 1767225600000, 1, ?2)",
+            params![
+                indice as i64 + 1,
+                format!("GT-SINTETICO-{indice:02}-FIM {texto}")
+            ],
+        )
+        .unwrap();
+    }
+    tx.commit().unwrap();
+    drop(fonte);
+    let origem_antes = retrato(&origem);
+    let (banco, dispositivo) = caso(raiz.path());
+    let x = importar(&banco, &dispositivo, &origem);
+    assert_eq!(x.status, "concluida", "{:?}", x.erro);
+    let conn = Connection::open_with_flags(
+        banco.pasta().join("caso.sied.db"),
+        OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .unwrap();
+    let auditoria_antes = banco.verificar_auditoria().unwrap();
+
+    for (indice, (tipo, _, esperados)) in CORPUS_INDICADORES.iter().enumerate() {
+        let rotulo = format!("GT-SINTETICO-{indice:02}-FIM");
+        let mut p = pedido(ModoDescoberta::Indicadores, &rotulo);
+        p.indicador = Some(*tipo);
+        let resultado = descoberta::buscar(&conn, &p, 0, 20).unwrap();
+        let total_esperado = if esperados.is_empty() { 0_i64 } else { 1 };
+        assert_eq!(
+            resultado.artefatos.total, total_esperado,
+            "{rotulo}: {tipo:?}"
+        );
+        assert_eq!(resultado.artefatos.itens.len() as i64, total_esperado);
+        assert_eq!(resultado.arquivos.total, 0);
+        let mut obtidos = BTreeSet::new();
+        for item in &resultado.artefatos.itens {
+            assert!(item
+                .achado
+                .artefato
+                .conteudo
+                .as_ref()
+                .unwrap()
+                .starts_with(&rotulo));
+            assert!(banco
+                .conferir_registro(item.achado.artefato.id)
+                .unwrap()
+                .confere());
+            for indicador in &item.indicadores {
+                assert_eq!(indicador.tipo, *tipo);
+                assert_eq!(indicador.campo, "conteudo");
+                assert!(
+                    obtidos.insert(indicador.valor.as_str()),
+                    "indicador duplicado"
+                );
+            }
+        }
+        let esperados: BTreeSet<_> = esperados.iter().copied().collect();
+        let falsos_positivos: Vec<_> = obtidos.difference(&esperados).copied().collect();
+        let falsos_negativos: Vec<_> = esperados.difference(&obtidos).copied().collect();
+        assert!(
+            falsos_positivos.is_empty(),
+            "{rotulo}: FP={falsos_positivos:?}"
+        );
+        assert!(
+            falsos_negativos.is_empty(),
+            "{rotulo}: FN={falsos_negativos:?}"
+        );
+    }
+    let auditoria_depois = banco.verificar_auditoria().unwrap();
+    assert_eq!(auditoria_depois.registros, auditoria_antes.registros);
+    assert_eq!(auditoria_depois.hash_final, auditoria_antes.hash_final);
+    assert_eq!(retrato(&origem), origem_antes);
+    assert!(banco.conferir_derivados().unwrap().consistente);
 }

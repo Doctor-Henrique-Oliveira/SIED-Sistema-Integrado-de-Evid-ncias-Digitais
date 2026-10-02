@@ -8,12 +8,27 @@
 //! SIED_VOLUME=200000 cargo test --release -p sied-armazenamento --test desempenho \
 //!     -- --ignored --nocapture
 //! ```
+//!
+//! AI-0 isolada (sem Tauri/Typst), sempre em TempDir e sem `SIED_MANTER`:
+//! ```text
+//! SIED_VOLUME_AI0=50000 SIED_REPETICOES_AI0=3 cargo test --release \
+//!     -p sied-armazenamento --test desempenho medir_ai0_com_volume \
+//!     -- --ignored --exact --nocapture
+//! ```
+//! Os tempos são observações, não SLO/recall de dados reais. O cache do SO não
+//! é controlado. Payload JSON não é uma medição de RSS nem de toda a memória.
+
+#[path = "../../../testes/rust/caso_sintetico.rs"]
+mod comum;
 
 use rusqlite::Connection;
 use sied_armazenamento::busca::FiltroBusca;
 use sied_armazenamento::conversas::FiltroConversas;
+use sied_armazenamento::descoberta::{
+    self, ModoDescoberta, PedidoDescoberta, ResultadoDescoberta, TipoIndicador,
+};
 use sied_armazenamento::evidencias::NovaEvidencia;
-use sied_armazenamento::{BancoCaso, Sessao};
+use sied_armazenamento::{BancoCaso, ErroArmazenamento, Resultado, Sessao};
 use sied_dominio::{NovoCaso, NovoDispositivo, SistemaOperacional};
 use sied_ingestao::fonte::pasta::PastaSomenteLeitura;
 use sied_ingestao::importador::Importador;
@@ -272,4 +287,215 @@ fn medir_desempenho_com_volume() {
         let _ = raiz.into_path();
         println!("caso mantido em {}", pasta.display());
     }
+}
+
+fn observar_ai0(
+    nome: &str,
+    total_esperado: i64,
+    repeticoes: usize,
+    mut consultar: impl FnMut() -> Resultado<ResultadoDescoberta>,
+) {
+    let mut tempos = Vec::new();
+    let mut payload_maximo = 0;
+    let mut limites = 0;
+    for _ in 0..repeticoes {
+        let inicio = Instant::now();
+        let resultado = consultar();
+        let tempo = inicio.elapsed();
+        match resultado {
+            Ok(resultado) => {
+                assert_eq!(resultado.artefatos.total, total_esperado, "{nome}");
+                assert_eq!(
+                    resultado.artefatos.itens.len() as i64,
+                    total_esperado.min(50)
+                );
+                assert_eq!(resultado.arquivos.total, 0);
+                let bytes = serde_json::to_vec(&resultado).unwrap().len();
+                payload_maximo = payload_maximo.max(bytes);
+                tempos.push(tempo);
+            }
+            Err(ErroArmazenamento::DescobertaLimite) => {
+                limites += 1;
+                println!(
+                    "{nome}: prazo cooperativo atingido em {:.1} ms; sem página parcial",
+                    tempo.as_secs_f64() * 1000.0
+                );
+            }
+            Err(erro) => panic!("{nome}: falha inesperada na medição: {erro}"),
+        }
+    }
+    tempos.sort();
+    if !tempos.is_empty() {
+        let p50 = tempos[(tempos.len() - 1) / 2].as_secs_f64() * 1000.0;
+        let p95 = tempos[(tempos.len() * 95).div_ceil(100) - 1].as_secs_f64() * 1000.0;
+        println!("{nome:<38} concluídas={}/{} p50={p50:.1} ms p95={p95:.1} ms payload_max={payload_maximo} bytes", tempos.len(), repeticoes);
+    }
+    if limites > 0 {
+        println!("MEDIÇÃO INCOMPLETA {nome}: {limites} consulta(s) atingiram o prazo; não extrapolar esses tempos como desempenho aprovado.");
+    }
+    assert_eq!(
+        limites, 0,
+        "{nome}: medição incompleta não aprova a validação"
+    );
+}
+
+#[test]
+#[ignore = "medição AI-0 sintética: release, --ignored --exact --nocapture"]
+fn medir_ai0_com_volume() {
+    let total: i64 = std::env::var("SIED_VOLUME_AI0")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(50_000);
+    let repeticoes: usize = std::env::var("SIED_REPETICOES_AI0")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(3);
+    assert!(
+        (1..=1_000_000).contains(&total),
+        "volume AI-0 deve ficar entre 1 e 1.000.000"
+    );
+    assert!(
+        (1..=20).contains(&repeticoes),
+        "repetições AI-0 devem ficar entre 1 e 20"
+    );
+    let raiz = tempfile::tempdir().unwrap();
+    let origem = raiz.path().join("Extracao-SINTETICA-AI0-VOLUME");
+    medir(
+        "gerar SMS SINTÉTICOS usando gerador de volume existente",
+        || extracao(&origem, total),
+    );
+    // Sete sementes explícitas, construídas na fonte ANTES da importação. O
+    // remetente neutro não adiciona indicadores de telefone nesses sete registros.
+    let sementes = [
+        "192.0.2.1 [2001:db8::1]",
+        "teste@example.invalid",
+        "https://example.invalid/amostra",
+        "sub.example.invalid",
+        "0123456789abcdef0123456789abcdef",
+        "+5511900000045",
+        "-23.55052, -46.633308",
+    ];
+    let fonte = Connection::open(origem.join("telefonia/mmssms.db")).unwrap();
+    for (indice, semente) in sementes.iter().enumerate() {
+        fonte
+            .execute(
+                "INSERT INTO sms VALUES (?1, 99999999, 'REMETENTE-SINTETICO', ?2, 1, ?3)",
+                rusqlite::params![
+                    total + indice as i64 + 1,
+                    BASE_MS + (total + indice as i64 + 1) * 30_000,
+                    format!("AI0-MARCADOR-SINTETICO-{indice}-FIM {semente}")
+                ],
+            )
+            .unwrap();
+    }
+    drop(fonte);
+    let origem_antes = comum::retrato(&origem);
+    let (mut banco, dispositivo) = comum::caso(raiz.path());
+    let importada = medir("importar volume AI-0 pelo pipeline normal", || {
+        comum::importar(&banco, &dispositivo, &origem)
+    });
+    assert_eq!(importada.status, "concluida", "{:?}", importada.erro);
+    assert_eq!(
+        importada.total_artefatos,
+        Some(total + sementes.len() as i64)
+    );
+    let conn = Connection::open_with_flags(
+        banco.pasta().join("caso.sied.db"),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .unwrap();
+    let auditoria_antes = banco.verificar_auditoria().unwrap();
+    println!("--- AI-0: {total} SMS + 7 sementes SINTÉTICAS; {repeticoes} repetições; cache do SO não controlado ---");
+    let literal = PedidoDescoberta {
+        filtro: FiltroBusca {
+            texto: "Mensagem sintética".into(),
+            app: Some("sms".into()),
+            tipo: Some("mensagem".into()),
+            ..Default::default()
+        },
+        modo: ModoDescoberta::Literal,
+        termos: vec![],
+        indicador: None,
+    };
+    observar_ai0(
+        "literal / página inicial",
+        total - total / 1000,
+        repeticoes,
+        || descoberta::buscar(&conn, &literal, 0, 50),
+    );
+    let expansao = PedidoDescoberta {
+        filtro: FiltroBusca {
+            texto: "ligação".into(),
+            ..literal.filtro.clone()
+        },
+        modo: ModoDescoberta::Expansao,
+        termos: vec!["marcador".into()],
+        indicador: None,
+    };
+    let esperados_expansao = total / 1000 + sementes.len() as i64;
+    observar_ai0(
+        "expansão / união sem duplicação",
+        esperados_expansao,
+        repeticoes,
+        || descoberta::buscar(&conn, &expansao, 0, 50),
+    );
+    for (tipo, esperado) in [
+        (TipoIndicador::Ip, 1),
+        (TipoIndicador::Email, 1),
+        (TipoIndicador::Url, 1),
+        (TipoIndicador::Dominio, 2),
+        (TipoIndicador::Hash, 1),
+        // O hash sintático também contém uma sequência numérica reconhecida
+        // como candidata a telefone. Candidato não prova identidade/validade.
+        (TipoIndicador::Telefone, total + 2),
+        (TipoIndicador::Coordenada, 1),
+    ] {
+        let pedido = PedidoDescoberta {
+            filtro: FiltroBusca {
+                texto: String::new(),
+                ..literal.filtro.clone()
+            },
+            modo: ModoDescoberta::Indicadores,
+            termos: vec![],
+            indicador: Some(tipo),
+        };
+        observar_ai0(
+            &format!("indicadores / {tipo:?}"),
+            esperado,
+            repeticoes,
+            || descoberta::buscar(&conn, &pedido, 0, 50),
+        );
+    }
+    // Motor de leitura não escreve auditoria. Snapshot tem uma transação distinta.
+    let auditoria_motor = banco.verificar_auditoria().unwrap();
+    assert_eq!(auditoria_motor.registros, auditoria_antes.registros);
+    assert_eq!(auditoria_motor.hash_final, auditoria_antes.hash_final);
+    let exec = medir("AI-0 snapshot / expansão + transação auditada", || {
+        banco.executar_descoberta(expansao, None)
+    });
+    match exec {
+        Ok(exec) => {
+            assert_eq!(exec.consulta.total_artefatos, esperados_expansao);
+            let offset = (esperados_expansao - 50).max(0);
+            observar_ai0("snapshot / última página", esperados_expansao, 1, || {
+                banco.paginar_descoberta(exec.consulta.id, offset, 50)
+            });
+            assert_eq!(
+                banco.verificar_auditoria().unwrap().registros,
+                auditoria_antes.registros + 1
+            );
+        }
+        Err(ErroArmazenamento::DescobertaLimite) => {
+            println!("MEDIÇÃO INCOMPLETA snapshot: prazo cooperativo; nenhum snapshot publicado.");
+            assert!(banco.listar_consultas_descoberta().unwrap().is_empty());
+            assert_eq!(
+                banco.verificar_auditoria().unwrap().registros,
+                auditoria_antes.registros
+            );
+            panic!("snapshot: medição incompleta não aprova a validação");
+        }
+        Err(erro) => panic!("snapshot: falha inesperada na medição: {erro}"),
+    }
+    assert_eq!(comum::retrato(&origem), origem_antes);
+    // Sem manter/copiar o caso, mesmo que SIED_MANTER esteja definido no ambiente.
 }

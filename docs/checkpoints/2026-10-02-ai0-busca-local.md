@@ -8,6 +8,8 @@ Após a missão documental, o responsável autorizou no chat iniciar a implement
 Este checkpoint não conclui a AI-0. Posteriormente, o responsável autorizou continuar
 as pendências do planejamento sem aguardar a CI. Desenvolvimento e liberação validada
 são estados distintos; as fases AI-1–AI-7 seguem não implementadas. Não há merge.
+Missão seguinte: validação exclusivamente da AI-0, sem iniciar AI-1. Resultado parcial,
+dependências e transporte dos contratos: [checkpoint de validação](2026-10-02-ai0-validacao.md).
 
 ## Recorte implementado, ainda não validado operacionalmente
 

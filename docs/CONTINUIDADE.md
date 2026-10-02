@@ -641,9 +641,12 @@ alteração da arquitetura vigente. Especificação: [ROADMAP-MDFML.md](ROADMAP-
 
 Autorizações posteriores no chat iniciaram um recorte AI-0 local em branch dedicada e
 solicitaram continuar as pendências sem aguardar CI, sem merge e sem motores de IA
-implementados. Contratos gerados, testes Rust, build e validação operacional
-continuam pendentes; não tratar a fase como concluída. Ver
-[checkpoint AI-0](checkpoints/2026-10-02-ai0-busca-local.md).
+implementados. A missão atual restringe-se à validação da AI-0; AI-1 não deve começar.
+Os 81 testes unitários do armazenamento passaram na CI de `21f43f1`, mas a cota de
+artifacts bloqueou as etapas seguintes. Contratos completos versionados, bateria Rust,
+build completo e validação operacional continuam pendentes; não tratar a fase como
+concluída. Ver [checkpoint AI-0](checkpoints/2026-10-02-ai0-busca-local.md) e
+[checkpoint de validação](checkpoints/2026-10-02-ai0-validacao.md).
 
 **Objetivo:** reduzir o tempo para encontrar, revisar, correlacionar e documentar artefatos
 relevantes em grandes extrações, com pesquisa local sobre mensagens, imagens, prints, OCR,
