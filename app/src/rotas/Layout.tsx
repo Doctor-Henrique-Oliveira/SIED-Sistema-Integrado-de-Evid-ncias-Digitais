@@ -44,9 +44,10 @@ export function Layout() {
   const erroNoBoot = useCallback((mensagem: string) => { setErro(mensagem); setFase("error"); }, []);
   const workspacePronto = useCallback(() => {
     if (!aberto) return;
-    setFase("workspace");
-    void prepararJanelaWorkspace();
-    if (pathname === "/") navegar(`/casos/${aberto.caso.id}`, { replace: true });
+    void prepararJanelaWorkspace().finally(() => {
+      setFase("workspace");
+      if (pathname === "/") navegar(`/casos/${aberto.caso.id}`, { replace: true });
+    });
   }, [aberto, navegar, pathname]);
 
   useEffect(() => {

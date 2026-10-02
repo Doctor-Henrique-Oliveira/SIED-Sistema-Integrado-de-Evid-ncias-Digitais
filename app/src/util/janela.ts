@@ -10,6 +10,7 @@ async function janela() {
 export async function prepararJanelaEntrada() {
   try {
     const { app, LogicalSize } = await janela();
+    await app.setDecorations(false);
     await app.unmaximize();
     await app.setResizable(false);
     await app.setMaximizable(false);
@@ -23,6 +24,7 @@ export async function prepararJanelaEntrada() {
 export async function prepararJanelaWorkspace() {
   try {
     const { app, currentMonitor, LogicalSize } = await janela();
+    await app.setDecorations(true);
     await app.setResizable(true);
     await app.setMaximizable(true);
     await app.setMinSize(new LogicalSize(960, 600));

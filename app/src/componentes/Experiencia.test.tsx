@@ -84,13 +84,13 @@ describe("experiência premium de entrada", () => {
     const pronto = vi.fn();
     render(<ForensicBootConsole aberto={aberto} info={info} aoPronto={pronto} aoErro={vi.fn()} />);
     expect(screen.getByText("Pasta de caso reconhecida")).toBeInTheDocument();
-    await screen.findByText("Trilha de auditoria conferida");
+    await screen.findByText("Trilha de auditoria conferida", {}, { timeout: 5000 });
     const linhas = screen.getAllByRole("listitem").map((item) => item.textContent);
     expect(linhas[0]).toContain("Pasta de caso reconhecida");
     expect(linhas[1]).toContain("Banco do caso aberto");
     expect(linhas[2]).toContain("Caso identificado");
     expect(linhas[3]).toContain("Trilha de auditoria conferida");
-    await waitFor(() => expect(pronto).toHaveBeenCalledOnce(), { timeout: 1800 });
+    await waitFor(() => expect(pronto).toHaveBeenCalledOnce(), { timeout: 6000 });
   });
 
   it("erro de abertura permanece visível e oferece recuperação", async () => {

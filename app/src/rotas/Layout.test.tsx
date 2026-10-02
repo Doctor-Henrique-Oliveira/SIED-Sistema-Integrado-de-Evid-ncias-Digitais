@@ -8,7 +8,7 @@ import { Layout } from "./Layout";
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: () => ({
-    unmaximize: vi.fn(), setResizable: vi.fn(), setMaximizable: vi.fn(), setSize: vi.fn(),
+    unmaximize: vi.fn(), setResizable: vi.fn(), setMaximizable: vi.fn(), setDecorations: vi.fn(), setSize: vi.fn(),
     setMinSize: vi.fn(), center: vi.fn(),
   }),
   currentMonitor: vi.fn().mockResolvedValue(null),
@@ -56,7 +56,7 @@ describe("máquina de estados da experiência", () => {
     montar();
     expect(await screen.findByRole("main", { name: "Preparando workspace do caso" }, { timeout: 3000 })).toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: "Navegação principal" })).not.toBeInTheDocument();
-    expect(await screen.findByRole("navigation", { name: "Navegação principal" }, { timeout: 2000 })).toBeInTheDocument();
+    expect(await screen.findByRole("navigation", { name: "Navegação principal" }, { timeout: 7000 })).toBeInTheDocument();
     expect(await screen.findByText("Dashboard carregado", {}, { timeout: 1000 })).toBeInTheDocument();
   });
 });

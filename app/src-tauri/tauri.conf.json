@@ -14,6 +14,8 @@
     "windows": [
       {
         "title": "SIED — Sistema Integrado de Evidências Digitais",
+        "decorations": false,
+        "backgroundColor": "#07090e",
         "width": 1020,
         "height": 680,
         "minWidth": 900,

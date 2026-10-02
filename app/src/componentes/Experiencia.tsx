@@ -42,7 +42,14 @@ export function SplashScreen({ aoTerminar, duracao = 3800 }: { aoTerminar: () =>
   );
 }
 
-type EventoBoot = { id: string; nivel: "step" | "ok" | "warn" | "error" | "metric"; rotulo: string; detalhe?: string };
+type EstadoBoot = "aguardando" | "processando" | "ok";
+type EventoBoot = {
+  id: string;
+  codigo: string;
+  rotulo: string;
+  detalhe?: string;
+  estado: EstadoBoot;
+};
 
 export function ForensicBootConsole({ aberto, info, aoPronto, aoErro }: {
   aberto: CasoAberto;
@@ -51,6 +58,7 @@ export function ForensicBootConsole({ aberto, info, aoPronto, aoErro }: {
   aoErro: (mensagem: string) => void;
 }) {
   const [auditoria, setAuditoria] = useState<VerificacaoAuditoria | null>(null);
+  const [etapaAtiva, setEtapaAtiva] = useState(0);
   const [pronto, setPronto] = useState(false);
 
   useEffect(() => {
@@ -62,49 +70,75 @@ export function ForensicBootConsole({ aberto, info, aoPronto, aoErro }: {
   }, [aberto.caso.id, aoErro]);
 
   useEffect(() => {
-    if (!auditoria) return;
-    const id = window.setTimeout(() => setPronto(true), 420);
+    if (etapaAtiva >= 3 && !auditoria) return;
+    if (etapaAtiva >= 5) {
+      if (!auditoria) return;
+      const id = window.setTimeout(() => setPronto(true), 720);
+      return () => window.clearTimeout(id);
+    }
+    const id = window.setTimeout(() => setEtapaAtiva((atual) => atual + 1), etapaAtiva === 0 ? 680 : 600);
     return () => window.clearTimeout(id);
-  }, [auditoria]);
+  }, [auditoria, etapaAtiva]);
   useEffect(() => {
     if (!pronto) return;
     const id = window.setTimeout(aoPronto, 520);
     return () => window.clearTimeout(id);
   }, [pronto, aoPronto]);
 
-  const eventos = useMemo<EventoBoot[]>(() => [
-    { id: "pasta", nivel: "ok", rotulo: "Pasta de caso reconhecida", detalhe: aberto.pasta },
-    { id: "banco", nivel: "ok", rotulo: "Banco do caso aberto" },
-    { id: "caso", nivel: "ok", rotulo: "Caso identificado", detalhe: identificacaoCaso(aberto.caso) },
-    ...(auditoria ? [{ id: "auditoria", nivel: "ok" as const, rotulo: "Trilha de auditoria conferida", detalhe: `${numero(auditoria.registros)} registros` }] :
-      [{ id: "auditoria", nivel: "step" as const, rotulo: "Conferindo trilha de auditoria" }]),
-    ...(info ? [{ id: "sessao", nivel: "ok" as const, rotulo: "Sessão local preparada", detalhe: `${info.usuario} @ ${info.maquina}` }] : []),
-    ...(pronto ? [{ id: "workspace", nivel: "ok" as const, rotulo: "Workspace pronto" }] : []),
-  ], [aberto, auditoria, info, pronto]);
+  const eventos = useMemo<EventoBoot[]>(() => {
+    const definirEstado = (indice: number, concluido = indice < etapaAtiva): EstadoBoot => {
+      if (indice < etapaAtiva && concluido) return "ok";
+      if (indice === etapaAtiva) return concluido ? "ok" : "processando";
+      return "aguardando";
+    };
+    return [
+      { id: "pasta", codigo: "DIRECTORY", rotulo: "Pasta de caso reconhecida", detalhe: aberto.pasta, estado: definirEstado(0) },
+      { id: "banco", codigo: "CASE DATABASE", rotulo: "Banco do caso aberto", detalhe: "caso.sied.db", estado: definirEstado(1) },
+      { id: "caso", codigo: "CASE IDENTITY", rotulo: "Caso identificado", detalhe: identificacaoCaso(aberto.caso), estado: definirEstado(2) },
+      { id: "auditoria", codigo: "AUDIT CHAIN", rotulo: auditoria ? "Trilha de auditoria conferida" : "Conferindo trilha de auditoria", detalhe: auditoria ? `${numero(auditoria.registros)} registros conferidos` : "Validação em andamento", estado: definirEstado(3, Boolean(auditoria)) },
+      { id: "sessao", codigo: "LOCAL SESSION", rotulo: "Sessão local preparada", detalhe: info ? `${info.usuario} @ ${info.maquina}` : "Estação local", estado: definirEstado(4, Boolean(info)) },
+      { id: "workspace", codigo: "WORKSPACE", rotulo: "Workspace pronto", detalhe: pronto ? "Ambiente operacional liberado" : "Preparando ambiente operacional", estado: definirEstado(5, pronto) },
+    ];
+  }, [aberto, auditoria, etapaAtiva, info, pronto]);
 
   return (
     <main className="boot-forense" aria-label="Preparando workspace do caso">
-      <section className="boot-forense__terminal">
-        <header className="boot-forense__cabecalho">
-          <span className="flex items-center gap-2"><Icone nome="terminal" className="size-4 text-ouro" /> SIED FORENSIC SESSION</span>
-          <span className="text-2xs text-texto-3">LOCAL · OFFLINE</span>
+      <section className="boot-forense__estacao">
+        <header className="boot-forense__cabecalho" data-tauri-drag-region>
+          <span className="boot-forense__marca"><Icone nome="terminal" className="size-4" /> SIED <b>/</b> FORENSIC BOOT</span>
+          <span className="boot-forense__ambiente"><i /> LOCAL · OFFLINE</span>
         </header>
-        <div className="boot-forense__contexto">
-          <p className="sobrelinha text-ouro!">Inicialização operacional</p>
-          <h1>{identificacaoCaso(aberto.caso)}</h1>
+        <div className="boot-forense__corpo">
+          <div className="boot-forense__introducao">
+            <p className="sobrelinha text-ouro!">Estação de análise digital</p>
+            <h1>Inicializando caso</h1>
+            <p className="boot-forense__caso">{identificacaoCaso(aberto.caso)}</p>
+            <p className="boot-forense__pasta" title={aberto.pasta}>{aberto.pasta}</p>
+          </div>
+          <div className="boot-forense__telemetria" aria-label="Estado da sessão">
+            <div><span>MODE</span><strong>LOCAL / OFFLINE</strong></div>
+            <div><span>CASE</span><strong>{aberto.caso.id.slice(0, 8).toUpperCase()}</strong></div>
+            <div><span>STATION</span><strong>{info?.maquina ?? "LOCAL"}</strong></div>
+          </div>
+          <ol className="boot-forense__eventos" role="log" aria-live="polite" aria-label="Etapas de inicialização">
+            {eventos.slice(0, Math.min(etapaAtiva + 1, eventos.length)).map((evento, indice) => (
+              <li key={evento.id} className={`boot-forense__evento boot-forense__evento--${evento.estado}`}>
+                <span className="boot-forense__trilho" aria-hidden><i /></span>
+                <span className="boot-forense__indice">{String(indice + 1).padStart(2, "0")}</span>
+                <span className="boot-forense__leitura">
+                  <span className="boot-forense__codigo">{evento.codigo}</span>
+                  <strong>{evento.rotulo}</strong>
+                  {evento.detalhe && <small title={evento.detalhe}>{evento.detalhe}</small>}
+                </span>
+                <span className="boot-forense__estado" aria-label={evento.estado}>{evento.estado === "ok" ? "OK" : evento.estado === "processando" ? "PROCESSING" : "—"}</span>
+              </li>
+            ))}
+          </ol>
         </div>
-        <ol className="boot-forense__eventos" role="log" aria-live="polite">
-          {eventos.map((evento, indice) => (
-            <li key={evento.id} className={`boot-forense__evento boot-forense__evento--${evento.nivel}`} style={{ animationDelay: `${indice * 70}ms` }}>
-              <span className="boot-forense__indice">{String(indice + 1).padStart(2, "0")}</span>
-              <span className="boot-forense__nivel">[{evento.nivel === "step" ? "..." : evento.nivel.toUpperCase()}]</span>
-              <span className="min-w-0"><strong>{evento.rotulo}</strong>{evento.detalhe && <small title={evento.detalhe}>{evento.detalhe}</small>}</span>
-            </li>
-          ))}
-        </ol>
         <footer className={`boot-forense__rodape ${pronto ? "is-ready" : ""}`}>
           <span className="boot-forense__cursor" aria-hidden />
-          {pronto ? "CASO PRONTO · liberando modo operacional" : "Validando ambiente do caso"}
+          <span>{pronto ? "CASE READY" : "PROCESSING CASE ENVIRONMENT"}</span>
+          <span className="boot-forense__integridade">{pronto ? "INTEGRITY: OK" : "AUDIT VALIDATION"}</span>
         </footer>
       </section>
     </main>
