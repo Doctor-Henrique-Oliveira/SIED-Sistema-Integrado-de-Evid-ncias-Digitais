@@ -49,6 +49,14 @@ jobs:
           cache-dependency-path: app/package-lock.json
       - run: npm ci
         working-directory: app
+      # Valida a biblioteca AI-1 sem depender do frontend, Tauri ou Typst.
+      # Todos os gates completos abaixo continuam obrigatórios.
+      - name: Testes da fundação documental AI-1
+        run: cargo test --locked -p sied-documentos
+      - name: Clippy da fundação documental AI-1
+        run: cargo clippy --locked -p sied-documentos --all-targets -- -D warnings
+      - name: Medir leitura documental sintética AI-1
+        run: cargo test --locked --release -p sied-documentos --test documentos medicao_20_leituras_reais_de_texto_sintetico_de_2mib -- --ignored --exact --nocapture
       - name: Build da interface (necessário para compilar o app Tauri)
         run: npm run build
         working-directory: app

@@ -4,6 +4,7 @@ members = [
     "crates/sied-dominio",
     "crates/sied-armazenamento",
     "crates/sied-ingestao",
+    "crates/sied-documentos",
     "crates/sied-midia",
     "crates/sied-relatorio",
     "app/src-tauri",
@@ -37,6 +38,7 @@ flate2 = "1"
 sied-dominio = { path = "crates/sied-dominio" }
 sied-armazenamento = { path = "crates/sied-armazenamento" }
 sied-ingestao = { path = "crates/sied-ingestao" }
+sied-documentos = { path = "crates/sied-documentos" }
 sied-midia = { path = "crates/sied-midia" }
 sied-relatorio = { path = "crates/sied-relatorio" }
 

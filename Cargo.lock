@@ -4189,6 +4189,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "sied-documentos"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "hex",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sied-armazenamento",
+ "sied-dominio",
+ "sied-ingestao",
+ "tempfile",
+ "walkdir",
+]
+
+[[package]]
 name = "sied-dominio"
 version = "0.1.0"
 dependencies = [
