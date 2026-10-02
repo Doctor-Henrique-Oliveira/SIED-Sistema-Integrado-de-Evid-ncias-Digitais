@@ -3,7 +3,8 @@ import { Link, useSearchParams } from "react-router-dom";
 import type { Caso, FiltroBusca, PedacoTrecho } from "../api/cliente";
 import { useBusca, useExtracoes } from "../api/consultas";
 import { Botao } from "../componentes/Botao";
-import { Aviso, Cabecalho, Cartao, Carregando, entrada, Paginacao, Selo, tabela, Vazio } from "../componentes/Estrutura";
+import { Abas, Aviso, Cabecalho, Cartao, Carregando, entrada, Paginacao, Selo, tabela, Vazio } from "../componentes/Estrutura";
+import { DescobertaLocal, type ModoDescobertaLocal } from "../componentes/DescobertaLocal";
 import { Icone } from "../componentes/Icone";
 import { destinoRegistro } from "../componentes/LinhaTempo";
 import { dataHoraMs, limiteDia, numero, tamanho } from "../util/formatar";
@@ -34,6 +35,33 @@ export function TrechoDestacado({ partes }: { partes: PedacoTrecho[] }) {
 }
 
 function Busca({ caso }: { caso: Caso }) {
+  const [modo, setModo] = useState<"tradicional" | ModoDescobertaLocal>("tradicional");
+  const [params] = useSearchParams();
+  const q = params.get("q");
+  // Ctrl+K sempre abre a pesquisa tradicional; não expande texto implicitamente.
+  useEffect(() => { setModo("tradicional"); }, [q]);
+  return (
+    <>
+      <Cabecalho
+        icone="busca"
+        sobre={<VoltarAoCaso caso={caso} />}
+        titulo="Busca"
+        subtitulo="Pesquisa no caso · texto tradicional e descoberta local explicável."
+      />
+      <div className="mb-4">
+        <Abas<"tradicional" | ModoDescobertaLocal>
+          rotulo="Mecanismo de busca"
+          atual={modo}
+          mudar={setModo}
+          abas={[["tradicional", "Tradicional"], ["expansao", "Expansão"], ["literal", "Literal / emojis"], ["indicadores", "Indicadores"]]}
+        />
+      </div>
+      {modo === "tradicional" ? <BuscaTradicional caso={caso} /> : <DescobertaLocal key={caso.id} caso={caso} modo={modo} />}
+    </>
+  );
+}
+
+function BuscaTradicional({ caso }: { caso: Caso }) {
   const [params, setParams] = useSearchParams();
   const extracoes = useExtracoes(caso.id);
   const [texto, setTexto] = useState(params.get("q") ?? "");
@@ -74,12 +102,6 @@ function Busca({ caso }: { caso: Caso }) {
 
   return (
     <>
-      <Cabecalho
-        icone="busca"
-        sobre={<VoltarAoCaso caso={caso} />}
-        titulo="Busca"
-        subtitulo="Mensagens, telefones e nomes de arquivo de todas as extrações do caso."
-      />
       <div className="space-y-4">
         <section aria-label="Formulário de busca" className="painel p-4">
           <form onSubmit={buscar} className="space-y-3" role="search">

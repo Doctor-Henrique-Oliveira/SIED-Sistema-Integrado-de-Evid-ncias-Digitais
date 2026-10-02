@@ -32,6 +32,7 @@ use crate::busca::{self, FiltroBusca, ResultadoBusca};
 use crate::conexao::{self, Abertura};
 use crate::conversas::{self, AppConversas, Conversa, FiltroConversas, PosicaoMensagem, Trecho};
 use crate::derivados::{self, ConferenciaDerivados, ReconstrucaoDerivados};
+use crate::descoberta::{PedidoDescoberta, ResultadoDescoberta};
 use crate::evidencias::{self, Evidencia, Marcacoes, NovaEvidencia, TextosEvidencia};
 use crate::extracoes::{
     self, ArquivoComOrigem, ArquivoExtracao, ArtefatoDetalhe, ArtefatoResumo, ExecucaoParser,
@@ -40,6 +41,10 @@ use crate::extracoes::{
 use crate::importacao::{Importacao, PASTA_IMPORTACOES};
 use crate::linha_tempo::{self, FiltroLinhaTempo, ResumoLinhaTempo};
 use crate::migracoes::{self, BANCO_CASO};
+use crate::pesquisa_local::{
+    self, ConsultaDescobertaSalva, ExecucaoDescoberta, VersaoVocabularioPesquisa,
+    VocabularioPesquisa,
+};
 use crate::relatorios::{self, NovoRelatorio, RelatorioRegistrado};
 use crate::resumo::{self, Identificador, ResumoCaso};
 use crate::{ErroArmazenamento, Resultado, Sessao};
@@ -433,6 +438,57 @@ impl BancoCaso {
         limite: i64,
     ) -> Resultado<ResultadoBusca> {
         busca::buscar(&self.conn, filtro, deslocamento, limite)
+    }
+
+    pub fn listar_vocabularios_pesquisa(&self) -> Resultado<Vec<VersaoVocabularioPesquisa>> {
+        pesquisa_local::listar_vocabularios(&self.conn)
+    }
+
+    pub fn salvar_vocabulario_pesquisa(
+        &mut self,
+        dados: VocabularioPesquisa,
+    ) -> Resultado<VersaoVocabularioPesquisa> {
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let versao = pesquisa_local::salvar_vocabulario(&tx, &self.sessao, dados)?;
+        tx.commit()?;
+        Ok(versao)
+    }
+
+    pub fn exportar_vocabulario_pesquisa(&mut self, id: i64) -> Resultado<String> {
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let texto = pesquisa_local::exportar_vocabulario(&tx, &self.sessao, id)?;
+        tx.commit()?;
+        Ok(texto)
+    }
+
+    pub fn executar_descoberta(
+        &mut self,
+        pedido: PedidoDescoberta,
+        vocabulario_id: Option<i64>,
+    ) -> Resultado<ExecucaoDescoberta> {
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let resultado = pesquisa_local::executar(&tx, &self.sessao, pedido, vocabulario_id)?;
+        tx.commit()?;
+        Ok(resultado)
+    }
+
+    pub fn paginar_descoberta(
+        &self,
+        consulta_id: i64,
+        deslocamento: i64,
+        limite: i64,
+    ) -> Resultado<ResultadoDescoberta> {
+        pesquisa_local::paginar(&self.conn, consulta_id, deslocamento, limite)
+    }
+
+    pub fn listar_consultas_descoberta(&self) -> Resultado<Vec<ConsultaDescobertaSalva>> {
+        pesquisa_local::listar_consultas(&self.conn)
     }
 
     /// Mensagens de um trecho de conversa (do início ao fim, inclusive).

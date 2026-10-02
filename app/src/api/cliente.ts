@@ -63,8 +63,24 @@ import type { ResumoLinhaTempo } from "./tipos/ResumoLinhaTempo";
 import type { ResumoChamadas } from "./tipos/ResumoChamadas";
 import type { TelefoneContato } from "./tipos/TelefoneContato";
 import type { TotalApp } from "./tipos/TotalApp";
+import type { PedidoDescoberta } from "./tipos/PedidoDescoberta";
+import type { ResultadoDescoberta } from "./tipos/ResultadoDescoberta";
+import type { AchadoDescoberta } from "./tipos/AchadoDescoberta";
+import type { VocabularioPesquisa } from "./tipos/VocabularioPesquisa";
+import type { RamoVocabulario } from "./tipos/RamoVocabulario";
+import type { VersaoVocabularioPesquisa } from "./tipos/VersaoVocabularioPesquisa";
+import type { ConsultaDescobertaSalva } from "./tipos/ConsultaDescobertaSalva";
+import type { ExecucaoDescoberta } from "./tipos/ExecucaoDescoberta";
 
 export type {
+  PedidoDescoberta,
+  ResultadoDescoberta,
+  AchadoDescoberta,
+  VocabularioPesquisa,
+  RamoVocabulario,
+  VersaoVocabularioPesquisa,
+  ConsultaDescobertaSalva,
+  ExecucaoDescoberta,
   Chamada,
   EventoImportacao,
   NivelEvento,
@@ -231,6 +247,17 @@ export const api = {
   conversaDoArtefato: (artefatoId: number) => chamar<number | null>("conversa_do_artefato", { artefatoId }),
   buscar: (filtro: FiltroBusca, deslocamento: number, limite: number) =>
     chamar<ResultadoBusca>("buscar", { filtro, deslocamento, limite }),
+  /** Pesquisa local explícita: guarda configuração e audita a execução no caso. */
+  executarDescoberta: (pedido: PedidoDescoberta, vocabularioId: number | null) =>
+    chamar<ExecucaoDescoberta>("executar_descoberta", { pedido, vocabularioId }),
+  paginarDescoberta: (consultaId: number, deslocamento: number, limite: number) =>
+    chamar<ResultadoDescoberta>("paginar_descoberta", { consultaId, deslocamento, limite }),
+  listarConsultasDescoberta: () => chamar<ConsultaDescobertaSalva[]>("listar_consultas_descoberta"),
+  listarVocabulariosPesquisa: () => chamar<VersaoVocabularioPesquisa[]>("listar_vocabularios_pesquisa"),
+  salvarVocabularioPesquisa: (dados: VocabularioPesquisa) =>
+    chamar<VersaoVocabularioPesquisa>("salvar_vocabulario_pesquisa", { dados }),
+  /** JSON versionado, preparado pelo backend; não abre rede nem grava na extração. */
+  exportarVocabularioPesquisa: (id: number) => chamar<string>("exportar_vocabulario_pesquisa", { id }),
 
   resumoCaso: () => chamar<ResumoCaso>("resumo_caso"),
   listarIdentificadores: (texto: string | null, deslocamento: number, limite: number) =>

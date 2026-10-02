@@ -15,12 +15,16 @@ use sied_armazenamento::auditoria::{RegistroAuditoria, VerificacaoAuditoria};
 use sied_armazenamento::busca::{AchadoArtefato, FiltroBusca, ResultadoBusca};
 use sied_armazenamento::conversas::{AppConversas, Conversa, FiltroConversas, PosicaoMensagem};
 use sied_armazenamento::derivados::{ConferenciaDerivados, ReconstrucaoDerivados};
+use sied_armazenamento::descoberta::{PedidoDescoberta, ResultadoDescoberta};
 use sied_armazenamento::evidencias::{Evidencia, Marcacoes, NovaEvidencia, TextosEvidencia};
 use sied_armazenamento::extracoes::{
     ArquivoExtracao, ArtefatoDetalhe, ArtefatoResumo, ExecucaoParser, Extracao, Pagina,
     TotalCategoria,
 };
 use sied_armazenamento::linha_tempo::{FiltroLinhaTempo, ResumoLinhaTempo};
+use sied_armazenamento::pesquisa_local::{
+    ConsultaDescobertaSalva, ExecucaoDescoberta, VersaoVocabularioPesquisa, VocabularioPesquisa,
+};
 use sied_armazenamento::relatorios::{ConferenciaPastaRelatorios, RelatorioRegistrado};
 use sied_armazenamento::resumo::{Identificador, ResumoCaso};
 use sied_armazenamento::CasoCatalogado;
@@ -456,6 +460,70 @@ pub async fn buscar(
 #[tauri::command]
 pub async fn resumo_caso(app_handle: AppHandle) -> ResultadoApp<ResumoCaso> {
     em_segundo_plano(app_handle, move |estado| estado.com(|s| s.resumo_caso())).await
+}
+
+#[tauri::command]
+pub async fn listar_vocabularios_pesquisa(
+    app_handle: AppHandle,
+) -> ResultadoApp<Vec<VersaoVocabularioPesquisa>> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.listar_vocabularios_pesquisa())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn salvar_vocabulario_pesquisa(
+    app_handle: AppHandle,
+    dados: VocabularioPesquisa,
+) -> ResultadoApp<VersaoVocabularioPesquisa> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.salvar_vocabulario_pesquisa(dados))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn exportar_vocabulario_pesquisa(app_handle: AppHandle, id: i64) -> ResultadoApp<String> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.exportar_vocabulario_pesquisa(id))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn executar_descoberta(
+    app_handle: AppHandle,
+    pedido: PedidoDescoberta,
+    vocabulario_id: Option<i64>,
+) -> ResultadoApp<ExecucaoDescoberta> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.executar_descoberta(pedido, vocabulario_id))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn paginar_descoberta(
+    app_handle: AppHandle,
+    consulta_id: i64,
+    deslocamento: i64,
+    limite: i64,
+) -> ResultadoApp<ResultadoDescoberta> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.paginar_descoberta(consulta_id, deslocamento, limite))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn listar_consultas_descoberta(
+    app_handle: AppHandle,
+) -> ResultadoApp<Vec<ConsultaDescobertaSalva>> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.listar_consultas_descoberta())
+    })
+    .await
 }
 
 #[tauri::command]

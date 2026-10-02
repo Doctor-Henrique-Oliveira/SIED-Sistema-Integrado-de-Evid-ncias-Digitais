@@ -10,12 +10,16 @@ use sied_armazenamento::busca::{AchadoArtefato, FiltroBusca, ResultadoBusca};
 use sied_armazenamento::caso::{nome_pasta_sugerido, NOME_ARQUIVO_CASO};
 use sied_armazenamento::conversas::{AppConversas, Conversa, FiltroConversas, PosicaoMensagem};
 use sied_armazenamento::derivados::{ConferenciaDerivados, ReconstrucaoDerivados};
+use sied_armazenamento::descoberta::{PedidoDescoberta, ResultadoDescoberta};
 use sied_armazenamento::evidencias::{Evidencia, Marcacoes, NovaEvidencia, TextosEvidencia};
 use sied_armazenamento::extracoes::{
     ArquivoExtracao, ArtefatoDetalhe, ArtefatoResumo, ExecucaoParser, Extracao, Pagina,
     TotalCategoria,
 };
 use sied_armazenamento::linha_tempo::{FiltroLinhaTempo, ResumoLinhaTempo};
+use sied_armazenamento::pesquisa_local::{
+    ConsultaDescobertaSalva, ExecucaoDescoberta, VersaoVocabularioPesquisa, VocabularioPesquisa,
+};
 use sied_armazenamento::relatorios::{ConferenciaPastaRelatorios, RelatorioRegistrado};
 use sied_armazenamento::resumo::{Identificador, ResumoCaso};
 use sied_armazenamento::{BancoCaso, CasoCatalogado, CatalogoGlobal, Sessao};
@@ -578,6 +582,58 @@ impl Servico {
 
     pub fn resumo_caso(&mut self) -> ResultadoApp<ResumoCaso> {
         Ok(self.banco()?.resumo()?)
+    }
+
+    fn pesquisa_sem_importacao(&self) -> ResultadoApp<()> {
+        if self.importacao.as_ref().is_some_and(|t| t.em_curso()) {
+            return Err(ErroApp::novo(
+                CodigoErro::Conflito,
+                "Há uma importação em andamento. Execute a descoberta quando ela terminar.",
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn listar_vocabularios_pesquisa(&mut self) -> ResultadoApp<Vec<VersaoVocabularioPesquisa>> {
+        Ok(self.banco()?.listar_vocabularios_pesquisa()?)
+    }
+
+    pub fn salvar_vocabulario_pesquisa(
+        &mut self,
+        dados: VocabularioPesquisa,
+    ) -> ResultadoApp<VersaoVocabularioPesquisa> {
+        Ok(self.banco()?.salvar_vocabulario_pesquisa(dados)?)
+    }
+
+    pub fn exportar_vocabulario_pesquisa(&mut self, id: i64) -> ResultadoApp<String> {
+        Ok(self.banco()?.exportar_vocabulario_pesquisa(id)?)
+    }
+
+    pub fn executar_descoberta(
+        &mut self,
+        pedido: PedidoDescoberta,
+        vocabulario_id: Option<i64>,
+    ) -> ResultadoApp<ExecucaoDescoberta> {
+        self.pesquisa_sem_importacao()?;
+        Ok(self.banco()?.executar_descoberta(pedido, vocabulario_id)?)
+    }
+
+    pub fn paginar_descoberta(
+        &mut self,
+        consulta_id: i64,
+        deslocamento: i64,
+        limite: i64,
+    ) -> ResultadoApp<ResultadoDescoberta> {
+        self.pesquisa_sem_importacao()?;
+        Ok(self.banco()?.paginar_descoberta(
+            consulta_id,
+            deslocamento.max(0),
+            limite.clamp(1, 200),
+        )?)
+    }
+
+    pub fn listar_consultas_descoberta(&mut self) -> ResultadoApp<Vec<ConsultaDescobertaSalva>> {
+        Ok(self.banco()?.listar_consultas_descoberta()?)
     }
 
     pub fn listar_identificadores(

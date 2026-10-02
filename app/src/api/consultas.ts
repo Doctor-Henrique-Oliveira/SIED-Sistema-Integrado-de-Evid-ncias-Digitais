@@ -19,6 +19,8 @@ import {
   type NovaEvidencia,
   type PedidoRelatorio,
   type TextosEvidencia,
+  type PedidoDescoberta,
+  type VocabularioPesquisa,
 } from "./cliente";
 
 export const chaves = {
@@ -356,6 +358,45 @@ export function useBusca(casoId: CasoId, filtro: FiltroBusca | null, deslocament
     queryFn: () => api.buscar(filtro!, deslocamento, limite),
     enabled: filtro != null && filtro.texto.trim() !== "",
     placeholderData: keepPreviousData,
+  });
+}
+
+// Descoberta AI-0: leituras são queries; ações auditadas nunca são autoexecutadas.
+export function useVocabulariosPesquisa(casoId: CasoId) {
+  return useQuery({ queryKey: ["vocabularios-pesquisa", casoId], queryFn: api.listarVocabulariosPesquisa });
+}
+
+export function useConsultasDescoberta(casoId: CasoId) {
+  return useQuery({ queryKey: ["consultas-descoberta", casoId], queryFn: api.listarConsultasDescoberta });
+}
+
+export function useSalvarVocabularioPesquisa(casoId: CasoId) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (dados: VocabularioPesquisa) => api.salvarVocabularioPesquisa(dados),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["vocabularios-pesquisa", casoId] });
+      void qc.invalidateQueries({ queryKey: chaves.auditoria(casoId) });
+    },
+  });
+}
+
+export function useExecutarDescoberta(casoId: CasoId) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ pedido, vocabularioId }: { pedido: PedidoDescoberta; vocabularioId: number | null }) =>
+      api.executarDescoberta(pedido, vocabularioId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["consultas-descoberta", casoId] });
+      void qc.invalidateQueries({ queryKey: chaves.auditoria(casoId) });
+    },
+  });
+}
+
+export function usePaginarDescoberta() {
+  return useMutation({
+    mutationFn: ({ consultaId, deslocamento, limite }: { consultaId: number; deslocamento: number; limite: number }) =>
+      api.paginarDescoberta(consultaId, deslocamento, limite),
   });
 }
 
