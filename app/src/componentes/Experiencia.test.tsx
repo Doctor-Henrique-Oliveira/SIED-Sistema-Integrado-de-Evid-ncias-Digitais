@@ -39,6 +39,19 @@ describe("experiência premium de entrada", () => {
     expect(terminou).toHaveBeenCalledOnce();
   });
 
+  it("mantém a apresentação completa por 3,8 segundos", () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: false })));
+    const terminou = vi.fn();
+    render(<SplashScreen aoTerminar={terminou} />);
+    expect(screen.getByText("Sistema Integrado de Evidências Digitais")).toBeInTheDocument();
+    expect(screen.getByText("Inicializando estação forense local")).toBeInTheDocument();
+    vi.advanceTimersByTime(3799);
+    expect(terminou).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(terminou).toHaveBeenCalledOnce();
+  });
+
   it("reduz a splash quando o sistema pede menos movimento", () => {
     vi.useFakeTimers();
     vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: true })));

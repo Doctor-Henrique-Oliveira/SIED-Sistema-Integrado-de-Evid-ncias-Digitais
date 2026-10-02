@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import type { CasoAberto, InfoApp, VerificacaoAuditoria } from "../api/cliente";
 import { api } from "../api/cliente";
 import { identificacaoCaso, numero } from "../util/formatar";
@@ -6,7 +6,7 @@ import { Icone } from "./Icone";
 
 export type FaseExperiencia = "splash" | "welcome" | "creating-case" | "opening-case" | "booting-case" | "workspace" | "error";
 
-export function SplashScreen({ aoTerminar, duracao = 1900 }: { aoTerminar: () => void; duracao?: number }) {
+export function SplashScreen({ aoTerminar, duracao = 3800 }: { aoTerminar: () => void; duracao?: number }) {
   useEffect(() => {
     const reduzir = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     const id = window.setTimeout(aoTerminar, reduzir ? 180 : duracao);
@@ -14,17 +14,29 @@ export function SplashScreen({ aoTerminar, duracao = 1900 }: { aoTerminar: () =>
   }, [aoTerminar, duracao]);
 
   return (
-    <main className="splash-sied" aria-label="Inicialização do SIED">
+    <main
+      className="splash-sied"
+      aria-label="Inicialização do SIED"
+      style={{ "--sied-splash-duration": `${duracao}ms` } as CSSProperties}
+    >
+      <span className="splash-sied__halo" aria-hidden />
       <div className="splash-sied__marca" aria-hidden>
+        <span className="splash-sied__anel splash-sied__anel--orbital" />
         <span className="splash-sied__anel splash-sied__anel--externo" />
         <span className="splash-sied__anel splash-sied__anel--interno" />
-        <span className="splash-sied__nucleo"><Icone nome="escudo" className="size-11" /></span>
+        <span className="splash-sied__eixos" />
+        <span className="splash-sied__nucleo">
+          <span className="splash-sied__varredura" />
+          <Icone nome="escudo" className="size-12" />
+        </span>
       </div>
       <div className="splash-sied__assinatura">
         <p className="splash-sied__sigla">SIED</p>
         <p className="splash-sied__nome">Sistema Integrado de Evidências Digitais</p>
-        <span className="splash-sied__linha" aria-hidden />
-        <p className="splash-sied__estado">Inicializando estação forense local</p>
+        <div className="splash-sied__inicializacao">
+          <span className="splash-sied__linha" aria-hidden><span /></span>
+          <p className="splash-sied__estado"><span aria-hidden />Inicializando estação forense local</p>
+        </div>
       </div>
     </main>
   );

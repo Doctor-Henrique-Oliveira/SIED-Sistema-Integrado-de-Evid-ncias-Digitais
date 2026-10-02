@@ -34,7 +34,7 @@ afterEach(() => { vi.useRealTimers(); vi.clearAllMocks(); });
 
 describe("máquina de estados da experiência", () => {
   it("sem caso libera a welcome, mas não o workspace", async () => {
-    vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: false })));
+    vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: true })));
     vi.mocked(invoke).mockImplementation(async (comando: string) => comando === "info_app"
       ? { versao: "0.1.0", usuario: "analista", maquina: "ESTACAO", pasta_dados: "C:/Dados", pasta_casos_padrao: "C:/Casos" }
       : null);
@@ -44,7 +44,7 @@ describe("máquina de estados da experiência", () => {
   });
 
   it("caso aberto passa pelo console antes de liberar sidebar e workspace", async () => {
-    vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: false })));
+    vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: true })));
     const caso = { id: "c1", numero_procedimento: "SINTÉTICO-001", numero_bo: null, fuso_horario: "America/Sao_Paulo" };
     vi.mocked(invoke).mockImplementation(async (comando: string) => {
       if (comando === "info_app") return { versao: "0.1.0", usuario: "analista", maquina: "ESTACAO", pasta_dados: "C:/Dados", pasta_casos_padrao: "C:/Casos" };
