@@ -60,6 +60,8 @@ export function ForensicBootConsole({ aberto, info, aoPronto, aoErro }: {
   const [auditoria, setAuditoria] = useState<VerificacaoAuditoria | null>(null);
   const [etapaAtiva, setEtapaAtiva] = useState(0);
   const [pronto, setPronto] = useState(false);
+  const fluxoEsquerdo = ["FLOW / AUX", "LAYER / 01", "TRACE / VISUAL", "SIGNAL / DEPTH", "VECTOR / 03"];
+  const fluxoDireito = ["CHANNEL / LOCAL", "STREAM / AUX", "INDEX / VISUAL", "TRACE / DEPTH", "PULSE / 02"];
 
   useEffect(() => {
     let ativo = true;
@@ -102,7 +104,17 @@ export function ForensicBootConsole({ aberto, info, aoPronto, aoErro }: {
   }, [aberto, auditoria, etapaAtiva, info, pronto]);
 
   return (
-    <main className="boot-forense" aria-label="Preparando workspace do caso">
+    <main className={`boot-forense ${pronto ? "is-ready" : etapaAtiva >= 5 ? "is-workspace-ready" : "is-processing"}`} aria-label="Preparando workspace do caso">
+      <div className="boot-forense__fluxos" aria-hidden="true">
+        <div className="boot-forense__fluxo boot-forense__fluxo--esquerdo">
+          <span className="boot-forense__fluxo-legenda">AUXILIARY TELEMETRY</span>
+          {fluxoEsquerdo.map((item, indice) => <span key={item} style={{ "--fluxo-atraso": `${indice * -1.15}s` } as CSSProperties}>{item}</span>)}
+        </div>
+        <div className="boot-forense__fluxo boot-forense__fluxo--direito">
+          <span className="boot-forense__fluxo-legenda">VISUAL DATA LAYER</span>
+          {fluxoDireito.map((item, indice) => <span key={item} style={{ "--fluxo-atraso": `${indice * -1.45}s` } as CSSProperties}>{item}</span>)}
+        </div>
+      </div>
       <section className="boot-forense__estacao">
         <header className="boot-forense__cabecalho" data-tauri-drag-region>
           <span className="boot-forense__marca"><Icone nome="terminal" className="size-4" /> SIED <b>/</b> FORENSIC BOOT</span>
@@ -119,6 +131,7 @@ export function ForensicBootConsole({ aberto, info, aoPronto, aoErro }: {
             <div><span>MODE</span><strong>LOCAL / OFFLINE</strong></div>
             <div><span>CASE</span><strong>{aberto.caso.id.slice(0, 8).toUpperCase()}</strong></div>
             <div><span>STATION</span><strong>{info?.maquina ?? "LOCAL"}</strong></div>
+            <div><span>RECORDS</span><strong>{auditoria ? numero(auditoria.registros) : "—"}</strong></div>
           </div>
           <ol className="boot-forense__eventos" role="log" aria-live="polite" aria-label="Etapas de inicialização">
             {eventos.slice(0, Math.min(etapaAtiva + 1, eventos.length)).map((evento, indice) => (
