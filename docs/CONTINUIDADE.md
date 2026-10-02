@@ -632,6 +632,39 @@ da importação, para que o console de uma importação passada possa ser reaber
 
 ---
 
+### 14.2 Motor de Descoberta Forense Multimodal Local (MDFML)
+
+**FUTURO — não implementado.** Registrado pelo responsável pelo produto em 02/10/2026 como
+capacidade estratégica de diferenciação do SIED. Nome e sigla provisórios. Este registro é
+contexto de produto e planejamento; não autoriza implementação, instalação de modelos ou
+alteração da arquitetura vigente. Especificação: [ROADMAP-MDFML.md](ROADMAP-MDFML.md).
+
+**Objetivo:** reduzir o tempo para encontrar, revisar, correlacionar e documentar artefatos
+relevantes em grandes extrações, com pesquisa local sobre mensagens, imagens, prints, OCR,
+PDFs, documentos, arquivos, metadados, indicadores e localizações. Preservar a pesquisa
+textual/FTS existente; resultados assistidos serão candidatos para revisão humana, nunca
+conclusões periciais automáticas.
+
+**Diretrizes:** offline-first; original intocado; derivados separados; explicação do mecanismo
+e da origem de cada resultado; modelos/vocabulários/configurações versionados; decisão humana
+separada da inferência; processamento incremental que não bloqueie o caso. Integração externa,
+se futuramente aprovada, será opcional, institucionalmente autorizada, identificada,
+explicitamente solicitada e auditável; não integra o núcleo local nem modifica as permissões
+atuais do frontend.
+
+**Faseamento proposto, ainda sem autorização de execução:** AI-0 (pesquisa tradicional,
+vocabulários, árvore de pesquisa, emojis e indicadores); AI-1 (OCR, PDFs/documentos e entidades);
+AI-2 (embeddings locais, semântica e ranking híbrido); AI-3 (visão, regiões e near-duplicates);
+AI-4 (multimodal); AI-5 (correlação, timeline assistida e grafo **experimental**); AI-6
+(assistente local explicável); AI-7 (feedback supervisionado, datasets autorizados e avaliação).
+Cada fase exige desenho técnico, modelo de ameaças, testes/benchmarks, avaliação de erros,
+privacidade, auditoria e checkpoint antes de qualquer merge.
+
+O detalhe documenta limites e tensões com o estado atual. Não substitui a ordem de continuidade
+do §13, não desbloqueia o importador Avilla e não altera o trabalho visual/premium em andamento.
+
+---
+
 ## 15. Interface: estrutura visual (redesign de 28/09/2026)
 
 Evolução visual e de navegação sobre a base existente: backend, Tauri, bancos, migrações, auditoria,
