@@ -1,19 +1,35 @@
 # SIED — Roadmap do Motor de Descoberta Forense Multimodal Local
 
-Data: 02/10/2026 · Status: **AI-0 EM VALIDAÇÃO SEPARADA; AI-1 PARCIALMENTE IMPLEMENTADA** · Nome/sigla provisórios: **MDFML**.
+Data: 02/10/2026 · Estado atualizado em 07/10/2026: **incrementos AI-0–AI-7 em integração e validação no PR #25** · Nome/sigla provisórios: **MDFML**.
 
 Registro estratégico de produto solicitado pelo responsável pelo SIED. Entrada oficial de
 planejamento: [CONTINUIDADE.md §14.2](CONTINUIDADE.md#142-motor-de-descoberta-forense-multimodal-local-mdfml).
 Este documento registra o planejamento; sua existência não autoriza implementação automática
 nem aprovação de modelos, dependências, fornecedores ou esquema de banco.
-Em 02/10/2026, o responsável autorizou explicitamente iniciar a AI-1. O primeiro incremento
-é uma biblioteca interna de leitura documental UTF-8 com origem conferida, sem OCR/PDF ou
-entidades implementados. A AI-0 continua separada, não integrada, no PR #24.
-Primeira entrega visível: leitura UTF-8 no detalhe de Arquivos, com origem conferida e
-proveniência. Estado efetivo: [fundação](checkpoints/2026-10-02-ai1-fundacao-documental.md)
-e [leitor documental](checkpoints/2026-10-02-ai1-leitor-documental.md).
-Incremento seguinte: [PDF nativo por página](checkpoints/2026-10-02-ai1-pdf-nativo.md)
-em Arquivos, com suporte conservador e limites explícitos; sem OCR/entidades.
+Em 02/10/2026, o responsável autorizou iniciar a AI-1. A AI-0 foi desenvolvida
+separadamente no PR #24; seu código está incorporado à branch do PR #25, ainda sem
+merge na `main`. Os checkpoints de [fundação](checkpoints/2026-10-02-ai1-fundacao-documental.md),
+[leitor documental](checkpoints/2026-10-02-ai1-leitor-documental.md) e
+[PDF nativo por página](checkpoints/2026-10-02-ai1-pdf-nativo.md) registram entregas
+históricas, não o limite atual da branch.
+
+### Estado do código no PR #25 em 07/10/2026
+
+| Eixo | Implementação presente na branch | Limite real |
+|---|---|---|
+| AI-0 | Pesquisa local literal, emojis e expansão explícita com vocabulário versionado, snapshots e cancelamento. | PR #24 permanece separado; a integração no PR #25 requer validação Rust/CI. |
+| AI-1 | Leitura UTF-8 e PDF nativo conservador, indexação explícita por página, FTS documental, candidatos sintáticos de e-mail, URL, domínio, IP, telefone e IMEI rotulado, revisão humana versionada. | Sem OCR; PDF digitalizado não fornece texto; candidatos não identificam titulares nem fatos. |
+| AI-2 | Busca integrada com fusão por posição de registros, arquivos, documentos e candidatos literais, explicando cada sinal. | Sem embeddings, modelo semântico ou interpretação livre de significado. |
+| AI-3 | dHash local de PNG/JPEG, duplicata por SHA-256 e candidatos visuais próximos; acesso ao arquivo original. | Sem classificação de objetos, regiões, bounding boxes ou confiança neural. |
+| AI-4 | Consulta local dos quatro índices disponíveis, filtros, ranking RRF, deduplicação por artefato/arquivo, proveniência e limites de janela expostos. | OCR, transcrição, embeddings e detecção visual não entram no ranking enquanto seus motores não existirem. |
+| AI-5 | Contexto temporal de ±5/30/60/1440 minutos e grafo local limitado com arestas diretas ou sugeridas e explicação por ligação. | Sem grafo global persistido nem inferência de causalidade/identidade; expansão é por registro e limitada. |
+| AI-6 | Preparação de consultas por gramática local explícita, seguida da busca integrada e fontes navegáveis. | Não é assistente de linguagem natural ou chatbot; consultas fora da gramática são recusadas. |
+| AI-7 | Revisão de candidatos documentais; datasets autorizados dentro do caso com amostras versionadas e métricas somente sobre intervalos anotados. | Sem treinamento, comparação controlada entre versões de modelo ou transferência automática de evidência para datasets globais. |
+
+Este quadro descreve **código na branch**, não funcionalidade validada e distribuída na
+`main`. A interface teve testes locais; compilação/testes Rust e build completo ainda
+dependem de contratos TypeScript gerados pelo próprio Rust e da CI, pois o ambiente Windows
+local não possui `link.exe`. Nenhum contrato deve ser escrito manualmente para contornar isso.
 O grafo é experimental; exemplos de telas, consultas e categorias são conceituais, sem dados
 reais de caso e sem resultados produzidos pelo SIED nesta missão.
 

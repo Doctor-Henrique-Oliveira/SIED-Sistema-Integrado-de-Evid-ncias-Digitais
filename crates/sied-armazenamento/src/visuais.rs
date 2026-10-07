@@ -148,7 +148,7 @@ pub fn guardar(
     mut d: VisualIndexado,
 ) -> Resultado<VisualIndexado> {
     validar(&d)?;
-    let confere:bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM arquivo a JOIN extracao x ON x.id=a.extracao_id JOIN dispositivo v ON v.id=x.dispositivo_id WHERE a.id=?1 AND x.id=?2 AND v.caso_id=?3 AND a.caminho=?4 AND a.sha256=?5)",params![d.arquivo_id,d.extracao_id.to_string(),d.caso_id.to_string(),d.caminho,d.sha256_origem],|r|r.get(0))?;
+    let confere:bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM arquivo a JOIN extracao x ON x.id=a.extracao_id JOIN dispositivo v ON v.id=x.dispositivo_id WHERE a.id=?1 AND x.id=?2 AND v.caso_id=?3 AND a.caminho=?4 AND a.sha256=?5 AND a.categoria='imagem')",params![d.arquivo_id,d.extracao_id.to_string(),d.caso_id.to_string(),d.caminho,d.sha256_origem],|r|r.get(0))?;
     if !confere {
         return Err(recusar("descritor não corresponde ao inventário do caso"));
     }
@@ -178,6 +178,7 @@ pub fn semelhantes(
     limite: usize,
     controle: &std::sync::Arc<crate::ControleDescoberta>,
 ) -> Resultado<ResultadoSimilarVisual> {
+    controle.verificar()?;
     if max_bits > 16 || !(1..=50).contains(&limite) {
         return Err(recusar("distância visual deve ser 0–16 e limite 1–50"));
     }
@@ -186,13 +187,13 @@ pub fn semelhantes(
         u64::from_str_radix(&referencia.dhash, 16).map_err(|_| recusar("dHash inválido"))?;
     let mut itens = Vec::new();
     // Duplicatas por SHA-256 do inventário independem de haver descritor visual.
-    let mut stmt=conn.prepare("SELECT id,extracao_id,caminho,sha256 FROM arquivo WHERE sha256=?1 AND id<>?2 ORDER BY id LIMIT ?3")?;
+    let mut stmt=conn.prepare("SELECT id,extracao_id,caminho,sha256 FROM arquivo WHERE sha256=?1 AND categoria='imagem' AND id<>?2 ORDER BY id LIMIT ?3")?;
     let exatos = stmt
         .query_map(
             params![
                 referencia.sha256_origem,
                 referencia.arquivo_id,
-                limite as i64
+                limite as i64 + 1
             ],
             |r| {
                 Ok(SimilarVisual {
@@ -207,7 +208,8 @@ pub fn semelhantes(
             },
         )?
         .collect::<std::result::Result<Vec<_>, _>>()?;
-    itens.extend(exatos);
+    let exatos_limitados = exatos.len() > limite;
+    itens.extend(exatos.into_iter().take(limite));
     let mut stmt=conn.prepare(&format!("SELECT {COLUNAS} FROM visual_derivado WHERE motor_id=?1 AND motor_versao=?2 AND arquivo_id<>?3 ORDER BY id LIMIT 5001"))?;
     let mut rows = stmt.query(params![
         referencia.motor_id,
@@ -215,7 +217,7 @@ pub fn semelhantes(
         referencia.arquivo_id
     ])?;
     let mut examinados = 0;
-    let mut limitada = false;
+    let mut limitada = exatos_limitados;
     let mut vistos = std::collections::BTreeSet::new();
     vistos.extend(itens.iter().map(|i| i.arquivo_id));
     while let Some(r) = rows.next()? {
@@ -248,13 +250,18 @@ pub fn semelhantes(
         }
     }
     itens.sort_by(|a, b| {
-        a.distancia_bits
-            .unwrap_or(0)
-            .cmp(&b.distancia_bits.unwrap_or(0))
+        (a.mecanismo != "sha256_exato")
+            .cmp(&(b.mecanismo != "sha256_exato"))
+            .then_with(|| {
+                a.distancia_bits
+                    .unwrap_or(0)
+                    .cmp(&b.distancia_bits.unwrap_or(0))
+            })
             .then_with(|| a.arquivo_id.cmp(&b.arquivo_id))
     });
     itens.truncate(limite);
-    Ok(ResultadoSimilarVisual{referencia,itens,descritores_examinados:examinados,varredura_limitada:limitada,limites:vec!["Somente imagens indexadas possuem dHash. Até 5.000 descritores compatíveis examinados nesta consulta; não é busca exaustiva em casos maiores.".into(),"dHash é semelhança estrutural grosseira, não identidade nem detecção de objetos. Imagens uniformes distintas podem coincidir; sem rotação EXIF ou perfil ICC.".into()]})
+    controle.verificar()?;
+    Ok(ResultadoSimilarVisual{referencia,itens,descritores_examinados:examinados,varredura_limitada:limitada,limites:vec!["Duplicatas exatas são priorizadas e limitadas à página solicitada; somente imagens indexadas possuem dHash. Até 5.000 descritores compatíveis são examinados, sem garantia de exaustividade em casos maiores.".into(),"dHash é semelhança estrutural grosseira, não identidade nem detecção de objetos. Imagens uniformes distintas podem coincidir; sem rotação EXIF ou perfil ICC.".into()]})
 }
 #[cfg(test)]
 mod contratos {
