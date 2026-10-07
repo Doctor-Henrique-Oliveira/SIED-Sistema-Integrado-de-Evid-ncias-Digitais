@@ -59,8 +59,21 @@ fn caso_recem_importado_confere() {
     let (_raiz, _origem, banco, _x) = preparado();
     let c = banco.conferir_derivados().unwrap();
     assert!(c.consistente, "{c:?}");
-    assert_eq!(c.tabelas.len(), 4);
-    assert!(c.tabelas.iter().all(|t| t.esperadas > 0), "{c:?}");
+    assert_eq!(c.tabelas.len(), 6);
+    // A fixture não contém snapshots AI-1: os quatro derivados históricos
+    // continuam presentes, e o novo índice documental corretamente começa vazio.
+    assert!(
+        c.tabelas
+            .iter()
+            .filter(|t| !matches!(
+                t.tabela.as_str(),
+                "busca_documento" | "busca_entidade_documental"
+            ))
+            .all(|t| t.esperadas > 0),
+        "{c:?}"
+    );
+    assert_eq!(diferenca(&c, "busca_documento"), (0, 0, true));
+    assert_eq!(diferenca(&c, "busca_entidade_documental"), (0, 0, true));
 }
 
 #[test]

@@ -3,7 +3,11 @@ import { Link, useSearchParams } from "react-router-dom";
 import type { Caso, FiltroBusca, PedacoTrecho } from "../api/cliente";
 import { useBusca, useExtracoes } from "../api/consultas";
 import { Botao } from "../componentes/Botao";
-import { Aviso, Cabecalho, Cartao, Carregando, entrada, Paginacao, Selo, tabela, Vazio } from "../componentes/Estrutura";
+import { BuscaDocumentos } from "../componentes/BuscaDocumentos";
+import { Abas, Aviso, Cabecalho, Cartao, Carregando, entrada, Paginacao, Selo, tabela, Vazio } from "../componentes/Estrutura";
+import { DescobertaLocal, type ModoDescobertaLocal } from "../componentes/DescobertaLocal";
+import { PesquisaUniversal } from "../componentes/PesquisaUniversal";
+import { DatasetsLocais } from "../componentes/DatasetsLocais";
 import { Icone } from "../componentes/Icone";
 import { destinoRegistro } from "../componentes/LinhaTempo";
 import { dataHoraMs, limiteDia, numero, tamanho } from "../util/formatar";
@@ -34,6 +38,33 @@ export function TrechoDestacado({ partes }: { partes: PedacoTrecho[] }) {
 }
 
 function Busca({ caso }: { caso: Caso }) {
+  const [modo, setModo] = useState<"tradicional" | "universal" | "supervisao" | ModoDescobertaLocal>("tradicional");
+  const [params] = useSearchParams();
+  const q = params.get("q");
+  // Ctrl+K preserva a pesquisa tradicional, sem expansão/inferência implícita.
+  useEffect(() => { setModo("tradicional"); }, [q]);
+  return (
+    <>
+      <Cabecalho
+        icone="busca"
+        sobre={<VoltarAoCaso caso={caso} />}
+        titulo="Busca"
+        subtitulo="Pesquisa no caso · registros, documentos indexados e descoberta local explicável."
+      />
+      <div className="mb-4">
+        <Abas<"tradicional" | "universal" | "supervisao" | ModoDescobertaLocal>
+          rotulo="Mecanismo de busca"
+          atual={modo}
+          mudar={setModo}
+          abas={[["tradicional", "Tradicional"], ["universal", "Integrada"], ["expansao", "Expansão"], ["literal", "Literal / emojis"], ["indicadores", "Indicadores"], ["supervisao", "Revisão e avaliação"]]}
+        />
+      </div>
+      {modo === "tradicional" ? <BuscaTradicional key={caso.id} caso={caso} /> : modo === "universal" ? <PesquisaUniversal caso={caso} filtro={q ? { texto: q } : undefined} /> : modo === "supervisao" ? <DatasetsLocais caso={caso} /> : <DescobertaLocal key={caso.id} caso={caso} modo={modo} />}
+    </>
+  );
+}
+
+function BuscaTradicional({ caso }: { caso: Caso }) {
   const [params, setParams] = useSearchParams();
   const extracoes = useExtracoes(caso.id);
   const [texto, setTexto] = useState(params.get("q") ?? "");
@@ -74,12 +105,6 @@ function Busca({ caso }: { caso: Caso }) {
 
   return (
     <>
-      <Cabecalho
-        icone="busca"
-        sobre={<VoltarAoCaso caso={caso} />}
-        titulo="Busca"
-        subtitulo="Mensagens, telefones e nomes de arquivo de todas as extrações do caso."
-      />
       <div className="space-y-4">
         <section aria-label="Formulário de busca" className="painel p-4">
           <form onSubmit={buscar} className="space-y-3" role="search">
@@ -232,6 +257,7 @@ function Busca({ caso }: { caso: Caso }) {
             />
           </>
         ) : null}
+        <BuscaDocumentos caso={caso} termo={filtro?.texto ?? ""} />
       </div>
     </>
   );

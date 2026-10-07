@@ -5,6 +5,7 @@
 
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api, type ArquivoExtracao, type Caso, type Extracao } from "../api/cliente";
 import { chaves, useArquivos, useDispositivos, useExecucoes, useExtracoes, useTotaisPorCategoria } from "../api/consultas";
 import { useListaPaginada } from "../util/listaPaginada";
@@ -15,6 +16,7 @@ import { EvidenciaArquivo } from "./Evidencias";
 import { Icone, type NomeIcone } from "./Icone";
 import { MiniaturaArquivo, SobreMiniatura } from "./Miniatura";
 import { LeitorDocumento } from "./LeitorDocumento";
+import { AnaliseVisual } from "./AnaliseVisual";
 
 export const iconeCategoria: Record<string, NomeIcone> = {
   banco_sqlite: "banco",
@@ -55,8 +57,10 @@ export function SeletorExtracao({ caso, valor, mudar }: {
 /** Extração escolhida (a primeira da lista, se nenhuma foi escolhida) e o estado das extrações. */
 export function useExtracaoEscolhida(caso: Caso) {
   const extracoes = useExtracoes(caso.id);
+  const [params] = useSearchParams();
   const [escolhida, setEscolhida] = useState<string | null>(null);
-  const id = escolhida ?? extracoes.data?.[0]?.id ?? null;
+  const solicitada=params.get("extracao");
+  const id = escolhida ?? (extracoes.data?.some(e=>e.id===solicitada)?solicitada:null) ?? extracoes.data?.[0]?.id ?? null;
   return { extracoes, id, setEscolhida };
 }
 
@@ -116,6 +120,7 @@ function DetalheArquivo({ caso, extracaoId, f, parser, fechar, documental }: {
       </dl>
       <EvidenciaArquivo caso={caso} arquivoId={f.id} sha256={f.sha256} />
       {documental && <LeitorDocumento caso={caso} extracaoId={extracaoId} arquivo={f} />}
+      {f.categoria === "imagem" && <AnaliseVisual caso={caso} extracaoId={extracaoId} arquivo={f} />}
     </Cartao>
   );
 }
@@ -127,6 +132,9 @@ const LIMITE = 100;
  * senão, tabela com todas as categorias.
  */
 export function InventarioArquivos({ caso, extracaoId, midias }: { caso: Caso; extracaoId: string; midias?: boolean }) {
+  const [params]=useSearchParams();
+  const arquivoSolicitado=Number(params.get("arquivo"));
+  const [erroOrigem,setErroOrigem]=useState<string|null>(null);
   const [categoria, setCategoria] = useState<string | null>(midias ? "midia" : null);
   const [texto, setTexto] = useState("");
   const [busca, setBusca] = useState<string | null>(null);
@@ -139,6 +147,14 @@ export function InventarioArquivos({ caso, extracaoId, midias }: { caso: Caso; e
     setSelecao(arquivo ? { casoId: caso.id, extracaoId, arquivo } : null);
   };
   useEffect(() => setSelecao(null), [caso.id, extracaoId]);
+  useEffect(()=>{
+    let atual=true;setErroOrigem(null);
+    if(params.get("extracao")!==extracaoId||!Number.isSafeInteger(arquivoSolicitado)||arquivoSolicitado<=0)return;
+    void api.obterArquivo(caso.id,extracaoId,arquivoSolicitado).then(a=>{
+      if(atual){if(a.id!==arquivoSolicitado)throw Error("O arquivo recebido não corresponde ao solicitado.");setSelecao({casoId:caso.id,extracaoId,arquivo:a});}
+    }).catch(e=>{if(atual)setErroOrigem(e instanceof Error?e.message:"Não foi possível abrir o arquivo original.");});
+    return()=>{atual=false;};
+  },[caso.id,extracaoId,arquivoSolicitado,params]);
   const totais = useTotaisPorCategoria(extracaoId);
   const execucoes = useExecucoes(extracaoId);
   const arquivos = useArquivos(extracaoId, { categoria, texto: busca }, deslocamento, LIMITE);
@@ -172,6 +188,7 @@ export function InventarioArquivos({ caso, extracaoId, midias }: { caso: Caso; e
 
   return (
     <div className={`grid gap-4 ${selecionado ? "xl:grid-cols-[minmax(0,1fr)_24rem]" : ""}`}>
+      {erroOrigem&&<Aviso>{erroOrigem}</Aviso>}
       <Cartao denso>
         <div className="flex flex-wrap items-center gap-3 border-b border-borda px-3 py-2.5">
           <Filtros rotulo="Filtrar por tipo" opcoes={opcoes} atual={categoria} mudar={filtrar} />

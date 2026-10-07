@@ -48,6 +48,14 @@ pub enum ErroArmazenamento {
     #[error("banco do caso inconsistente: {0}")]
     Inconsistente(String),
 
+    #[error("a descoberta local foi cancelada; nenhum resultado parcial foi confirmado")]
+    DescobertaCancelada,
+
+    #[error(
+        "a descoberta local atingiu o prazo cooperativo; nenhum resultado parcial foi confirmado"
+    )]
+    DescobertaLimite,
+
     /// Pedido válido na forma, mas recusado por regra do caso (o texto vai para a tela).
     #[error("{0}")]
     Recusado(String),

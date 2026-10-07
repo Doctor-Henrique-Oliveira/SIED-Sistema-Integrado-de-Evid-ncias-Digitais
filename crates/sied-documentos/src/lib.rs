@@ -27,7 +27,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 use ts_rs::TS;
 
+pub mod entidades;
 mod pdf;
+pub mod visao;
 
 /// Máximo de bytes da origem e do texto publicado: 2 MiB.
 pub const TAMANHO_MAXIMO: u64 = 2 * 1024 * 1024;
@@ -156,8 +158,14 @@ impl ControleDocumento {
         self.cancelado.store(true, Ordering::Release);
     }
 
+    /// Consulta cooperativa do sinal, inclusive entre leitura e publicação de
+    /// derivados. Não interrompe E/S nem processos nativos já bloqueados.
+    pub fn esta_cancelado(&self) -> bool {
+        self.cancelado.load(Ordering::Acquire)
+    }
+
     pub(crate) fn interrupcao(&self, inicio: Instant) -> Option<ResultadoDocumento> {
-        if self.cancelado.load(Ordering::Acquire) {
+        if self.esta_cancelado() {
             Some(ResultadoDocumento::sem(
                 EstadoDocumento::Cancelado,
                 "A análise do documento foi cancelada.",
@@ -346,7 +354,7 @@ pub fn analisar_pagina(
         }
         let (texto, total_paginas) = match extracao {
             Ok(Ok(texto)) => texto,
-            Ok(Err(resultado)) => return resultado,
+            Ok(Err(resultado)) => return *resultado,
             Err(_) => {
                 return ResultadoDocumento::sem(
                     Falhou,
@@ -481,6 +489,14 @@ mod contratos {
             (
                 "ResultadoDocumento.ts",
                 ResultadoDocumento::export_to_string().unwrap(),
+            ),
+            (
+                "AssinaturaVisual.ts",
+                visao::AssinaturaVisual::export_to_string().unwrap(),
+            ),
+            (
+                "ResultadoVisual.ts",
+                visao::ResultadoVisual::export_to_string().unwrap(),
             ),
         ] {
             println!("SIED_CONTRATO_INICIO:{nome}");

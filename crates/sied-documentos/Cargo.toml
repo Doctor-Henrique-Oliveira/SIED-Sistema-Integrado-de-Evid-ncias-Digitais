@@ -11,6 +11,7 @@ chrono.workspace = true
 hex.workspace = true
 flate2.workspace = true
 lopdf = { version = "=0.45.0", default-features = false }
+image = { version = "=0.25.10", default-features = false, features = ["png", "jpeg"] }
 serde.workspace = true
 sha2.workspace = true
 sied-dominio.workspace = true
@@ -18,6 +19,7 @@ sied-ingestao.workspace = true
 ts-rs.workspace = true
 
 [dev-dependencies]
+png = "=0.18.1"
 rusqlite.workspace = true
 serde_json.workspace = true
 sied-armazenamento.workspace = true

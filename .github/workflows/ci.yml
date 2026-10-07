@@ -39,6 +39,8 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       # Exportação genuína por ts-rs, recuperável pelo log sem depender da quota
       # de artifacts. Os gates completos de testes/tipos abaixo são preservados.
+      - name: Gerar contratos de índice e revisão pelo Rust
+        run: cargo test --locked -p sied-armazenamento --lib imprime_contratos -- --nocapture --test-threads=1
       - name: Gerar contratos pelo Rust e testar leitores documentais
         run: cargo test --locked -p sied-documentos -- --nocapture --test-threads=1
 
@@ -78,7 +80,7 @@ jobs:
         working-directory: app
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace
+      - run: cargo test --workspace -- --nocapture --test-threads=1
       - name: Tipos TypeScript gerados estão atualizados
         run: git diff --exit-code -- app/src/api/tipos
       - run: npm test
@@ -100,7 +102,7 @@ jobs:
           cache-dependency-path: app/package-lock.json
       - run: npm ci
         working-directory: app
-      - run: cargo test --workspace
+      - run: cargo test --workspace -- --nocapture --test-threads=1
 
   # Instaladores só quando fazem diferença: tag de release, execução manual ou PR que
   # mexe no que define o build do app.

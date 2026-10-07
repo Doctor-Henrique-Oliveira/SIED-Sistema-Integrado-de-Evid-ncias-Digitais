@@ -39,7 +39,7 @@ pub(super) fn extrair(
     pagina: u32,
     controle: &ControleDocumento,
     inicio: Instant,
-) -> Result<(String, u32), ResultadoDocumento> {
+) -> Result<(String, u32), Box<ResultadoDocumento>> {
     verificar_controle(controle, inicio)?;
     if pagina == 0 || pagina > MAXIMO_PAGINAS {
         return Err(falhou("A página solicitada do PDF é inválida."));
@@ -198,7 +198,7 @@ fn validar_arvore_paginas(
     paginas: &mut Vec<ObjectId>,
     controle: &ControleDocumento,
     inicio: Instant,
-) -> Result<(), ResultadoDocumento> {
+) -> Result<(), Box<ResultadoDocumento>> {
     verificar_controle(controle, inicio)?;
     if profundidade > MAXIMO_PROFUNDIDADE {
         return Err(limite(
@@ -277,7 +277,7 @@ fn validar_arvore_paginas(
 fn validar_recurso(
     documento: &Document,
     dicionario: &Dictionary,
-) -> Result<(), ResultadoDocumento> {
+) -> Result<(), Box<ResultadoDocumento>> {
     if let Ok(recurso) = dicionario.get(b"Resources") {
         resolver_dicionario(documento, recurso)?;
     }
@@ -287,7 +287,7 @@ fn validar_recurso(
 fn resolver_dicionario<'a>(
     documento: &'a Document,
     objeto: &'a Object,
-) -> Result<&'a Dictionary, ResultadoDocumento> {
+) -> Result<&'a Dictionary, Box<ResultadoDocumento>> {
     match objeto {
         Object::Dictionary(dicionario) => Ok(dicionario),
         Object::Reference(id) => documento.get_dictionary(*id).map_err(erro_motor),
@@ -298,7 +298,7 @@ fn resolver_dicionario<'a>(
 fn recursos_da_pagina(
     documento: &Document,
     pagina_id: ObjectId,
-) -> Result<Vec<&Dictionary>, ResultadoDocumento> {
+) -> Result<Vec<&Dictionary>, Box<ResultadoDocumento>> {
     let (direto, ids) = documento
         .get_page_resources(pagina_id)
         .map_err(erro_motor)?;
@@ -315,7 +315,7 @@ fn recursos_da_pagina(
 fn fontes_da_pagina(
     documento: &Document,
     pagina_id: ObjectId,
-) -> Result<BTreeMap<Vec<u8>, &Dictionary>, ResultadoDocumento> {
+) -> Result<BTreeMap<Vec<u8>, &Dictionary>, Box<ResultadoDocumento>> {
     let mut fontes = BTreeMap::new();
     for recurso in recursos_da_pagina(documento, pagina_id)? {
         if let Ok(objeto) = recurso.get(b"Font") {
@@ -339,7 +339,7 @@ fn fontes_da_pagina(
     Ok(fontes)
 }
 
-fn validar_fonte(fonte: &Dictionary) -> Result<(), ResultadoDocumento> {
+fn validar_fonte(fonte: &Dictionary) -> Result<(), Box<ResultadoDocumento>> {
     let base = fonte.get(b"BaseFont").and_then(Object::as_name).ok();
     let base_admitida = matches!(
         base,
@@ -380,7 +380,7 @@ fn validar_fonte(fonte: &Dictionary) -> Result<(), ResultadoDocumento> {
     Ok(())
 }
 
-fn validar_filtros(dicionario: &Dictionary) -> Result<(), ResultadoDocumento> {
+fn validar_filtros(dicionario: &Dictionary) -> Result<(), Box<ResultadoDocumento>> {
     match dicionario.get(b"Filter") {
         Err(Error::DictKey(_)) => {}
         Ok(Object::Name(_)) => {}
@@ -412,7 +412,7 @@ fn conteudo_estrito(
     pagina_id: ObjectId,
     controle: &ControleDocumento,
     inicio: Instant,
-) -> Result<Vec<u8>, ResultadoDocumento> {
+) -> Result<Vec<u8>, Box<ResultadoDocumento>> {
     let pagina = documento.get_dictionary(pagina_id).map_err(erro_motor)?;
     let mut conteudo = Vec::new();
     let mut ids = Vec::new();
@@ -455,7 +455,7 @@ fn conteudo_estrito(
 fn descomprimir_conteudo_estrito(
     stream: &lopdf::Stream,
     limite_bytes: usize,
-) -> Result<Vec<u8>, ResultadoDocumento> {
+) -> Result<Vec<u8>, Box<ResultadoDocumento>> {
     validar_filtros(&stream.dict)?;
     let filtro = match stream.dict.get(b"Filter") {
         Err(Error::DictKey(_)) => None,
@@ -509,7 +509,7 @@ fn validar_operacoes(
     fontes: &BTreeMap<Vec<u8>, &Dictionary>,
     controle: &ControleDocumento,
     inicio: Instant,
-) -> Result<(), ResultadoDocumento> {
+) -> Result<(), Box<ResultadoDocumento>> {
     let mut fonte_ativa: Option<&[u8]> = None;
     let mut fonte_motor: Option<&[u8]> = None;
     let mut estados_graficos = Vec::new();
@@ -617,7 +617,10 @@ fn numero(objeto: &Object) -> bool {
         || matches!(objeto, Object::Real(valor) if valor.is_finite())
 }
 
-fn validar_texto(operacao: &Operation, encoding: &Encoding<'_>) -> Result<(), ResultadoDocumento> {
+fn validar_texto(
+    operacao: &Operation,
+    encoding: &Encoding<'_>,
+) -> Result<(), Box<ResultadoDocumento>> {
     let mut strings = Vec::new();
     match operacao.operator.as_str() {
         "Tj" | "'" if operacao.operands.len() == 1 => {
@@ -668,7 +671,7 @@ fn validar_estado_grafico(
     documento: &Document,
     pagina_id: ObjectId,
     operacao: &Operation,
-) -> Result<(), ResultadoDocumento> {
+) -> Result<(), Box<ResultadoDocumento>> {
     let nome = operacao
         .operands
         .first()
@@ -694,14 +697,14 @@ fn validar_estado_grafico(
 fn verificar_controle(
     controle: &ControleDocumento,
     inicio: Instant,
-) -> Result<(), ResultadoDocumento> {
+) -> Result<(), Box<ResultadoDocumento>> {
     match controle.interrupcao(inicio) {
-        Some(resultado) => Err(resultado),
+        Some(resultado) => Err(Box::new(resultado)),
         None => Ok(()),
     }
 }
 
-fn erro_motor(erro: Error) -> ResultadoDocumento {
+fn erro_motor(erro: Error) -> Box<ResultadoDocumento> {
     match erro {
         Error::Decompress(DecompressError::MemoryLimitExceeded { .. }) => {
             limite("O PDF excede o limite de descompressão permitido pelo motor.")
@@ -716,14 +719,17 @@ fn erro_motor(erro: Error) -> ResultadoDocumento {
     }
 }
 
-fn falhou(motivo: &str) -> ResultadoDocumento {
-    ResultadoDocumento::sem(EstadoDocumento::Falhou, motivo)
+fn falhou(motivo: &str) -> Box<ResultadoDocumento> {
+    Box::new(ResultadoDocumento::sem(EstadoDocumento::Falhou, motivo))
 }
 
-fn sem_suporte(motivo: &str) -> ResultadoDocumento {
-    ResultadoDocumento::sem(EstadoDocumento::SemSuporte, motivo)
+fn sem_suporte(motivo: &str) -> Box<ResultadoDocumento> {
+    Box::new(ResultadoDocumento::sem(EstadoDocumento::SemSuporte, motivo))
 }
 
-fn limite(motivo: &str) -> ResultadoDocumento {
-    ResultadoDocumento::sem(EstadoDocumento::LimiteExcedido, motivo)
+fn limite(motivo: &str) -> Box<ResultadoDocumento> {
+    Box::new(ResultadoDocumento::sem(
+        EstadoDocumento::LimiteExcedido,
+        motivo,
+    ))
 }

@@ -1,7 +1,7 @@
 //! Conferência e reconstrução dos dados derivados do caso.
 //!
-//! Conversas, participantes e os dois índices de busca são calculados a partir de
-//! `artefato` e `arquivo` (migração 3) e mantidos por gatilhos. Nada neles é fonte de
+//! Conversas, participantes e os índices de busca são calculados a partir de
+//! `artefato`, `arquivo` e snapshots documentais e mantidos por gatilhos. Nada neles é fonte de
 //! verdade: se divergirem (gatilho com defeito numa versão antiga, banco editado por
 //! fora, índice FTS danificado), podem ser recalculados sem tocar nos registros de
 //! origem, que são imutáveis.
@@ -69,6 +69,12 @@ const GUARDADO_BUSCA_ARTEFATO: &str =
 
 const ESPERADO_BUSCA_ARQUIVO: &str = "SELECT id, caminho FROM arquivo";
 const GUARDADO_BUSCA_ARQUIVO: &str = "SELECT rowid, caminho FROM busca_arquivo";
+// Os snapshots documentais são derivados históricos com hash próprio; só este
+// índice de pesquisa pode ser reconstruído, nunca snapshots/candidatos/revisões.
+const ESPERADO_BUSCA_DOCUMENTO: &str = "SELECT id, texto FROM documento_derivado";
+const GUARDADO_BUSCA_DOCUMENTO: &str = "SELECT rowid, texto FROM busca_documento";
+const ESPERADO_BUSCA_ENTIDADE: &str = "SELECT id, literal, tipo FROM entidade_documental";
+const GUARDADO_BUSCA_ENTIDADE: &str = "SELECT rowid, literal, tipo FROM busca_entidade_documental";
 
 struct Tabela {
     nome: &'static str,
@@ -78,7 +84,7 @@ struct Tabela {
     fts: bool,
 }
 
-const TABELAS: [Tabela; 4] = [
+const TABELAS: [Tabela; 6] = [
     Tabela {
         nome: "conversa",
         esperado: ESPERADO_CONVERSA,
@@ -101,6 +107,18 @@ const TABELAS: [Tabela; 4] = [
         nome: "busca_arquivo",
         esperado: ESPERADO_BUSCA_ARQUIVO,
         guardado: GUARDADO_BUSCA_ARQUIVO,
+        fts: true,
+    },
+    Tabela {
+        nome: "busca_documento",
+        esperado: ESPERADO_BUSCA_DOCUMENTO,
+        guardado: GUARDADO_BUSCA_DOCUMENTO,
+        fts: true,
+    },
+    Tabela {
+        nome: "busca_entidade_documental",
+        esperado: ESPERADO_BUSCA_ENTIDADE,
+        guardado: GUARDADO_BUSCA_ENTIDADE,
         fts: true,
     },
 ];
@@ -207,7 +225,13 @@ pub fn reconstruir(tx: &Transaction, sessao: &Sessao) -> Resultado<ReconstrucaoD
          {ESPERADO_BUSCA_ARTEFATO};
          INSERT INTO busca_arquivo(busca_arquivo) VALUES('rebuild');
          DELETE FROM busca_arquivo;
-         INSERT INTO busca_arquivo (rowid, caminho) {ESPERADO_BUSCA_ARQUIVO};"
+         INSERT INTO busca_arquivo (rowid, caminho) {ESPERADO_BUSCA_ARQUIVO};
+         INSERT INTO busca_documento(busca_documento) VALUES('rebuild');
+         DELETE FROM busca_documento;
+         INSERT INTO busca_documento (rowid, texto) {ESPERADO_BUSCA_DOCUMENTO};
+         INSERT INTO busca_entidade_documental(busca_entidade_documental) VALUES('rebuild');
+         DELETE FROM busca_entidade_documental;
+         INSERT INTO busca_entidade_documental (rowid, literal, tipo) {ESPERADO_BUSCA_ENTIDADE};"
     ))?;
     let depois = conferir(tx)?;
     if !depois.consistente {

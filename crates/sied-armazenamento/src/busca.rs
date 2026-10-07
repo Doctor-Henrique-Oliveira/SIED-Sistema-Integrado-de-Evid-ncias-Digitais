@@ -26,7 +26,7 @@ const MARCA_FIM: char = '\u{2}';
 /// Mínimo de dígitos para tratar o texto como telefone.
 const MIN_DIGITOS_TELEFONE: usize = 6;
 
-#[derive(Debug, Clone, Default, Deserialize, TS)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct FiltroBusca {
     pub texto: String,

@@ -22,6 +22,7 @@ use sied_ingestao::eventos::{self, EventoImportacao};
 use sied_ingestao::pipeline::NOME_LOG;
 use sied_ingestao::InfoComponente;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use crate::agenda::{
     self, Chamada, ContatoAgenda, FiltroChamadas, FiltroContatos, ResumoChamadas, TotalApp,
@@ -30,8 +31,14 @@ use crate::auditoria::{self, RegistroAuditoria, VerificacaoAuditoria};
 use crate::busca::AchadoArtefato;
 use crate::busca::{self, FiltroBusca, ResultadoBusca};
 use crate::conexao::{self, Abertura};
+use crate::controle_descoberta::ControleDescoberta;
 use crate::conversas::{self, AppConversas, Conversa, FiltroConversas, PosicaoMensagem, Trecho};
 use crate::derivados::{self, ConferenciaDerivados, ReconstrucaoDerivados};
+use crate::descoberta::{PedidoDescoberta, ResultadoDescoberta};
+use crate::documentos::{
+    self, AchadoDocumento, DocumentoIndexado, EntidadeDocumento, EstadoRevisaoEntidade,
+    NovoDocumento, RevisaoEntidade,
+};
 use crate::evidencias::{self, Evidencia, Marcacoes, NovaEvidencia, TextosEvidencia};
 use crate::extracoes::{
     self, ArquivoComOrigem, ArquivoExtracao, ArtefatoDetalhe, ArtefatoResumo, ExecucaoParser,
@@ -40,8 +47,19 @@ use crate::extracoes::{
 use crate::importacao::{Importacao, PASTA_IMPORTACOES};
 use crate::linha_tempo::{self, FiltroLinhaTempo, ResumoLinhaTempo};
 use crate::migracoes::{self, BANCO_CASO};
+use crate::pesquisa_local::{
+    self, ConsultaDescobertaSalva, ExecucaoDescoberta, VersaoVocabularioPesquisa,
+    VocabularioPesquisa,
+};
+use crate::relacoes::{self, ContextoRelacoes};
 use crate::relatorios::{self, NovoRelatorio, RelatorioRegistrado};
 use crate::resumo::{self, Identificador, ResumoCaso};
+use crate::supervisao::{
+    self, AmostraSupervisionada, AvaliacaoSupervisionada, DatasetSupervisionado,
+    PedidoAmostraSupervisionada,
+};
+use crate::universal::{self, PedidoUniversal, ResultadoUniversal};
+use crate::visuais::{self, ResultadoSimilarVisual, VisualIndexado};
 use crate::{ErroArmazenamento, Resultado, Sessao};
 
 pub const NOME_ARQUIVO_CASO: &str = "caso.sied.db";
@@ -277,6 +295,202 @@ impl BancoCaso {
         Ok(r)
     }
 
+    // ---------- Documentos derivados (AI-1), separados dos fatos ----------
+
+    pub fn guardar_documento(&mut self, novo: &NovoDocumento) -> Resultado<DocumentoIndexado> {
+        if novo.caso_id != self.caso.id {
+            return Err(ErroArmazenamento::Recusado(
+                "snapshot pertence a outro caso".into(),
+            ));
+        }
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let documento = documentos::guardar(&tx, &self.sessao, novo)?;
+        tx.commit()?;
+        Ok(documento)
+    }
+
+    pub fn buscar_documentos(
+        &self,
+        termo: &str,
+        deslocamento: i64,
+        limite: i64,
+    ) -> Resultado<Pagina<AchadoDocumento>> {
+        documentos::buscar(&self.conn, termo, deslocamento, limite)
+    }
+
+    pub fn buscar_documentos_filtrado(
+        &self,
+        filtro: &FiltroBusca,
+        deslocamento: i64,
+        limite: i64,
+    ) -> Resultado<Pagina<AchadoDocumento>> {
+        documentos::buscar_filtrado(&self.conn, filtro, deslocamento, limite)
+    }
+
+    pub fn pesquisar_universal(
+        &self,
+        pedido: &PedidoUniversal,
+        deslocamento: i64,
+        limite: i64,
+        controle: &Arc<ControleDescoberta>,
+    ) -> Resultado<ResultadoUniversal> {
+        universal::pesquisar(
+            &self.conn,
+            self.caso.id,
+            pedido,
+            deslocamento,
+            limite,
+            controle,
+        )
+    }
+
+    pub fn contexto_relacoes(
+        &self,
+        artefato_id: i64,
+        janela_minutos: u32,
+        limite: i64,
+        controle: &Arc<ControleDescoberta>,
+    ) -> Resultado<ContextoRelacoes> {
+        relacoes::correlacionar(
+            &self.conn,
+            &self.caso.id,
+            artefato_id,
+            janela_minutos,
+            limite,
+            controle,
+        )
+    }
+
+    pub fn obter_documento(&self, id: i64) -> Resultado<DocumentoIndexado> {
+        documentos::obter(&self.conn, id)
+    }
+
+    pub fn entidades_documento(&self, id: i64) -> Resultado<Vec<EntidadeDocumento>> {
+        documentos::entidades(&self.conn, id)
+    }
+
+    pub fn revisar_entidade(
+        &mut self,
+        id: i64,
+        estado: EstadoRevisaoEntidade,
+        nota: Option<&str>,
+    ) -> Resultado<EntidadeDocumento> {
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let entidade = documentos::revisar(&tx, &self.sessao, id, estado, nota)?;
+        tx.commit()?;
+        Ok(entidade)
+    }
+
+    pub fn revisoes_entidade(
+        &self,
+        id: i64,
+        deslocamento: i64,
+        limite: i64,
+    ) -> Resultado<Pagina<RevisaoEntidade>> {
+        documentos::revisoes(&self.conn, id, deslocamento, limite)
+    }
+
+    pub fn criar_dataset(
+        &mut self,
+        nome: &str,
+        autorizacao: &str,
+        retencao: &str,
+    ) -> Resultado<DatasetSupervisionado> {
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let dataset = supervisao::criar_dataset(
+            &tx,
+            &self.sessao,
+            self.caso.id,
+            nome,
+            autorizacao,
+            retencao,
+        )?;
+        tx.commit()?;
+        Ok(dataset)
+    }
+
+    pub fn listar_datasets(
+        &self,
+        deslocamento: i64,
+        limite: i64,
+    ) -> Resultado<Pagina<DatasetSupervisionado>> {
+        supervisao::listar_datasets(&self.conn, self.caso.id, deslocamento, limite)
+    }
+
+    pub fn adicionar_amostra(
+        &mut self,
+        dataset_id: i64,
+        pedido: &PedidoAmostraSupervisionada,
+    ) -> Resultado<AmostraSupervisionada> {
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let amostra =
+            supervisao::adicionar_amostra(&tx, &self.sessao, self.caso.id, dataset_id, pedido)?;
+        tx.commit()?;
+        Ok(amostra)
+    }
+
+    pub fn amostras_dataset(
+        &self,
+        dataset_id: i64,
+        deslocamento: i64,
+        limite: i64,
+    ) -> Resultado<Pagina<AmostraSupervisionada>> {
+        supervisao::amostras_dataset(&self.conn, self.caso.id, dataset_id, deslocamento, limite)
+    }
+
+    pub fn avaliar_dataset(&self, dataset_id: i64) -> Resultado<AvaliacaoSupervisionada> {
+        self.avaliar_dataset_com_controle(dataset_id, &ControleDescoberta::novo())
+    }
+
+    pub fn avaliar_dataset_com_controle(
+        &self,
+        dataset_id: i64,
+        controle: &Arc<ControleDescoberta>,
+    ) -> Resultado<AvaliacaoSupervisionada> {
+        supervisao::avaliar_dataset(&self.conn, self.caso.id, dataset_id, controle)
+    }
+
+    pub fn visual_existente(
+        &self,
+        arquivo_id: i64,
+        motor: &str,
+        versao: &str,
+    ) -> Resultado<Option<VisualIndexado>> {
+        visuais::existente(&self.conn, arquivo_id, motor, versao)
+    }
+
+    pub fn guardar_visual(&mut self, dados: VisualIndexado) -> Resultado<VisualIndexado> {
+        if dados.caso_id != self.caso.id {
+            return Err(ErroArmazenamento::Recusado(
+                "descritor visual pertence a outro caso".into(),
+            ));
+        }
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let d = visuais::guardar(&tx, &self.sessao, dados)?;
+        tx.commit()?;
+        Ok(d)
+    }
+
+    pub fn semelhantes_visuais(
+        &self,
+        id: i64,
+        max_bits: u32,
+        limite: usize,
+        controle: &Arc<ControleDescoberta>,
+    ) -> Resultado<ResultadoSimilarVisual> {
+        visuais::semelhantes(&self.conn, id, max_bits, limite, controle)
+    }
+
     /// Registra o início de uma importação e devolve o gravador, que tem conexão
     /// própria e pode ser levado para outra thread.
     pub fn iniciar_importacao(
@@ -433,6 +647,84 @@ impl BancoCaso {
         limite: i64,
     ) -> Resultado<ResultadoBusca> {
         busca::buscar(&self.conn, filtro, deslocamento, limite)
+    }
+
+    pub fn listar_vocabularios_pesquisa(&self) -> Resultado<Vec<VersaoVocabularioPesquisa>> {
+        pesquisa_local::listar_vocabularios(&self.conn)
+    }
+
+    pub fn salvar_vocabulario_pesquisa(
+        &mut self,
+        dados: VocabularioPesquisa,
+    ) -> Resultado<VersaoVocabularioPesquisa> {
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let versao = pesquisa_local::salvar_vocabulario(&tx, &self.sessao, dados)?;
+        tx.commit()?;
+        Ok(versao)
+    }
+
+    pub fn exportar_vocabulario_pesquisa(&mut self, id: i64) -> Resultado<String> {
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let texto = pesquisa_local::exportar_vocabulario(&tx, &self.sessao, id)?;
+        tx.commit()?;
+        Ok(texto)
+    }
+
+    pub fn executar_descoberta(
+        &mut self,
+        pedido: PedidoDescoberta,
+        vocabulario_id: Option<i64>,
+    ) -> Resultado<ExecucaoDescoberta> {
+        self.executar_descoberta_com_controle(pedido, vocabulario_id, &ControleDescoberta::novo())
+    }
+
+    pub fn executar_descoberta_com_controle(
+        &mut self,
+        pedido: PedidoDescoberta,
+        vocabulario_id: Option<i64>,
+        controle: &Arc<ControleDescoberta>,
+    ) -> Resultado<ExecucaoDescoberta> {
+        controle.verificar()?;
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let resultado =
+            pesquisa_local::executar(&tx, &self.sessao, pedido, vocabulario_id, controle)?;
+        tx.commit()?;
+        Ok(resultado)
+    }
+
+    pub fn paginar_descoberta(
+        &self,
+        consulta_id: i64,
+        deslocamento: i64,
+        limite: i64,
+    ) -> Resultado<ResultadoDescoberta> {
+        self.paginar_descoberta_com_controle(
+            consulta_id,
+            deslocamento,
+            limite,
+            &ControleDescoberta::novo(),
+        )
+    }
+
+    pub fn paginar_descoberta_com_controle(
+        &self,
+        consulta_id: i64,
+        deslocamento: i64,
+        limite: i64,
+        controle: &Arc<ControleDescoberta>,
+    ) -> Resultado<ResultadoDescoberta> {
+        controle.verificar()?;
+        pesquisa_local::paginar(&self.conn, consulta_id, deslocamento, limite, controle)
+    }
+
+    pub fn listar_consultas_descoberta(&self) -> Resultado<Vec<ConsultaDescobertaSalva>> {
+        pesquisa_local::listar_consultas(&self.conn)
     }
 
     /// Mensagens de um trecho de conversa (do início ao fim, inclusive).
