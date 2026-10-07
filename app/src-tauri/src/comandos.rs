@@ -564,12 +564,28 @@ pub async fn indexar_visual(
         let leitura = estado
             .com(|s| s.pedido_documento(arquivo_id, caso_id))?
             .executar_visual(guarda.controle());
-        let a = leitura.assinatura.ok_or_else(|| {
-            ErroApp::novo(
-                CodigoErro::NaoSuportado,
+        if leitura.estado != sied_documentos::EstadoDocumento::Pronto {
+            let codigo = match leitura.estado {
+                sied_documentos::EstadoDocumento::OrigemDivergente
+                | sied_documentos::EstadoDocumento::HashAusente => CodigoErro::Integridade,
+                sied_documentos::EstadoDocumento::SemSuporte => CodigoErro::NaoSuportado,
+                sied_documentos::EstadoDocumento::Cancelado => CodigoErro::Conflito,
+                sied_documentos::EstadoDocumento::LimiteExcedido => CodigoErro::Validacao,
+                _ => CodigoErro::Interno,
+            };
+            return Err(ErroApp::novo(
+                codigo,
                 leitura
                     .motivo
-                    .unwrap_or_else(|| "o motor visual não publicou descritor".into()),
+                    .unwrap_or_else(|| "a análise visual não publicou descritor".into()),
+            ));
+        }
+        let a = leitura.assinatura.ok_or_else(|| {
+            ErroApp::novo(
+                CodigoErro::Integridade,
+                leitura
+                    .motivo
+                    .unwrap_or_else(|| "a análise visual pronta não contém descritor".into()),
             )
         })?;
         crate::documentos::conferir_cancelamento(guarda.controle())?;

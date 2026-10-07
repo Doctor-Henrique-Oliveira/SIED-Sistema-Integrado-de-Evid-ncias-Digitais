@@ -387,7 +387,7 @@ mod contratos {
     use super::*;
 
     #[test]
-    fn imprimir_contratos_relacionais_rust() {
+    fn imprime_contratos_relacionais_rust() {
         macro_rules! contrato {
             ($tipo:ty) => {
                 println!("SIED_CONTRATO_INICIO:{}.ts", <$tipo>::name());
