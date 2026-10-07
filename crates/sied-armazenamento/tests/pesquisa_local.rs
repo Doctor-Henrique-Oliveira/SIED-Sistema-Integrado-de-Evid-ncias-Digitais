@@ -248,8 +248,20 @@ fn migracao_v6_cria_backup_sem_editar_fatos_ou_indice() {
     banco.fechar().unwrap();
     let conn = Connection::open(pasta.join("caso.sied.db")).unwrap();
     conn.execute_batch(
-        "DROP TABLE consulta_descoberta; DROP TABLE vocabulario_pesquisa;
-        DELETE FROM schema_migracao WHERE versao = 7; PRAGMA user_version = 6;",
+        "PRAGMA foreign_keys = OFF;
+        DROP TABLE visual_derivado;
+        DROP TABLE amostra_supervisionada;
+        DROP TABLE dataset_supervisionado;
+        DROP TABLE revisao_entidade_documental;
+        DROP TABLE busca_entidade_documental;
+        DROP TABLE entidade_documental;
+        DROP TABLE busca_documento;
+        DROP TABLE documento_derivado;
+        DROP TABLE consulta_descoberta;
+        DROP TABLE vocabulario_pesquisa;
+        DELETE FROM schema_migracao WHERE versao >= 7;
+        PRAGMA user_version = 6;
+        PRAGMA foreign_keys = ON;",
     )
     .unwrap();
     drop(conn);
