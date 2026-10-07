@@ -171,8 +171,7 @@ pub fn pesquisar(
         || pedido.filtro.texto.split_whitespace().count() > 64
         || pedido.mecanismos.is_empty()
         || pedido.mecanismos.len() > 4
-        || deslocamento < 0
-        || deslocamento > 400
+        || !(0..=400).contains(&deslocamento)
         || !(1..=50).contains(&limite)
         || pedido
             .filtro
