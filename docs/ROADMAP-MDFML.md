@@ -353,10 +353,11 @@ novas telas nem modificar o trabalho visual/premium atual como parte deste regis
 
 ## 18. Faseamento proposto AI-0 → AI-7
 
-AI-0 permanece em validação no PR #24, sem integração. AI-1 tem início autorizado e
-a fundação documental, o leitor UTF-8 e PDF nativo por página parcialmente implementados.
-AI-2–AI-7 continuam planejadas, sem início.
-As entregas abaixo são metas completas, não alegação de funcionalidades disponíveis.
+Esta tabela conserva as metas completas de cada fase. O estado atual e as partes ainda
+ausentes estão no quadro do início deste documento. A branch do PR #25 integrou o código
+da AI-0 e vários incrementos das fases seguintes; ela ainda requer validação Rust,
+contratos gerados e build completo antes de ser tratada como entrega final.
+As metas abaixo não são alegação de funcionalidades disponíveis na `main`.
 
 | Fase | Escopo planejado | Entrega a validar antes de avançar |
 |---|---|---|

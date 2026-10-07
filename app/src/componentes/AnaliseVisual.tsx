@@ -40,6 +40,7 @@ function Sessao({caso,extracaoId,arquivo}:{caso:Caso;extracaoId:string;arquivo:A
     <div className="flex items-center justify-between gap-2"><h3 className="text-sm font-semibold">Pesquisa por imagem</h3><Selo tom="neutro">LOCAL · DERIVADO</Selo></div>
     <p className="text-xs text-texto-2">SHA-256 identifica arquivos de mesmos bytes. dHash compara estrutura visual grosseira, não identidade ou objetos. Classificação neural está indisponível.</p>
     <Botao tamanho="p" variante="secundario" onClick={()=>void indexar()} disabled={!arquivo.sha256||arquivo.tamanho>2*1024*1024||ocupada}>Analisar imagem</Botao>
+    {(!arquivo.sha256 || arquivo.tamanho > 2*1024*1024) && <p className="text-xs text-texto-3">{!arquivo.sha256 ? "A imagem não tem SHA-256 conferível no inventário." : "A leitura visual local aceita arquivos de até 2 MiB nesta versão."} Análise indisponível para este arquivo.</p>}
     {ocupada&&<Carregando texto="Processando consulta visual local…"/>}
     {operacao.current&&<Botao tamanho="p" variante="fantasma" onClick={()=>void api.cancelarDescoberta(operacao.current!).catch(e=>setErro(String(e)))}>Solicitar cancelamento</Botao>}
     {erro&&<Aviso>{erro}</Aviso>}

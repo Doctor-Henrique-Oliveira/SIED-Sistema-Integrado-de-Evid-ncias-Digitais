@@ -14,7 +14,8 @@
 
 use rusqlite::{params, params_from_iter, types::Value, Connection, OptionalExtension};
 use serde::Serialize;
-use sied_dominio::{CasoId, DataHora, ExtracaoId};
+use sied_dominio::artefato::DataHora;
+use sied_dominio::{CasoId, ExtracaoId};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use ts_rs::TS;
@@ -238,7 +239,7 @@ fn correlacionar_interno(
                     classe: ClasseRelacao::Sugerida,
                     motivo: format!("Diferença UTC de {delta} ms dentro da janela. Apenas proximidade temporal, não causalidade."),
                     mecanismo: MECANISMO_TEMPORAL.into(),
-                    score_contexto: Some((1.0 - delta as f64 / janela_ms as f64).clamp(0.0, 1.0)),
+                    score_contexto: Some((1.0_f64 - delta as f64 / janela_ms as f64).clamp(0.0, 1.0)),
                 });
             }
         }
