@@ -56,7 +56,7 @@ describe("máquina de estados da experiência", () => {
     montar();
     expect(await screen.findByRole("main", { name: "Preparando workspace do caso" }, { timeout: 3000 })).toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: "Navegação principal" })).not.toBeInTheDocument();
-    expect(await screen.findByRole("heading", { name: "Preparar o caso" }, { timeout: 7000 })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Preparar fontes do caso" }, { timeout: 7000 })).toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: "Navegação principal" })).not.toBeInTheDocument();
     expect(screen.queryByText("Dashboard carregado")).not.toBeInTheDocument();
   }, 10000);

@@ -46,10 +46,11 @@ function PainelCaso({ caso, pasta }: { caso: Caso; pasta: string }) {
   return (
     <div className="space-y-5">
       <CabecalhoCaso caso={caso} pasta={pasta} />
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="dashboard-secao flex flex-wrap items-end justify-between gap-3 border-b border-borda pb-3">
         <div>
-          <p className="sobrelinha text-ouro!">Centro de análise</p>
-          <h2 className="mt-0.5 text-lg font-semibold tracking-tight text-texto">Panorama operacional</h2>
+          <p className="sobrelinha text-ouro!">Centro de comando</p>
+          <h2 className="mt-0.5 text-lg font-semibold tracking-[-0.02em] text-texto">Panorama operacional do caso</h2>
+          <p className="mt-0.5 text-xs text-texto-3">Fontes, cobertura e pontos que exigem atenção imediata.</p>
         </div>
         <Atalhos caso={caso} />
       </div>
@@ -91,12 +92,12 @@ function CabecalhoCaso({ caso, pasta }: { caso: Caso; pasta: string }) {
             <Icone nome="casos" className="size-3.5" />
             {caso.procedimento ?? "Procedimento não informado"}
           </p>
-          <h1 className="mt-1 truncate text-2xl font-semibold tracking-tight text-texto">{identificacaoCaso(caso)}</h1>
+          <h1 className="mt-1 truncate text-[24px] font-semibold leading-tight tracking-[-0.035em] text-texto">{identificacaoCaso(caso)}</h1>
           <p className="mt-0.5 truncate font-mono text-2xs text-texto-3" title="Pasta do caso">
             {pasta}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="dashboard-caso__estado flex flex-wrap items-center gap-2">
           <Selo tom="ok" titulo="O banco deste caso está aberto nesta estação">
             <Icone nome="check" className="size-3" /> Aberto nesta estação
           </Selo>
