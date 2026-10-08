@@ -30,7 +30,7 @@ export function PreparacaoCaso({
   const carregando = dispositivos.isPending || extracoes.isPending;
 
   return (
-    <div className="mx-auto max-w-[1040px] px-7 pb-10 pt-8">
+    <div className="preparacao-sied mx-auto max-w-[1040px] px-7 pb-10 pt-8">
       <div className="mb-7 flex items-center justify-between gap-4 border-b border-borda pb-5">
         <div className="flex min-w-0 items-center gap-3.5">
           <span className="grid size-10 shrink-0 place-items-center rounded-md border border-ouro/35 bg-ouro/8 text-ouro">
@@ -44,7 +44,7 @@ export function PreparacaoCaso({
         <span className="rounded-sm border border-borda-2 px-2.5 py-1 font-mono text-2xs uppercase tracking-wide text-texto-2">Local · offline</span>
       </div>
 
-      <section aria-label="Identificação do caso" className="mb-6 border-l-2 border-ouro bg-sup/75 px-5 py-4">
+      <section aria-label="Identificação do caso" className="preparacao-sied__caso mb-6 border-l-2 border-ouro px-5 py-4">
         <div className="flex flex-wrap items-baseline justify-between gap-x-5 gap-y-1">
           <div>
             <p className="sobrelinha">{caso.procedimento ?? "Procedimento não informado"}</p>
@@ -65,7 +65,7 @@ export function PreparacaoCaso({
       {extracoes.isError ? <div className="mb-4"><Aviso>{extracoes.error.message}<Botao variante="secundario" tamanho="p" className="mt-2" onClick={() => void extracoes.refetch()}>Tentar novamente</Botao></Aviso></div> : null}
 
       <div className="space-y-6">
-        <section aria-label="Etapa 1: dispositivo">
+        <section aria-label="Etapa 1: dispositivo" className="preparacao-sied__etapa">
           <div className="mb-2.5 flex items-center gap-3">
             <span className={`font-mono text-xs ${possuiDispositivo ? "text-ok" : "text-ouro"}`}>01</span>
             <div className="h-px flex-1 bg-borda-2" />
@@ -76,7 +76,7 @@ export function PreparacaoCaso({
           <SecaoDispositivos caso={caso} compacto />
         </section>
 
-        <section aria-label="Etapa 2: extração">
+        <section aria-label="Etapa 2: extração" className="preparacao-sied__etapa">
           <div className="mb-2.5 flex items-center gap-3">
             <span className={`font-mono text-xs ${possuiExtracao ? "text-ok" : possuiDispositivo ? "text-ouro" : "text-texto-3"}`}>02</span>
             <div className="h-px flex-1 bg-borda-2" />

@@ -95,7 +95,7 @@ export function Layout() {
 
   if (!prontoParaWorkspace) {
     return (
-      <div className="flex h-full min-h-0 flex-col bg-fundo">
+      <div className="workspace-sied flex h-full min-h-0 flex-col bg-fundo">
         <BarraSuperior caso={caso} info={info.data} preparacao />
         <main id="conteudo" tabIndex={-1} className="min-h-0 flex-1 overflow-y-auto outline-none">
           <PreparacaoCaso caso={aberto.caso} pasta={aberto.pasta} dispositivos={dispositivos} extracoes={extracoes} />
@@ -105,7 +105,7 @@ export function Layout() {
   }
 
   return (
-    <div className="flex h-full">
+    <div className="workspace-sied flex h-full">
       {/* Botão (não âncora): com o hash router, "#conteudo" trocaria a rota. */}
       <button
         type="button"
