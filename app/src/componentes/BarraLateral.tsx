@@ -1,4 +1,4 @@
-// Barra lateral fixa: marca, caso aberto, os 12 módulos e o estado da estação.
+// Barra lateral fixa: marca, caso aberto, módulos e estado da estação.
 // Módulos que dependem de um caso ficam desativados (com explicação) enquanto
 // nenhum caso está aberto.
 
@@ -46,6 +46,10 @@ export const grupos: { titulo: string; modulos: Modulo[] }[] = [
     titulo: "Saída",
     modulos: [{ rotulo: "Relatórios", icone: "relatorios", para: "/casos/:caso/relatorios" }],
   },
+  {
+    titulo: "Controle",
+    modulos: [{ rotulo: "Auditoria", icone: "integridade", para: "/casos/:caso/auditoria" }],
+  },
 ];
 
 export const configuracoes: Modulo = { rotulo: "Configurações", icone: "config", para: "/configuracoes", exato: true };
@@ -91,12 +95,12 @@ function Item({ m, casoId }: { m: Modulo; casoId: string | undefined }) {
 export function BarraLateral({ caso, info }: { caso: Caso | undefined; info: InfoApp | undefined }) {
   return (
     <aside className="flex w-[232px] shrink-0 flex-col border-r border-borda bg-lateral">
-      <div className="flex h-12 shrink-0 items-center gap-2.5 border-b border-borda px-4">
+      <div className="flex h-14 shrink-0 items-center gap-3 border-b border-borda px-4">
         <span className="grid size-7 place-items-center rounded-md border border-ouro/45 text-ouro">
           <Icone nome="escudo" className="size-4" />
         </span>
         <div className="min-w-0 leading-none">
-          <p className="text-sm font-semibold tracking-[0.2em] text-texto">SIED</p>
+          <p className="text-sm font-semibold tracking-[0.18em] text-texto">SIED</p>
           <p className="mt-1 truncate text-3xs tracking-wide text-texto-3">Evidências Digitais</p>
         </div>
       </div>

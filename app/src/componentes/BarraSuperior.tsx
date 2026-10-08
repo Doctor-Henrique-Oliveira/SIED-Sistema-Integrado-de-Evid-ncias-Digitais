@@ -93,22 +93,28 @@ function BuscaGlobal({ caso }: { caso: Caso }) {
   );
 }
 
-export function BarraSuperior({ caso, info }: { caso: Caso | undefined; info: InfoApp | undefined }) {
+export function BarraSuperior({ caso, info, preparacao = false }: { caso: Caso | undefined; info: InfoApp | undefined; preparacao?: boolean }) {
   const fechar = useFecharCaso();
   const navegar = useNavigate();
   const secao = secaoAtual(useLocation().pathname);
-  const acaoDiscreta = "rounded-sm px-1.5 py-0.5 text-2xs text-texto-3 transition-colors hover:bg-sup-2 hover:text-texto";
+  const acaoDiscreta = "rounded-sm px-2 py-1 text-xs text-texto-2 transition-colors hover:bg-sup-2 hover:text-texto focus-visible:outline focus-visible:outline-ouro";
 
   return (
-    <header className="flex h-12 shrink-0 items-center gap-4 border-b border-borda bg-lateral px-5">
+    <header className="flex h-14 shrink-0 items-center gap-5 border-b border-borda bg-lateral px-6">
       <nav aria-label="Você está em" className="flex min-w-0 items-center gap-1.5 text-sm">
         {caso ? (
           <>
-            <Link to={`/casos/${caso.id}`} className="truncate font-medium text-texto hover:text-ouro-claro" title="Visão geral do caso">
+            {preparacao && <span className="mr-3 flex shrink-0 items-center gap-2.5 border-r border-borda-2 pr-4 text-texto" aria-label="SIED">
+              <Icone nome="escudo" className="size-4 text-ouro" />
+              <span className="text-xs font-semibold tracking-[0.18em]">SIED</span>
+            </span>}
+            <Link to={`/casos/${caso.id}`} className="truncate font-semibold tracking-tight text-texto hover:text-ouro-claro" title="Visão geral do caso">
               {identificacaoCaso(caso)}
             </Link>
             <span className="hidden truncate text-texto-3 2xl:inline">· {caso.unidade}</span>
-            {secao && secao !== "Dashboard" && (
+            {preparacao ? (
+              <><Icone nome="direita" className="size-3.5 shrink-0 text-texto-4" /><span className="shrink-0 text-texto-2">Preparação</span></>
+            ) : secao && secao !== "Dashboard" && (
               <>
                 <Icone nome="direita" className="size-3.5 shrink-0 text-texto-4" />
                 <span className="truncate text-texto-2" aria-current="page">{secao}</span>
@@ -129,10 +135,10 @@ export function BarraSuperior({ caso, info }: { caso: Caso | undefined; info: In
         )}
       </nav>
 
-      <div className="flex flex-1 justify-center">{caso && <BuscaGlobal caso={caso} />}</div>
+      <div className="flex flex-1 justify-center">{caso && !preparacao && <BuscaGlobal caso={caso} />}</div>
 
       <div className="flex shrink-0 items-center gap-3 text-xs text-texto-2">
-        {caso && <ImportacaoEmCurso caso={caso} />}
+        {caso && !preparacao && <ImportacaoEmCurso caso={caso} />}
         <span
           className="hidden h-6 items-center gap-1.5 rounded-sm px-1.5 text-2xs font-medium uppercase tracking-[0.08em] text-texto-3 ring-1 ring-inset ring-borda-2 lg:flex"
           title="O SIED não usa internet: tudo fica nesta estação"

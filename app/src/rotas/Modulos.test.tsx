@@ -72,8 +72,8 @@ function montar(rota: string, elemento: ReactNode, caminho: string) {
 }
 
 describe("barra lateral", () => {
-  it("tem os 12 módulos e desativa os do caso quando nenhum caso está aberto", () => {
-    expect(grupos.flatMap((g) => g.modulos).length + 1).toBe(12); // + Configurações
+  it("tem os módulos e desativa os do caso quando nenhum caso está aberto", () => {
+    expect(grupos.flatMap((g) => g.modulos).length + 1).toBe(13); // + Configurações
     render(
       <MemoryRouter>
         <BarraLateral caso={undefined} info={undefined} />
@@ -94,6 +94,7 @@ describe("barra lateral", () => {
     );
     expect(screen.getByRole("link", { name: "Conversas" })).toHaveAttribute("href", "/casos/c1/conversas");
     expect(screen.getByRole("link", { name: "Dashboard" })).toHaveAttribute("href", "/casos/c1");
+    expect(screen.getByRole("link", { name: "Auditoria" })).toHaveAttribute("href", "/casos/c1/auditoria");
     expect(screen.getByText("IP 1/2026")).toBeInTheDocument();
   });
 });

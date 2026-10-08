@@ -5,7 +5,7 @@ import { useAbrirCaso, useCasoAtual, useExtracoes, usePastaEmRede, useResumoCaso
 import { classeBotao } from "../componentes/Botao";
 import { Aviso, Cartao, Carregando, FaixaIndicadores, Indicador, Selo } from "../componentes/Estrutura";
 import { Icone, type NomeIcone } from "../componentes/Icone";
-import { SecaoAtividades, SecaoDispositivos, SecaoExtracoes } from "../componentes/SecoesCaso";
+import { SecaoDispositivos, SecaoExtracoes } from "../componentes/SecoesCaso";
 import { dataHora, identificacaoCaso, localDaPasta, numero, tamanho } from "../util/formatar";
 import { nomeTipoArtefato } from "../util/rotulos";
 
@@ -44,21 +44,26 @@ export function VoltarAoCaso({ caso }: { caso: Caso }) {
 function PainelCaso({ caso, pasta }: { caso: Caso; pasta: string }) {
   const resumo = useResumoCaso(caso.id);
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <CabecalhoCaso caso={caso} pasta={pasta} />
-      <Atalhos caso={caso} />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="sobrelinha text-ouro!">Centro de análise</p>
+          <h2 className="mt-0.5 text-lg font-semibold tracking-tight text-texto">Panorama operacional</h2>
+        </div>
+        <Atalhos caso={caso} />
+      </div>
       <Indicadores caso={caso} r={resumo.data} />
       <LeituraCaso r={resumo.data} />
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
-        <div className="min-w-0 space-y-4">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <div className="min-w-0">
           <SecaoDispositivos caso={caso} compacto />
+        </div>
+        <div className="min-w-0">
           <SecaoExtracoes caso={caso} compacto />
         </div>
-        <div className="min-w-0 space-y-4">
-          <Alertas caso={caso} pasta={pasta} r={resumo.data} />
-          <SecaoAtividades caso={caso} />
-        </div>
       </div>
+      <Alertas caso={caso} pasta={pasta} r={resumo.data} />
     </div>
   );
 }
@@ -78,7 +83,7 @@ function CabecalhoCaso({ caso, pasta }: { caso: Caso; pasta: string }) {
     ["Vítima", caso.vitima],
   ];
   return (
-    <section aria-label="Identificação do caso" className="relative overflow-hidden rounded-xl border border-borda bg-sup px-5 py-4">
+    <section aria-label="Identificação do caso" className="relative overflow-hidden rounded-md border border-borda bg-sup px-6 py-5">
       <span className="absolute inset-y-0 left-0 w-0.5 bg-ouro" aria-hidden />
       <div className="flex flex-wrap items-start justify-between gap-x-8 gap-y-4">
         <div className="min-w-0">
@@ -86,7 +91,7 @@ function CabecalhoCaso({ caso, pasta }: { caso: Caso; pasta: string }) {
             <Icone nome="casos" className="size-3.5" />
             {caso.procedimento ?? "Procedimento não informado"}
           </p>
-          <h1 className="mt-1 truncate text-2xl font-semibold tracking-[-0.015em] text-texto">{identificacaoCaso(caso)}</h1>
+          <h1 className="mt-1 truncate text-2xl font-semibold tracking-tight text-texto">{identificacaoCaso(caso)}</h1>
           <p className="mt-0.5 truncate font-mono text-2xs text-texto-3" title="Pasta do caso">
             {pasta}
           </p>
@@ -95,8 +100,8 @@ function CabecalhoCaso({ caso, pasta }: { caso: Caso; pasta: string }) {
           <Selo tom="ok" titulo="O banco deste caso está aberto nesta estação">
             <Icone nome="check" className="size-3" /> Aberto nesta estação
           </Selo>
-          <Selo tom="neutro" titulo="Fuso usado para exibir todas as datas do caso">
-            <Icone nome="relogio" className="size-3" /> {caso.fuso_horario}
+          <Selo tom="neutro" titulo="Fuso registrado neste caso; usado para exibir as datas sem reinterpretá-las">
+            <Icone nome="relogio" className="size-3" /> Fuso do caso: {caso.fuso_horario}
           </Selo>
         </div>
       </div>
