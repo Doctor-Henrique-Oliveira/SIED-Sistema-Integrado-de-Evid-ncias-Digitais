@@ -118,8 +118,11 @@ describe("experiência premium de entrada", () => {
     const pronto = vi.fn();
     render(<ForensicBootConsole aberto={aberto} info={info} aoPronto={pronto} aoErro={vi.fn()} />);
     expect(screen.getByText("Pasta de caso reconhecida")).toBeInTheDocument();
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
+    expect(screen.queryByText("Banco do caso aberto")).not.toBeInTheDocument();
     await screen.findByText("Trilha de auditoria conferida", {}, { timeout: 5000 });
     const linhas = screen.getAllByRole("listitem").map((item) => item.textContent);
+    expect(linhas).toHaveLength(4);
     expect(linhas[0]).toContain("Pasta de caso reconhecida");
     expect(linhas[1]).toContain("Banco do caso aberto");
     expect(linhas[2]).toContain("Caso identificado");

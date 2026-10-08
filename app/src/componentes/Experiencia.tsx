@@ -101,6 +101,9 @@ export function ForensicBootConsole({ aberto, info, aoPronto, aoErro }: {
       { id: "workspace", codigo: "WORKSPACE", rotulo: pronto ? "Workspace pronto" : "Preparação do workspace", detalhe: pronto ? "Ambiente operacional liberado" : "Preparando ambiente operacional", estado: definirEstado(5, pronto) },
     ];
   }, [aberto, auditoria, etapaAtiva, info, pronto]);
+  // O console revela somente etapas realmente alcançadas. Não há lista pronta,
+  // rolagem manual ou operação fictícia escondida abaixo da viewport.
+  const eventosVisiveis = eventos.slice(0, Math.min(eventos.length, etapaAtiva + 1));
 
   return (
     <main className={`boot-forense ${pronto ? "is-ready" : etapaAtiva >= 5 ? "is-workspace-ready" : "is-processing"}`} aria-label="Preparando workspace do caso">
@@ -137,8 +140,12 @@ export function ForensicBootConsole({ aberto, info, aoPronto, aoErro }: {
         <section className="boot-forense__sequencia" aria-label="Sequência operacional">
           <div className="boot-forense__legenda"><span>INICIALIZAÇÃO DO CASO</span><span>01 — 06</span></div>
           <ol className="boot-forense__eventos" role="log" aria-live="polite" aria-label="Etapas de inicialização">
-            {eventos.map((evento, indice) => (
-              <li key={evento.id} className={`boot-forense__evento boot-forense__evento--${evento.estado}`}>
+            {eventosVisiveis.map((evento, indice) => (
+              <li
+                key={evento.id}
+                className={`boot-forense__evento boot-forense__evento--${evento.estado}`}
+                aria-current={evento.estado === "processando" ? "step" : undefined}
+              >
                 <span className="boot-forense__indice">{String(indice + 1).padStart(2, "0")}</span>
                 <div className="boot-forense__leitura">
                   <span className="boot-forense__codigo">{evento.codigo}</span>
@@ -151,6 +158,10 @@ export function ForensicBootConsole({ aberto, info, aoPronto, aoErro }: {
               </li>
             ))}
           </ol>
+          <div className="boot-forense__prompt" aria-hidden="true">
+            <span>SIED:\CASE_BOOT&gt;</span>
+            <i />
+          </div>
         </section>
       </div>
       <footer className="boot-forense__rodape">
