@@ -234,8 +234,8 @@ export function useCancelarImportacao() {
   });
 }
 
-export function useExtracoes(casoId: CasoId) {
-  return useQuery({ queryKey: chaves.extracoes(casoId), queryFn: api.listarExtracoes });
+export function useExtracoes(casoId: CasoId | undefined) {
+  return useQuery({ queryKey: chaves.extracoes(casoId ?? ""), queryFn: api.listarExtracoes, enabled: !!casoId });
 }
 
 export function useExtracao(id: ExtracaoId) {

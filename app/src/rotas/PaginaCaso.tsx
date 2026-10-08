@@ -3,9 +3,9 @@ import { Link, useParams } from "react-router-dom";
 import type { Caso, Extracao, ResumoCaso } from "../api/cliente";
 import { useAbrirCaso, useCasoAtual, useExtracoes, usePastaEmRede, useResumoCaso } from "../api/consultas";
 import { classeBotao } from "../componentes/Botao";
-import { Aviso, Cartao, Carregando, FaixaIndicadores, Indicador, Selo } from "../componentes/Estrutura";
+import { Aviso, Cartao, Carregando, Selo } from "../componentes/Estrutura";
 import { Icone, type NomeIcone } from "../componentes/Icone";
-import { SecaoAtividades, SecaoDispositivos, SecaoExtracoes } from "../componentes/SecoesCaso";
+import { SecaoDispositivos, SecaoExtracoes } from "../componentes/SecoesCaso";
 import { dataHora, identificacaoCaso, localDaPasta, numero, tamanho } from "../util/formatar";
 import { nomeTipoArtefato } from "../util/rotulos";
 
@@ -44,21 +44,26 @@ export function VoltarAoCaso({ caso }: { caso: Caso }) {
 function PainelCaso({ caso, pasta }: { caso: Caso; pasta: string }) {
   const resumo = useResumoCaso(caso.id);
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <CabecalhoCaso caso={caso} pasta={pasta} />
-      <Atalhos caso={caso} />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="sobrelinha text-ouro!">Centro de análise</p>
+          <h2 className="mt-0.5 text-lg font-semibold tracking-tight text-texto">Panorama operacional</h2>
+        </div>
+        <Atalhos caso={caso} />
+      </div>
       <Indicadores caso={caso} r={resumo.data} />
       <LeituraCaso r={resumo.data} />
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
-        <div className="min-w-0 space-y-4">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <div className="min-w-0">
           <SecaoDispositivos caso={caso} compacto />
+        </div>
+        <div className="min-w-0">
           <SecaoExtracoes caso={caso} compacto />
         </div>
-        <div className="min-w-0 space-y-4">
-          <Alertas caso={caso} pasta={pasta} r={resumo.data} />
-          <SecaoAtividades caso={caso} />
-        </div>
       </div>
+      <Alertas caso={caso} pasta={pasta} r={resumo.data} />
     </div>
   );
 }
@@ -78,7 +83,7 @@ function CabecalhoCaso({ caso, pasta }: { caso: Caso; pasta: string }) {
     ["Vítima", caso.vitima],
   ];
   return (
-    <section aria-label="Identificação do caso" className="relative overflow-hidden rounded-xl border border-borda bg-sup px-5 py-4">
+    <section aria-label="Identificação do caso" className="dashboard-caso relative overflow-hidden rounded-md border border-borda bg-sup px-6 py-5">
       <span className="absolute inset-y-0 left-0 w-0.5 bg-ouro" aria-hidden />
       <div className="flex flex-wrap items-start justify-between gap-x-8 gap-y-4">
         <div className="min-w-0">
@@ -86,7 +91,7 @@ function CabecalhoCaso({ caso, pasta }: { caso: Caso; pasta: string }) {
             <Icone nome="casos" className="size-3.5" />
             {caso.procedimento ?? "Procedimento não informado"}
           </p>
-          <h1 className="mt-1 truncate text-2xl font-semibold tracking-[-0.015em] text-texto">{identificacaoCaso(caso)}</h1>
+          <h1 className="mt-1 truncate text-2xl font-semibold tracking-tight text-texto">{identificacaoCaso(caso)}</h1>
           <p className="mt-0.5 truncate font-mono text-2xs text-texto-3" title="Pasta do caso">
             {pasta}
           </p>
@@ -95,8 +100,8 @@ function CabecalhoCaso({ caso, pasta }: { caso: Caso; pasta: string }) {
           <Selo tom="ok" titulo="O banco deste caso está aberto nesta estação">
             <Icone nome="check" className="size-3" /> Aberto nesta estação
           </Selo>
-          <Selo tom="neutro" titulo="Fuso usado para exibir todas as datas do caso">
-            <Icone nome="relogio" className="size-3" /> {caso.fuso_horario}
+          <Selo tom="neutro" titulo={`Identificação visual da estação. Datas continuam usando o fuso técnico registrado no caso: ${caso.fuso_horario}`}>
+            <Icone nome="relogio" className="size-3" /> America/Bahia
           </Selo>
         </div>
       </div>
@@ -159,34 +164,51 @@ function Indicadores({ caso, r }: { caso: Caso; r: ResumoCaso | undefined }) {
     .join(" · ");
   const n = (v: number | undefined) => (v == null ? null : numero(v));
   return (
-    <FaixaIndicadores rotulo="Indicadores do caso" className="grid-cols-2 md:grid-cols-4 2xl:grid-cols-8">
-      <Indicador rotulo="Dispositivos" icone="dispositivo" valor={n(r?.dispositivos)} para={`${base}/dispositivos`} />
-      <Indicador
-        rotulo="Extrações"
-        icone="extracao"
-        valor={n(r?.extracoes)}
-        detalhe={r && `${numero(r.extracoes_concluidas)} concluídas`}
-        para={`${base}/extracoes`}
-      />
-      <Indicador rotulo="Arquivos" icone="arquivos" valor={n(r?.arquivos)} detalhe={r && tamanho(r.bytes)} para={`${base}/arquivos`} />
-      <Indicador rotulo="Mídias" icone="midias" valor={n(midias)} detalhe="imagens, vídeos, áudios, docs" para={`${base}/midias`} />
-      <Indicador rotulo="Registros" icone="banco" tom="ouro" valor={n(r?.registros)} detalhe={principais || (r && "interpretados")} />
-      <Indicador rotulo="Conversas" icone="conversas" valor={n(r?.conversas)} para={`${base}/conversas`} />
-      <Indicador
-        rotulo="Identificadores"
-        icone="contatos"
-        valor={n(r?.identificadores)}
-        detalhe="nas conversas"
-        para={`${base}/contatos`}
-      />
-      <Indicador
-        rotulo="Localizações"
-        icone="localizacoes"
-        valor={n(r?.localizacoes)}
-        detalhe="registros com coordenadas"
-        para={`${base}/localizacoes`}
-      />
-    </FaixaIndicadores>
+    <section aria-label="Indicadores do caso" className="dashboard-indicadores">
+      <div className="dashboard-indicadores__principais">
+        <MetricaPrincipal rotulo="Registros interpretados" icone="banco" valor={n(r?.registros)} detalhe={principais || (r && "Conteúdo disponível para análise")} destaque />
+        <MetricaPrincipal rotulo="Extrações" icone="extracao" valor={n(r?.extracoes)} detalhe={r && `${numero(r.extracoes_concluidas)} concluídas`} para={`${base}/extracoes`} />
+        <MetricaPrincipal rotulo="Arquivos inventariados" icone="arquivos" valor={n(r?.arquivos)} detalhe={r && tamanho(r.bytes)} para={`${base}/arquivos`} />
+      </div>
+      <div className="dashboard-indicadores__secundarios">
+        <MetricaCompacta rotulo="Conversas" icone="conversas" valor={n(r?.conversas)} para={`${base}/conversas`} />
+        <MetricaCompacta rotulo="Mídias" icone="midias" valor={n(midias)} para={`${base}/midias`} />
+        <MetricaCompacta rotulo="Identificadores" icone="contatos" valor={n(r?.identificadores)} para={`${base}/contatos`} />
+        <MetricaCompacta rotulo="Localizações" icone="localizacoes" valor={n(r?.localizacoes)} para={`${base}/localizacoes`} />
+        <MetricaCompacta rotulo="Dispositivos" icone="dispositivo" valor={n(r?.dispositivos)} para={`${base}/dispositivos`} />
+      </div>
+    </section>
+  );
+}
+
+function MetricaPrincipal({ rotulo, icone, valor, detalhe, para, destaque = false }: {
+  rotulo: string;
+  icone: NomeIcone;
+  valor: ReactNode | null;
+  detalhe?: ReactNode;
+  para?: string;
+  destaque?: boolean;
+}) {
+  const conteudo = <>
+    <div className="flex items-center justify-between gap-3">
+      <p className="sobrelinha">{rotulo}</p>
+      <Icone nome={icone} className={`size-4 ${destaque ? "text-ouro" : "text-texto-3"}`} />
+    </div>
+    <p className={`mt-3 tabular text-[28px] font-semibold leading-none tracking-[-0.035em] ${valor == null ? "text-texto-3" : "text-texto"}`}>{valor ?? "—"}</p>
+    <p className="mt-2 truncate text-xs text-texto-3">{detalhe ?? "Aguardando leitura do caso"}</p>
+  </>;
+  const classe = `dashboard-metrica-principal ${destaque ? "dashboard-metrica-principal--destaque" : ""}`;
+  return para ? <Link to={para} className={classe}>{conteudo}</Link> : <div className={classe}>{conteudo}</div>;
+}
+
+function MetricaCompacta({ rotulo, icone, valor, para }: { rotulo: string; icone: NomeIcone; valor: ReactNode | null; para: string }) {
+  return (
+    <Link to={para} className="dashboard-metrica-compacta">
+      <Icone nome={icone} className="size-4 text-texto-3" />
+      <span className="min-w-0 flex-1 truncate text-xs text-texto-2">{rotulo}</span>
+      <strong className={`tabular text-base font-semibold ${valor == null ? "text-texto-3" : "text-texto"}`}>{valor ?? "—"}</strong>
+      <Icone nome="direita" className="size-3 text-texto-4" />
+    </Link>
   );
 }
 

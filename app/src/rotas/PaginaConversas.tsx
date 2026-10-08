@@ -124,7 +124,7 @@ function Conversas({ caso }: { caso: Caso }) {
           </LinkBotao>
         }
       />
-      <div className={`grid h-[calc(100vh-10.25rem)] min-h-[28rem] gap-2 ${colunas}`}>
+      <div className={`conversas-workbench grid h-[calc(100vh-10.25rem)] min-h-[28rem] gap-2 ${colunas}`}>
         <div className={`min-h-0 ${selecionada != null && tecnica ? "hidden 2xl:flex" : "flex"}`}>
           <ListaConversas caso={caso} selecionada={selecionada} />
         </div>
@@ -193,7 +193,7 @@ function ListaConversas({ caso, selecionada }: { caso: Caso; selecionada: number
 
   const totalApps = apps.data?.reduce((n, a) => n + a.conversas, 0) ?? 0;
   return (
-    <section aria-label="Conversas do caso" className="flex min-h-0 w-full flex-col overflow-hidden border border-borda bg-sup">
+    <section aria-label="Conversas do caso" className="conversas-lista flex min-h-0 w-full flex-col overflow-hidden border border-borda bg-sup">
       <div className="space-y-2 border-b border-borda p-2.5">
         <div className="relative">
           <Icone nome="busca" className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-texto-3" />
@@ -314,8 +314,8 @@ function ItemConversa({ caso, c, ativa }: { caso: Caso; c: Conversa; ativa: bool
     <Link
       to={`/casos/${caso.id}/conversas/${c.id}`}
       aria-current={ativa ? "true" : undefined}
-      className={`flex gap-2.5 px-3 py-2.5 transition-colors ${
-        ativa ? "bg-ouro/10 shadow-[inset_2px_0_0_var(--color-ouro)]" : "hover:bg-sup-2"
+      className={`conversa-item flex gap-2.5 px-3 py-3 transition-colors ${
+        ativa ? "conversa-item--ativa" : "hover:bg-sup-2"
       }`}
     >
       <Avatar c={c} />
@@ -474,8 +474,8 @@ function Chat({
 
   return (
     <MarcasContexto.Provider value={marcas}>
-      <section aria-label="Chat" className="flex min-h-0 min-w-0 flex-col painel">
-        <div className="flex flex-wrap items-center gap-3 border-b border-borda px-3.5 py-2.5">
+      <section aria-label="Chat" className="conversa-chat flex min-h-0 min-w-0 flex-col painel">
+        <div className="conversa-chat__cabecalho flex flex-wrap items-center gap-3 border-b border-borda px-4 py-3">
           <Avatar c={c} grande />
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-base font-semibold text-texto">{tituloConversa(c)}</h2>
@@ -694,8 +694,8 @@ function Bolha({
         onClick={() => selecionar(m.id)}
         aria-pressed={ativo}
         data-teste="mensagem"
-        className={`max-w-[min(75%,40rem)] rounded-2xl border px-3 py-2 text-left text-sm transition-colors ${
-          enviada ? "rounded-br-sm border-info/25 bg-info/12 hover:bg-info/18" : "rounded-bl-sm border-borda-2 bg-sup-2 hover:bg-sup-3"
+        className={`conversa-bolha max-w-[min(72%,42rem)] rounded-2xl border px-3.5 py-2.5 text-left text-sm transition-colors ${
+          enviada ? "conversa-bolha--enviada rounded-br-sm" : "conversa-bolha--recebida rounded-bl-sm"
         } ${ativo ? "outline-2 outline-offset-2 outline-ouro" : ""} ${daBusca || (achado && atual) ? "ring-2 ring-ouro/70" : achado ? "ring-1 ring-ouro/35" : ""}`}
       >
         {!enviada && m.remetente && (
@@ -770,7 +770,7 @@ function Mensagens({
   const porIdExterno = new Map(itens.flatMap((m) => (m.id_externo ? [[m.id_externo, m] as const] : [])));
   let diaAnterior: string | null = null;
   return (
-    <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-4 py-3" aria-label="Mensagens da conversa">
+    <div className="conversa-mensagens min-h-0 flex-1 space-y-1.5 overflow-y-auto px-5 py-4" aria-label="Mensagens da conversa">
       {itens.length === 0 && <p className="py-6 text-center text-sm text-texto-2">Nenhuma mensagem nesta conversa.</p>}
       {itens.map((m) => {
         const d = diaDe(m, caso.fuso_horario);
@@ -869,7 +869,7 @@ function MensagensLongas({
           <span className="rounded-full border border-borda bg-sup-2 px-3 py-0.5 text-2xs text-texto-2 shadow-sm">{diaDe(diaTopo, caso.fuso_horario)}</span>
         </div>
       )}
-      <div ref={rolagem} className="min-h-0 flex-1 overflow-y-auto px-4 py-3" aria-label="Mensagens da conversa">
+      <div ref={rolagem} className="conversa-mensagens min-h-0 flex-1 overflow-y-auto px-5 py-4" aria-label="Mensagens da conversa">
         <div className="relative w-full" style={{ height: virtual.getTotalSize() }}>
           {visiveis.map((v) => {
             const m = item(v.index);
@@ -1002,7 +1002,7 @@ function PainelContexto({ caso, c, selecionada, abrirOrigem, abrirRegistro }: {
     </div>
   );
   return (
-    <aside aria-label="Contexto da conversa" className="hidden min-h-0 flex-col overflow-y-auto border border-borda bg-sup xl:flex">
+    <aside aria-label="Contexto da conversa" className="inspector-sied hidden min-h-0 flex-col overflow-y-auto border border-borda bg-sup xl:flex">
       <div className="border-b border-borda px-4 py-3"><p className="sobrelinha text-ouro!">Inspector técnico</p><p className="mt-0.5 text-sm font-semibold text-texto">Contexto da conversa</p></div>
       <SecaoRecolhivel titulo="Conversa" icone="conversas">
         <dl>

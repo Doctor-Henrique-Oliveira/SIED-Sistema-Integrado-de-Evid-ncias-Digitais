@@ -19,6 +19,7 @@ import {
   PaginaLocalizacoes,
 } from "./rotas/PaginasEstruturais";
 import { PaginaRelatorios } from "./rotas/PaginaRelatorios";
+import { PaginaAuditoria } from "./rotas/PaginaAuditoria";
 
 const clienteConsultas = new QueryClient({
   defaultOptions: {
@@ -49,6 +50,7 @@ const roteador = createHashRouter([
       { path: "casos/:casoId/localizacoes", element: <PaginaLocalizacoes /> },
       { path: "casos/:casoId/consultas", element: <PaginaConsultas /> },
       { path: "casos/:casoId/relatorios", element: <PaginaRelatorios /> },
+      { path: "casos/:casoId/auditoria", element: <PaginaAuditoria /> },
     ],
   },
 ]);

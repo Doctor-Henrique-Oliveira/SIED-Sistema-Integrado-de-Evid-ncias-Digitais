@@ -1,4 +1,4 @@
-// Barra lateral fixa: marca, caso aberto, os 12 módulos e o estado da estação.
+// Barra lateral fixa: marca, caso aberto, módulos e estado da estação.
 // Módulos que dependem de um caso ficam desativados (com explicação) enquanto
 // nenhum caso está aberto.
 
@@ -46,13 +46,17 @@ export const grupos: { titulo: string; modulos: Modulo[] }[] = [
     titulo: "Saída",
     modulos: [{ rotulo: "Relatórios", icone: "relatorios", para: "/casos/:caso/relatorios" }],
   },
+  {
+    titulo: "Controle",
+    modulos: [{ rotulo: "Auditoria", icone: "integridade", para: "/casos/:caso/auditoria" }],
+  },
 ];
 
 export const configuracoes: Modulo = { rotulo: "Configurações", icone: "config", para: "/configuracoes", exato: true };
 
 function Item({ m, casoId }: { m: Modulo; casoId: string | undefined }) {
   const precisaCaso = m.para.includes(":caso");
-  const base = "group relative flex h-8 items-center gap-2.5 rounded-md px-2.5 text-sm transition-colors";
+  const base = "group relative flex h-9 items-center gap-2.5 rounded-md px-3 text-sm transition-colors";
   if (precisaCaso && !casoId) {
     return (
       <span
@@ -72,7 +76,7 @@ function Item({ m, casoId }: { m: Modulo; casoId: string | undefined }) {
       title={m.dica}
       className={({ isActive }) =>
         `${base} ${
-          isActive ? "bg-sup-2 font-medium text-texto" : "text-texto-2 hover:bg-sup/80 hover:text-texto"
+          isActive ? "bg-sup-2 font-semibold text-texto ring-1 ring-inset ring-borda-2/70" : "text-texto-2 hover:bg-sup/80 hover:text-texto"
         }`
       }
     >
@@ -90,29 +94,30 @@ function Item({ m, casoId }: { m: Modulo; casoId: string | undefined }) {
 
 export function BarraLateral({ caso, info }: { caso: Caso | undefined; info: InfoApp | undefined }) {
   return (
-    <aside className="flex w-[232px] shrink-0 flex-col border-r border-borda bg-lateral">
-      <div className="flex h-12 shrink-0 items-center gap-2.5 border-b border-borda px-4">
+    <aside className="sied-sidebar flex w-[244px] shrink-0 flex-col border-r border-borda bg-lateral">
+      <div className="flex h-14 shrink-0 items-center gap-3 border-b border-borda px-4">
         <span className="grid size-7 place-items-center rounded-md border border-ouro/45 text-ouro">
           <Icone nome="escudo" className="size-4" />
         </span>
         <div className="min-w-0 leading-none">
-          <p className="text-sm font-semibold tracking-[0.2em] text-texto">SIED</p>
+          <p className="text-sm font-semibold tracking-[0.18em] text-texto">SIED</p>
           <p className="mt-1 truncate text-3xs tracking-wide text-texto-3">Evidências Digitais</p>
         </div>
       </div>
 
-      <div className="border-b border-borda px-4 py-3">
-        <p className="sobrelinha">Caso ativo</p>
+      <div className="border-b border-borda px-4 py-3.5">
+        <p className="sobrelinha flex items-center gap-2"><span className="size-1.5 rounded-full bg-ok" aria-hidden /> Caso ativo</p>
         {caso ? (
-          <p className="mt-0.5 truncate text-sm font-medium text-ouro-claro" title={identificacaoCaso(caso)}>
-            {identificacaoCaso(caso)}
-          </p>
+          <div className="mt-1.5 min-w-0">
+            <p className="truncate text-sm font-semibold tracking-tight text-ouro-claro" title={identificacaoCaso(caso)}>{identificacaoCaso(caso)}</p>
+            <p className="mt-0.5 truncate text-2xs text-texto-3" title={caso.unidade}>{caso.unidade}</p>
+          </div>
         ) : (
           <p className="mt-0.5 text-sm text-texto-3">Nenhum caso aberto</p>
         )}
       </div>
 
-      <nav className="flex-1 space-y-4 overflow-y-auto px-3 py-3" aria-label="Navegação principal">
+      <nav className="flex-1 space-y-4 overflow-y-auto px-3 py-4" aria-label="Navegação principal">
         {grupos.map((g) => (
           <div key={g.titulo}>
             <p className="sobrelinha px-2.5 pb-1.5 text-texto-4!">{g.titulo}</p>

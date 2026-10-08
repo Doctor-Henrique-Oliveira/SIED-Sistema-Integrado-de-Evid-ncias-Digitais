@@ -21,9 +21,31 @@ export async function prepararJanelaEntrada() {
   }
 }
 
+/** Antes de haver fonte importada, a preparação permanece numa janela contida. */
+export async function prepararJanelaPreparacao() {
+  try {
+    const { app, currentMonitor, LogicalSize } = await janela();
+    try { await app.setTheme("dark"); } catch { /* A janela ainda pode ser dimensionada. */ }
+    await app.unmaximize();
+    await app.setDecorations(true);
+    await app.setResizable(true);
+    await app.setMaximizable(false);
+    await app.setMinSize(new LogicalSize(900, 600));
+    const monitor = await currentMonitor();
+    const escala = monitor?.scaleFactor ?? 1;
+    const largura = monitor ? monitor.size.width / escala : 1120;
+    const altura = monitor ? monitor.size.height / escala : 780;
+    await app.setSize(new LogicalSize(Math.min(1120, largura * 0.88), Math.min(780, altura * 0.86)));
+    await app.center();
+  } catch {
+    // Sem efeito fora do Tauri.
+  }
+}
+
 export async function prepararJanelaWorkspace() {
   try {
     const { app, currentMonitor, LogicalSize } = await janela();
+    try { await app.setTheme("dark"); } catch { /* A janela ainda pode ser dimensionada. */ }
     await app.setDecorations(true);
     await app.setResizable(true);
     await app.setMaximizable(true);

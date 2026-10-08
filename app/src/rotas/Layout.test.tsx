@@ -9,7 +9,7 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: () => ({
     unmaximize: vi.fn(), setResizable: vi.fn(), setMaximizable: vi.fn(), setDecorations: vi.fn(), setSize: vi.fn(),
-    setMinSize: vi.fn(), center: vi.fn(),
+    setMinSize: vi.fn(), setTheme: vi.fn(), center: vi.fn(),
   }),
   currentMonitor: vi.fn().mockResolvedValue(null),
 }));
@@ -43,7 +43,7 @@ describe("máquina de estados da experiência", () => {
     expect(screen.queryByRole("navigation", { name: "Navegação principal" })).not.toBeInTheDocument();
   });
 
-  it("caso aberto passa pelo console antes de liberar sidebar e workspace", async () => {
+  it("caso sem fontes passa pelo console e permanece na preparação compacta", async () => {
     vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: true })));
     const caso = { id: "c1", numero_procedimento: "SINTÉTICO-001", numero_bo: null, fuso_horario: "America/Sao_Paulo" };
     vi.mocked(invoke).mockImplementation(async (comando: string) => {
@@ -56,7 +56,26 @@ describe("máquina de estados da experiência", () => {
     montar();
     expect(await screen.findByRole("main", { name: "Preparando workspace do caso" }, { timeout: 3000 })).toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: "Navegação principal" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Preparar o caso" }, { timeout: 7000 })).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Navegação principal" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Dashboard carregado")).not.toBeInTheDocument();
+  }, 10000);
+
+  it("libera sidebar e Dashboard após dispositivo e extração concluída", async () => {
+    vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: true })));
+    const caso = { id: "c1", numero_procedimento: "SINTÉTICO-001", numero_bo: null, fuso_horario: "America/Sao_Paulo" };
+    vi.mocked(invoke).mockImplementation(async (comando: string) => {
+      if (comando === "info_app") return { versao: "0.1.0", usuario: "analista", maquina: "ESTACAO", pasta_dados: "C:/Dados", pasta_casos_padrao: "C:/Casos" };
+      if (comando === "caso_atual") return { caso, pasta: "C:/Casos/c1" };
+      if (comando === "verificar_auditoria") return { registros: 3, hash_final: "ab".repeat(32) };
+      if (comando === "listar_dispositivos") return [{ id: "d1", apelido: "Aparelho sintético" }];
+      if (comando === "listar_extracoes") return [{ id: "e1", status: "concluida", dispositivo_id: "d1" }];
+      if (comando === "estado_importacao") return null;
+      return [];
+    });
+    montar();
+    expect(await screen.findByRole("main", { name: "Preparando workspace do caso" }, { timeout: 3000 })).toBeInTheDocument();
     expect(await screen.findByRole("navigation", { name: "Navegação principal" }, { timeout: 7000 })).toBeInTheDocument();
     expect(await screen.findByText("Dashboard carregado", {}, { timeout: 1000 })).toBeInTheDocument();
-  });
+  }, 10000);
 });

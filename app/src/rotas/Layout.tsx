@@ -2,18 +2,24 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import { useAbrirCaso, useCasoAtual, useInfoApp } from "../api/consultas";
+import { useAbrirCaso, useCasoAtual, useDispositivos, useExtracoes, useInfoApp } from "../api/consultas";
 import { BarraLateral } from "../componentes/BarraLateral";
 import { BarraSuperior } from "../componentes/BarraSuperior";
 import { ErroExperiencia, ForensicBootConsole, SplashScreen, type FaseExperiencia } from "../componentes/Experiencia";
 import { Aviso } from "../componentes/Estrutura";
-import { prepararJanelaEntrada, prepararJanelaWorkspace } from "../util/janela";
+import { prepararJanelaEntrada, prepararJanelaPreparacao, prepararJanelaWorkspace } from "../util/janela";
+import { fontesProntas, PreparacaoCaso } from "./PreparacaoCaso";
 
 export function Layout() {
   const info = useInfoApp();
   const casoAtual = useCasoAtual();
   const caso = casoAtual.data?.caso;
   const aberto = casoAtual.data;
+  const dispositivos = useDispositivos(caso?.id);
+  const extracoes = useExtracoes(caso?.id);
+  const fontesCarregadas = dispositivos.isSuccess && extracoes.isSuccess;
+  const fontesConsultadas = !dispositivos.isPending && !extracoes.isPending;
+  const prontoParaWorkspace = fontesCarregadas && fontesProntas(dispositivos.data, extracoes.data);
   const { pathname } = useLocation();
   const navegar = useNavigate();
   const abrir = useAbrirCaso();
@@ -21,6 +27,10 @@ export function Layout() {
   const [splashConcluida, setSplashConcluida] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const principal = useRef<HTMLElement>(null);
+  const filaJanela = useRef<Promise<void>>(Promise.resolve());
+  const ajustarJanela = useCallback((ajuste: () => Promise<void>) => {
+    filaJanela.current = filaJanela.current.then(ajuste, ajuste);
+  }, []);
 
   const rotaCaso = pathname.match(/^\/casos\/([^/]+)/)?.[1];
   const irAposSplash = useCallback(() => {
@@ -33,7 +43,9 @@ export function Layout() {
     else setFase(pathname === "/casos/novo" ? "creating-case" : "welcome");
   }, [aberto, casoAtual.isPending, fase, info.isPending, pathname, splashConcluida]);
 
-  useEffect(() => { void prepararJanelaEntrada(); }, []);
+  useEffect(() => {
+    if (fase === "splash" || fase === "welcome" || fase === "creating-case") ajustarJanela(prepararJanelaEntrada);
+  }, [ajustarJanela, fase]);
   useEffect(() => {
     if (fase === "splash") return;
     if (aberto && fase !== "booting-case" && fase !== "workspace" && fase !== "error") setFase("booting-case");
@@ -44,11 +56,14 @@ export function Layout() {
   const erroNoBoot = useCallback((mensagem: string) => { setErro(mensagem); setFase("error"); }, []);
   const workspacePronto = useCallback(() => {
     if (!aberto) return;
-    void prepararJanelaWorkspace().finally(() => {
-      setFase("workspace");
-      if (pathname === "/") navegar(`/casos/${aberto.caso.id}`, { replace: true });
-    });
+    setFase("workspace");
+    if (pathname === "/") navegar(`/casos/${aberto.caso.id}`, { replace: true });
   }, [aberto, navegar, pathname]);
+
+  useEffect(() => {
+    if (fase !== "workspace" || !aberto || !fontesConsultadas) return;
+    ajustarJanela(prontoParaWorkspace ? prepararJanelaWorkspace : prepararJanelaPreparacao);
+  }, [aberto?.caso.id, ajustarJanela, fase, fontesConsultadas, prontoParaWorkspace]);
 
   useEffect(() => {
     if (fase === "splash" || !rotaCaso || rotaCaso === "novo" || aberto?.caso.id === rotaCaso || abrir.isPending || abrir.isError) return;
@@ -78,8 +93,19 @@ export function Layout() {
     );
   }
 
+  if (!prontoParaWorkspace) {
+    return (
+      <div className="workspace-sied flex h-full min-h-0 flex-col bg-fundo">
+        <BarraSuperior caso={caso} info={info.data} preparacao />
+        <main id="conteudo" tabIndex={-1} className="min-h-0 flex-1 overflow-y-auto outline-none">
+          <PreparacaoCaso caso={aberto.caso} pasta={aberto.pasta} dispositivos={dispositivos} extracoes={extracoes} />
+        </main>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex h-full">
+    <div className="workspace-sied flex h-full">
       {/* Botão (não âncora): com o hash router, "#conteudo" trocaria a rota. */}
       <button
         type="button"
