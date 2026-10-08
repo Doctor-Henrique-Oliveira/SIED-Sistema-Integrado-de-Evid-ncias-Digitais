@@ -97,10 +97,10 @@ export function BarraSuperior({ caso, info, preparacao = false }: { caso: Caso |
   const fechar = useFecharCaso();
   const navegar = useNavigate();
   const secao = secaoAtual(useLocation().pathname);
-  const acaoDiscreta = "rounded-sm px-2 py-1 text-xs text-texto-2 transition-colors hover:bg-sup-2 hover:text-texto focus-visible:outline focus-visible:outline-ouro";
+  const acaoDiscreta = "sied-topbar__acao rounded-sm px-2 py-1 text-xs text-texto-2 transition-colors hover:bg-sup-2 hover:text-texto focus-visible:outline focus-visible:outline-ouro";
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-5 border-b border-borda bg-lateral px-6">
+    <header className="sied-topbar flex h-[58px] shrink-0 items-center gap-5 border-b border-borda bg-lateral px-6">
       <nav aria-label="Você está em" className="flex min-w-0 items-center gap-1.5 text-sm">
         {caso ? (
           <>
@@ -108,9 +108,12 @@ export function BarraSuperior({ caso, info, preparacao = false }: { caso: Caso |
               <Icone nome="escudo" className="size-4 text-ouro" />
               <span className="text-xs font-semibold tracking-[0.18em]">SIED</span>
             </span>}
-            <Link to={`/casos/${caso.id}`} className="truncate font-semibold tracking-tight text-texto hover:text-ouro-claro" title="Visão geral do caso">
-              {identificacaoCaso(caso)}
-            </Link>
+            <span className="sied-topbar__caso flex min-w-0 items-center gap-2">
+              <span className="hidden font-mono text-3xs uppercase tracking-[0.12em] text-texto-4 xl:inline">Caso</span>
+              <Link to={`/casos/${caso.id}`} className="truncate font-semibold tracking-[-0.01em] text-texto hover:text-ouro-claro" title="Visão geral do caso">
+                {identificacaoCaso(caso)}
+              </Link>
+            </span>
             <span className="hidden truncate text-texto-3 2xl:inline">· {caso.unidade}</span>
             {preparacao ? (
               <><Icone nome="direita" className="size-3.5 shrink-0 text-texto-4" /><span className="shrink-0 text-texto-2">Preparação</span></>
@@ -140,7 +143,7 @@ export function BarraSuperior({ caso, info, preparacao = false }: { caso: Caso |
       <div className="flex shrink-0 items-center gap-3 text-xs text-texto-2">
         {caso && !preparacao && <ImportacaoEmCurso caso={caso} />}
         <span
-          className="hidden h-6 items-center gap-1.5 rounded-sm px-1.5 text-2xs font-medium uppercase tracking-[0.08em] text-texto-3 ring-1 ring-inset ring-borda-2 lg:flex"
+          className="sied-topbar__local hidden h-6 items-center gap-1.5 rounded-sm px-2 text-2xs font-medium uppercase tracking-[0.08em] text-texto-3 ring-1 ring-inset ring-borda-2 lg:flex"
           title="O SIED não usa internet: tudo fica nesta estação"
         >
           <Icone nome="cadeado" className="size-3 text-ok" />
