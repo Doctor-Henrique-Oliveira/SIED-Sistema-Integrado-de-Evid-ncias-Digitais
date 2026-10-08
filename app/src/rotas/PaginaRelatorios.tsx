@@ -35,7 +35,7 @@ function Relatorios({ caso, pasta }: { caso: Caso; pasta: string }) {
         titulo="Relatórios"
         subtitulo="Evidências selecionadas e relatório em PDF, com hashes, origem técnica e cadeia de custódia."
       />
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_26rem]">
+      <div className="relatorios-workbench grid gap-4 xl:grid-cols-[minmax(0,1fr)_26rem]">
         <ListaEvidencias caso={caso} />
         <div className="flex min-w-0 flex-col gap-4">
           <GerarRelatorio caso={caso} pasta={pasta} />
@@ -120,7 +120,7 @@ function ItemEvidencia({ caso, e, total }: { caso: Caso; e: Evidencia; total: nu
         ? `/casos/${caso.id}/extracoes/${e.arquivo.extracao_id}`
         : null;
   return (
-    <li className="px-4 py-3" aria-label={`Evidência ${ref}`}>
+    <li className="evidencia-relatorio px-4 py-3" aria-label={`Evidência ${ref}`}>
       <div className="flex items-start gap-3">
         <span className="tabular mt-0.5 w-11 shrink-0 font-mono text-sm font-semibold text-ouro-claro">{ref}</span>
         <div className="min-w-0 flex-1">

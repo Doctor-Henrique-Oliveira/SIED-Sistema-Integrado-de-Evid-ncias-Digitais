@@ -187,10 +187,10 @@ export function InventarioArquivos({ caso, extracaoId, midias }: { caso: Caso; e
       ];
 
   return (
-    <div className={`grid gap-4 ${selecionado ? "xl:grid-cols-[minmax(0,1fr)_24rem]" : ""}`}>
+    <div className={`workbench-forense grid gap-4 ${selecionado ? "xl:grid-cols-[minmax(0,1fr)_24rem]" : ""}`}>
       {erroOrigem&&<Aviso>{erroOrigem}</Aviso>}
       <Cartao denso>
-        <div className="flex flex-wrap items-center gap-3 border-b border-borda px-3 py-2.5">
+        <div className="workbench-forense__ferramentas flex flex-wrap items-center gap-3 border-b border-borda px-3 py-2.5">
           <Filtros rotulo="Filtrar por tipo" opcoes={opcoes} atual={categoria} mudar={filtrar} />
           <form
             className="ml-auto"
@@ -232,7 +232,7 @@ export function InventarioArquivos({ caso, extracaoId, midias }: { caso: Caso; e
             selecionar={setSelecionado}
           />
         ) : midias ? (
-          <ul className="grid grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] gap-3 p-3" aria-label="Mídias">
+          <ul className="galeria-forense grid grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] gap-3 p-3" aria-label="Mídias">
             {arquivos.data.itens.map((f) => (
               <li key={f.id}>
                 <CartaoMidia caso={caso} f={f} ativo={selecionado?.id === f.id} selecionar={setSelecionado} />
@@ -261,7 +261,7 @@ export function InventarioArquivos({ caso, extracaoId, midias }: { caso: Caso; e
                     aria-selected={selecionado?.id === f.id}
                     onClick={() => setSelecionado(f)}
                     onKeyDown={(e) => e.key === "Enter" && setSelecionado(f)}
-                    className={`cursor-pointer ${selecionado?.id === f.id ? "bg-ouro/8" : tabela.linha}`}
+                    className={`${tabela.linha} cursor-pointer ${selecionado?.id === f.id ? "bg-ouro/8" : ""}`}
                   >
                     <td className={`${tabela.td} max-w-md break-all font-mono text-xs text-texto`}>{f.caminho}</td>
                     <td className={`${tabela.td} font-mono text-xs text-texto-2`}>{extensao(f.caminho) || "—"}</td>
@@ -307,7 +307,7 @@ function CartaoMidia({ caso, f, ativo, selecionar }: {
       aria-pressed={ativo}
       onClick={() => selecionar(f)}
       title={f.caminho}
-      className={`flex w-full flex-col overflow-hidden rounded-lg border text-left transition-colors ${
+      className={`midia-forense flex w-full flex-col overflow-hidden rounded-lg border text-left transition-colors ${
         ativo ? "border-ouro/70 bg-ouro/5" : "border-borda bg-sup-2/60 hover:border-borda-2"
       }`}
     >
@@ -396,7 +396,7 @@ function GradeVirtual({ caso, extracaoId, filtro, primeira, selecionado, selecio
               return f ? (
                 <CartaoMidia key={f.id} caso={caso} f={f} ativo={selecionado?.id === f.id} selecionar={selecionar} />
               ) : (
-                <span key={`v${i}`} className="animate-pulse rounded-lg border border-borda bg-sup-2/40" aria-hidden />
+                <span key={`v${i}`} className="midia-forense animate-pulse rounded-lg border border-borda bg-sup-2/40" aria-hidden />
               );
             })}
           </li>

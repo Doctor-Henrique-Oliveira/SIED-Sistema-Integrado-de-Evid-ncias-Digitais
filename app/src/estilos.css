@@ -513,6 +513,96 @@ textarea:focus-visible {
   box-shadow: inset 2px 0 0 color-mix(in srgb, var(--color-ouro) 52%, transparent);
 }
 
+.tabela-forense__linha[aria-selected="true"] {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--color-ouro) 10%, var(--color-sup-2)), var(--color-sup-2));
+  box-shadow: inset 2px 0 0 var(--color-ouro);
+}
+
+.workbench-forense__ferramentas {
+  min-height: 3.35rem;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--color-sup-2) 72%, transparent), transparent 76%),
+    color-mix(in srgb, var(--color-lateral) 24%, transparent);
+}
+
+.workbench-forense__ferramentas form {
+  position: relative;
+}
+
+.workbench-forense__ferramentas form::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 -0.75rem;
+  width: 1px;
+  background: var(--color-borda);
+}
+
+.galeria-forense {
+  background:
+    linear-gradient(color-mix(in srgb, var(--color-borda) 9%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--color-borda) 7%, transparent) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.midia-forense {
+  position: relative;
+  border-color: color-mix(in srgb, var(--color-borda-2) 58%, var(--color-borda));
+  background: color-mix(in srgb, var(--color-sup-2) 78%, var(--color-sup));
+  box-shadow: 0 8px 20px rgb(0 0 0 / 0.13);
+  transition: transform 140ms, border-color 140ms, background-color 140ms, box-shadow 140ms;
+}
+
+.midia-forense:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--color-ouro) 28%, var(--color-borda-2));
+  background: var(--color-sup-2);
+  box-shadow: 0 12px 26px rgb(0 0 0 / 0.19);
+}
+
+.midia-forense[aria-pressed="true"] {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-ouro) 22%, transparent), 0 12px 28px rgb(0 0 0 / 0.2);
+}
+
+.midia-forense[aria-pressed="true"]::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 2px;
+  background: linear-gradient(90deg, var(--color-ouro), color-mix(in srgb, var(--color-ouro) 18%, transparent));
+}
+
+.relatorios-workbench > :first-child {
+  min-height: 24rem;
+}
+
+.relatorios-workbench > :last-child {
+  position: sticky;
+  top: 0.75rem;
+  align-self: start;
+}
+
+.evidencia-relatorio {
+  position: relative;
+  transition: background-color 140ms;
+}
+
+.evidencia-relatorio::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 2px;
+  background: transparent;
+  transition: background-color 140ms;
+}
+
+.evidencia-relatorio:hover {
+  background: color-mix(in srgb, var(--color-sup-2) 65%, transparent);
+}
+
+.evidencia-relatorio:hover::before {
+  background: color-mix(in srgb, var(--color-ouro) 62%, transparent);
+}
+
 .dashboard-caso {
   background:
     linear-gradient(105deg, color-mix(in srgb, var(--color-sup-2) 62%, transparent), transparent 53%),
@@ -792,6 +882,10 @@ a.dashboard-metrica-principal:hover {
 @media (max-width: 1180px) {
   .dashboard-indicadores__principais { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .dashboard-indicadores__secundarios { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 1279px) {
+  .relatorios-workbench > :last-child { position: static; }
 }
 
 @media (max-width: 820px) {
