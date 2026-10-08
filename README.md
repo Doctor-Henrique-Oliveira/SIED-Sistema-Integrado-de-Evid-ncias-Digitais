@@ -10,9 +10,9 @@ arquitetura aprovada em [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md).
 > tudo com trilha de auditoria. Conversas reconstruídas e busca global sobre o que foi importado.
 > O analista marca evidências (mensagem, trecho de conversa ou arquivo) e gera um relatório PDF
 > com hashes conferidos, origem completa e cadeia de custódia.
-> Interface em tema escuro com barra lateral de 12 módulos (Dashboard, Casos, Dispositivos,
+> Interface em tema escuro com barra lateral de 13 módulos (Dashboard, Casos, Dispositivos,
 > Extrações, Conversas, Mídias, Arquivos, Contatos, Localizações, Consultas, Relatórios,
-> Configurações); os módulos sem dados ainda dizem "ainda não disponível", nunca mostram números
+> Auditoria e Configurações); os módulos sem dados ainda dizem "ainda não disponível", nunca mostram números
 > fictícios. O importador do Avilla aguarda uma extração real para ser escrito
 > (roteiro em [`docs/PREPARACAO-AVILLA-WHATSAPP.md`](docs/PREPARACAO-AVILLA-WHATSAPP.md)).
 
@@ -106,11 +106,11 @@ Parsers disponíveis:
 - **Tema escuro** com tokens em `app/src/estilos.css` (dourado só para o institucional e a ação
   principal; verde, azul, laranja e vermelho para estados). Fontes do sistema, ícones embutidos:
   nada vem da internet.
-- **Casca**: barra lateral fixa com os 12 módulos (os do caso ficam desativados sem caso aberto) e
-  cabeçalho com o caso aberto, busca global do caso (**Ctrl+K**), importação em curso e usuário @
-  estação.
+- **Casca**: antes de haver dispositivo e extração concluída, o caso usa uma preparação compacta
+  sem a barra lateral analítica. Depois disso, a barra lateral reúne os 13 módulos e o cabeçalho
+  mostra o caso aberto, busca global (**Ctrl+K**), importação em curso e usuário @ estação.
 - **Dashboard do caso**: dados do procedimento, atalhos, indicadores contados no banco do caso,
-  dispositivos, extrações, alertas e trilha de auditoria com verificação.
+  dispositivos, extrações e alertas. A trilha e sua verificação ficam no módulo próprio **Auditoria**.
 - **Progresso da importação**: as quatro etapas, barra da etapa atual, tempo decorrido, taxa e
   tempo restante do inventário (medidos, não estimados por fórmula fixa) e a cópia de trabalho em
   conferência. Tudo vem dos números que o backend informa.

@@ -9,12 +9,12 @@ import { Icone, type NomeIcone } from "./Icone";
 
 /** Classes das tabelas densas (cabeçalho fixo em caixa alta, linhas com divisória). */
 export const tabela = {
-  base: "w-full text-left text-sm",
-  cabeca: "border-b border-borda bg-lateral/40 text-3xs uppercase tracking-[0.05em] text-texto-3",
+  base: "tabela-forense w-full text-left text-sm",
+  cabeca: "tabela-forense__cabeca border-b border-borda bg-lateral/40 text-3xs uppercase tracking-[0.05em] text-texto-3",
   th: "px-3 py-2 font-semibold",
   corpo: "divide-y divide-borda",
   td: "px-3 py-[7px] align-top",
-  linha: "transition-colors hover:bg-sup-2/70",
+  linha: "tabela-forense__linha transition-colors hover:bg-sup-2/70",
 };
 
 /** Cabeçalho da página: sobrelinha opcional, título, subtítulo e ações à direita. */
@@ -26,16 +26,20 @@ export function Cabecalho({ titulo, subtitulo, acoes, sobre, icone }: {
   icone?: NomeIcone;
 }) {
   return (
-    <header className="mb-5 flex flex-wrap items-end justify-between gap-x-6 gap-y-3 border-b border-borda pb-4">
-      <div className="min-w-0">
-        {sobre && <div className="sobrelinha mb-1">{sobre}</div>}
-        <h1 className="flex min-w-0 items-center gap-2.5 text-xl font-semibold tracking-[-0.01em] text-texto">
-          {icone && <Icone nome={icone} className="size-[18px] shrink-0 text-ouro" />}
-          <span className="truncate">{titulo}</span>
-        </h1>
-        {subtitulo && <div className="mt-0.5 text-sm text-texto-2">{subtitulo}</div>}
+    <header className="cabecalho-modulo mb-5 flex flex-wrap items-end justify-between gap-x-6 gap-y-3 border-b border-borda pb-4">
+      <div className="flex min-w-0 items-start gap-3">
+        {icone && (
+          <span className="cabecalho-modulo__icone" aria-hidden>
+            <Icone nome={icone} className="size-[18px] text-ouro" />
+          </span>
+        )}
+        <div className="min-w-0">
+          {sobre && <div className="sobrelinha cabecalho-modulo__sobre mb-1">{sobre}</div>}
+          <h1 className="min-w-0 truncate text-xl font-semibold tracking-[-0.018em] text-texto">{titulo}</h1>
+          {subtitulo && <div className="cabecalho-modulo__subtitulo mt-1 max-w-4xl text-sm text-texto-2">{subtitulo}</div>}
+        </div>
       </div>
-      {acoes && <div className="flex flex-wrap items-center gap-2">{acoes}</div>}
+      {acoes && <div className="cabecalho-modulo__acoes flex flex-wrap items-center gap-2">{acoes}</div>}
     </header>
   );
 }
@@ -51,7 +55,7 @@ export function Cartao({ titulo, acoes, children, className = "", denso, icone, 
   rotulo?: string;
 }) {
   return (
-    <section aria-label={rotulo} className={`painel min-w-0 ${className}`}>
+    <section aria-label={rotulo} className={`painel cartao-sied min-w-0 ${className}`}>
       {(titulo || acoes) && (
         <div className="flex min-h-10 items-center justify-between gap-3 border-b border-borda px-4 py-1.5">
           {titulo && (
@@ -119,8 +123,12 @@ export function Vazio({ titulo, children, icone, acao }: {
   acao?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center rounded-xl border border-dashed border-borda-2 px-6 py-8 text-center">
-      {icone && <Icone nome={icone} className="mb-2.5 size-6 text-texto-3" />}
+    <div className="estado-vazio flex flex-col items-center rounded-xl border border-dashed border-borda-2 px-6 py-8 text-center">
+      {icone && (
+        <span className="estado-vazio__icone" aria-hidden>
+          <Icone nome={icone} className="size-5 text-texto-2" />
+        </span>
+      )}
       <p className="font-medium text-texto">{titulo}</p>
       {children && <div className="mt-1.5 max-w-prose text-sm text-texto-2">{children}</div>}
       {acao && <div className="mt-4">{acao}</div>}
@@ -136,7 +144,7 @@ export function Indisponivel({ titulo, icone, children, previsto }: {
   previsto?: string[];
 }) {
   return (
-    <div className="painel p-5" role="status">
+    <div className="painel modulo-planejado p-5" role="status">
       <div className="flex items-start gap-3.5">
         <Icone nome={icone} className="mt-0.5 size-5 shrink-0 text-texto-3" />
         <div className="min-w-0">
@@ -351,7 +359,7 @@ export function Abas<T extends string>({ abas, atual, mudar, rotulo }: {
   rotulo: string;
 }) {
   return (
-    <div role="tablist" aria-label={rotulo} className="flex gap-1 overflow-x-auto border-b border-borda">
+    <div role="tablist" aria-label={rotulo} className="abas-forenses flex gap-1 overflow-x-auto border-b border-borda">
       {abas.map(([id, texto]) => (
         <button
           key={id}
