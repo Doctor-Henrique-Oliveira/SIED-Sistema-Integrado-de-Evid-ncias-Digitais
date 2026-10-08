@@ -7,6 +7,18 @@
 
 A importação atual é um fluxo local e assíncrono. O analista escolhe um dispositivo já cadastrado e uma pasta de extração; o SIED detecta os importadores compatíveis, pede a confirmação do analista e executa o pipeline sem gravar na origem.
 
+### Regra visual antes da importação
+
+Enquanto não houver **um dispositivo cadastrado e pelo menos uma extração concluída**, o SIED mantém uma preparação central e contida:
+
+- não exibe a sidebar do workspace;
+- não exibe painéis laterais de alertas ou auditoria;
+- não exibe Dashboard nem módulos analíticos;
+- apresenta somente a identificação do caso, a sequência de liberação e as etapas **Dispositivo** e **Extração**;
+- abre o workspace automaticamente somente depois que a importação termina com estado `concluída`.
+
+A **Auditoria** possui aba própria na sidebar e só aparece junto com o workspace já liberado. Ela não faz parte do Dashboard nem da preparação inicial.
+
 ```mermaid
 flowchart LR
     A[Cadastrar dispositivo] --> B[Importar extração]
@@ -30,7 +42,7 @@ flowchart LR
 6. Confira a ferramenta detectada, o nível de suporte e os motivos apresentados.
 7. Selecione um importador disponível e clique em **Iniciar importação**.
 
-![Assistente atual reconhecendo uma extração IPED](checkpoints/iped/i1-assistente-iped.png)
+> A captura antiga do assistente foi removida deste guia porque mostrava a sidebar e o painel de Auditoria antes da liberação do workspace. Esse arranjo não representa a interface atual.
 
 ## O que o assistente confere
 
@@ -72,9 +84,9 @@ O painel apresenta:
 - botão de cancelamento;
 - console de eventos reais emitidos pelo backend.
 
-![Console técnico ao final de uma importação sintética](checkpoints/console/c1-console-importacao.png)
-
 O console registra contagem, inventário, hashes, bancos localizados, cópias conferidas, parsers executados, avisos, erros e o resultado final. Ele pode ser reaberto depois na aba **Processamento** da extração.
+
+Durante a execução, o console permanece dentro da preparação central. Sidebar, Dashboard, alertas laterais e Auditoria continuam ocultos até a conclusão real.
 
 ## Importadores existentes
 
@@ -114,6 +126,8 @@ Dentro da pasta do caso, a importação mantém:
 ## Depois da importação
 
 Use **Abrir extração** para conferir resumo, arquivos, registros, parsers, avisos, manifesto e console. Quando existe pelo menos uma extração concluída, o SIED libera o workspace analítico completo com Dashboard, Conversas, Busca, Mídias, Arquivos, Contatos, Localizações, Relatórios e Auditoria.
+
+Somente nesse momento a sidebar aparece. A Auditoria fica disponível em sua própria rota/aba e não é incorporada ao Dashboard.
 
 ## Limitações atuais importantes
 

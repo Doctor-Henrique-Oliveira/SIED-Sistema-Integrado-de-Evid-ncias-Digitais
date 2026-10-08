@@ -58,7 +58,11 @@ describe("máquina de estados da experiência", () => {
     expect(screen.queryByRole("navigation", { name: "Navegação principal" })).not.toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Preparar fontes do caso" }, { timeout: 7000 })).toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: "Navegação principal" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Auditoria")).not.toBeInTheDocument();
+    expect(screen.queryByText("Alertas e pendências")).not.toBeInTheDocument();
     expect(screen.queryByText("Dashboard carregado")).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Etapa 1: dispositivo" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Etapa 2: extração" })).toBeInTheDocument();
   }, 10000);
 
   it("libera sidebar e Dashboard após dispositivo e extração concluída", async () => {
