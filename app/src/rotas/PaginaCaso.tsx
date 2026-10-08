@@ -100,8 +100,8 @@ function CabecalhoCaso({ caso, pasta }: { caso: Caso; pasta: string }) {
           <Selo tom="ok" titulo="O banco deste caso está aberto nesta estação">
             <Icone nome="check" className="size-3" /> Aberto nesta estação
           </Selo>
-          <Selo tom="neutro" titulo="Fuso registrado neste caso; usado para exibir as datas sem reinterpretá-las">
-            <Icone nome="relogio" className="size-3" /> Fuso do caso: {caso.fuso_horario}
+          <Selo tom="neutro" titulo={`Identificação visual da estação. Datas continuam usando o fuso técnico registrado no caso: ${caso.fuso_horario}`}>
+            <Icone nome="relogio" className="size-3" /> America/Bahia
           </Selo>
         </div>
       </div>
