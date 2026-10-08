@@ -2,4 +2,5 @@
 import type { FiltroBusca } from "./FiltroBusca";
 import type { ModoDescoberta } from "./ModoDescoberta";
 import type { TipoIndicador } from "./TipoIndicador";
+
 export type PedidoDescoberta = { filtro: FiltroBusca, modo: ModoDescoberta, termos: Array<string>, indicador?: TipoIndicador, };

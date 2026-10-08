@@ -3,4 +3,5 @@ import type { AchadoArquivo } from "./AchadoArquivo";
 import type { AchadoDescoberta } from "./AchadoDescoberta";
 import type { ModoDescoberta } from "./ModoDescoberta";
 import type { Pagina } from "./Pagina";
+
 export type ResultadoDescoberta = { modo: ModoDescoberta, termos_efetivos: Array<string>, artefatos: Pagina<AchadoDescoberta>, arquivos: Pagina<AchadoArquivo>, algoritmo: string, executada_em: string, };

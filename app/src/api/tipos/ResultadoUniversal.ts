@@ -2,8 +2,9 @@
 import type { CasoId } from "./CasoId";
 import type { ItemUniversal } from "./ItemUniversal";
 import type { PedidoUniversal } from "./PedidoUniversal";
+
 export type ResultadoUniversal = { caso_id: CasoId, pedido: PedidoUniversal, algoritmo: string, executada_em: string, itens: Array<ItemUniversal>, 
 /**
-* União da janela recuperada, não o número total de artefatos do caso.
-*/
+ * União da janela recuperada, não o número total de artefatos do caso.
+ */
 recuperados_na_janela: number, janela_limitada: boolean, avisos: Array<string>, };

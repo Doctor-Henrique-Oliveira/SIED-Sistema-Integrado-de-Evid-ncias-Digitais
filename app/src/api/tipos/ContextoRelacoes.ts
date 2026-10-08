@@ -4,4 +4,5 @@ import type { ArestaRelacao } from "./ArestaRelacao";
 import type { CasoId } from "./CasoId";
 import type { NoRelacao } from "./NoRelacao";
 import type { Pagina } from "./Pagina";
+
 export type ContextoRelacoes = { caso_id: CasoId, origem: AchadoArtefato, nos: Array<NoRelacao>, arestas: Array<ArestaRelacao>, eventos: Pagina<AchadoArtefato>, janela_minutos: number, limitado: boolean, avisos: Array<string>, };

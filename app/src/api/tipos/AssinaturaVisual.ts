@@ -2,12 +2,13 @@
 import type { CaminhoFonte } from "./CaminhoFonte";
 import type { CasoId } from "./CasoId";
 import type { ExtracaoId } from "./ExtracaoId";
+
 export type AssinaturaVisual = { caso_id: CasoId, extracao_id: ExtracaoId, arquivo_id: number, caminho: CaminhoFonte, sha256: string, motor_id: string, motor_versao: string, executado_em: string, largura: number, altura: number, 
 /**
-* Exatamente 16 dígitos hexadecimais minúsculos; não é hash criptográfico.
-*/
+ * Exatamente 16 dígitos hexadecimais minúsculos; não é hash criptográfico.
+ */
 dhash: string, 
 /**
-* Média RGBA8/BT.601 composta sobre preto, em escala 0–255, sem calibração.
-*/
+ * Média RGBA8/BT.601 composta sobre preto, em escala 0–255, sem calibração.
+ */
 luminancia_media: number, };
