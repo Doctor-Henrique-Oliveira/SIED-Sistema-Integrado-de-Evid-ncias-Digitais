@@ -563,6 +563,11 @@ Detalhes no `README.md`.
 
 ## 13. Próximo passo recomendado
 
+O comando permanente **`CONTINUE O PROJETO`** e a fila oficial atual estão documentados em
+[`../CONTINUE-PROJETO.md`](../CONTINUE-PROJETO.md) e
+[`PLANO-EXECUCAO-CONTINUA.md`](PLANO-EXECUCAO-CONTINUA.md). Esse plano prevalece para a ordem
+das próximas implementações e mantém Avilla Forensics como última etapa obrigatória.
+
 **Fase 1: ciclo completo na `main`, auditado.** Volume real (PR #9) e evidências com relatório PDF
 (PR #10) estão descritos no §4 e nos checkpoints `2026-09-28-fase1-visual-volume.md` e
 `2026-09-29-fase1-evidencias-relatorio.md`. A auditoria pré-produção (PR #11) está em

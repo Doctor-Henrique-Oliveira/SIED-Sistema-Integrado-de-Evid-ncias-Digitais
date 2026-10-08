@@ -1,5 +1,10 @@
 # SIED — Roadmap do Motor de Descoberta Forense Multimodal Local
 
+> **Execução atual:** AI-0–AI-7 foram incorporadas à `main` como fundações no commit `683752f`.
+> A ordem operacional para aprofundar os motores e continuar o produto está em
+> [`PLANO-EXECUCAO-CONTINUA.md`](PLANO-EXECUCAO-CONTINUA.md). As referências ao PR #25 abaixo
+> permanecem como registro histórico do estado em 07/10/2026.
+
 Data: 02/10/2026 · Estado atualizado em 07/10/2026: **incrementos AI-0–AI-7 em integração e validação no PR #25** · Nome/sigla provisórios: **MDFML**.
 
 Registro estratégico de produto solicitado pelo responsável pelo SIED. Entrada oficial de

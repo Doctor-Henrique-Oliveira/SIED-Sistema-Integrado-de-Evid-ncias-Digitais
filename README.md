@@ -4,6 +4,14 @@ Plataforma forense local (offline) para importar, analisar, organizar e relatar 
 extraídas de dispositivos móveis. Visão do produto em [`docs/VISAO.md`](docs/VISAO.md);
 arquitetura aprovada em [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md).
 
+## Continuidade automática do desenvolvimento
+
+Para retomar o projeto em qualquer nova sessão, use o comando **`CONTINUE O PROJETO`**.
+O protocolo permanente está em [`CONTINUE-PROJETO.md`](CONTINUE-PROJETO.md) e a ordem oficial,
+com critérios verificáveis de conclusão, está em
+[`docs/PLANO-EXECUCAO-CONTINUA.md`](docs/PLANO-EXECUCAO-CONTINUA.md). O importador Avilla
+Forensics permanece obrigatoriamente como a última etapa.
+
 > **Estado atual: Fase 1 — importar, analisar, selecionar e relatar.** O app cria casos, cadastra
 > dispositivos e importa uma pasta de extração: inventário com SHA-256 de todos os arquivos,
 > manifesto `sha256sum`, SMS e WhatsApp do Android interpretados com a origem de cada registro,
