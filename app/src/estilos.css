@@ -410,6 +410,82 @@ a.dashboard-metrica-principal:hover {
   position: relative;
 }
 
+.conversas-workbench > * {
+  min-width: 0;
+}
+
+.conversas-lista,
+.conversa-chat,
+.inspector-sied {
+  border-radius: var(--radius-xl);
+  box-shadow: 0 12px 28px rgb(0 0 0 / 0.1);
+}
+
+.conversas-lista {
+  background: color-mix(in srgb, var(--color-sup) 96%, var(--color-lateral));
+}
+
+.conversa-item {
+  position: relative;
+}
+
+.conversa-item--ativa {
+  color: var(--color-texto);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--color-ouro) 11%, var(--color-sup)), var(--color-sup-2));
+  box-shadow: inset 2px 0 0 var(--color-ouro);
+}
+
+.conversa-item--ativa::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: 1px;
+  background: color-mix(in srgb, var(--color-ouro) 30%, transparent);
+}
+
+.conversa-chat {
+  overflow: hidden;
+  background: color-mix(in srgb, var(--color-fundo) 82%, var(--color-sup));
+}
+
+.conversa-chat__cabecalho {
+  background: linear-gradient(105deg, color-mix(in srgb, var(--color-sup-2) 68%, transparent), var(--color-sup));
+}
+
+.conversa-mensagens {
+  background:
+    linear-gradient(color-mix(in srgb, var(--color-borda) 14%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--color-borda) 12%, transparent) 1px, transparent 1px),
+    color-mix(in srgb, var(--color-fundo) 88%, var(--color-sup));
+  background-size: 36px 36px;
+}
+
+.conversa-bolha {
+  box-shadow: 0 5px 14px rgb(0 0 0 / 0.12);
+}
+
+.conversa-bolha--enviada {
+  border-color: color-mix(in srgb, var(--color-info) 26%, var(--color-borda));
+  background: color-mix(in srgb, var(--color-info) 11%, var(--color-sup-2));
+}
+
+.conversa-bolha--enviada:hover {
+  background: color-mix(in srgb, var(--color-info) 16%, var(--color-sup-2));
+}
+
+.conversa-bolha--recebida {
+  border-color: var(--color-borda-2);
+  background: color-mix(in srgb, var(--color-sup-2) 94%, var(--color-fundo));
+}
+
+.conversa-bolha--recebida:hover {
+  background: var(--color-sup-3);
+}
+
+.inspector-sied {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-sup-2) 35%, var(--color-sup)), var(--color-sup) 9rem);
+}
+
 @media (max-width: 1180px) {
   .dashboard-indicadores__principais { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .dashboard-indicadores__secundarios { grid-template-columns: repeat(3, minmax(0, 1fr)); }
