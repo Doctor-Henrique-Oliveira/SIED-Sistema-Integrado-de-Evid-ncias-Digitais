@@ -18,6 +18,8 @@ pub enum CodigoErro {
     Integridade,
     /// Recurso ainda não implementado (ex.: importador do Avilla).
     NaoSuportado,
+    DescobertaCancelada,
+    DescobertaLimite,
     Interno,
 }
 
@@ -99,6 +101,8 @@ impl From<ErroArmazenamento> for ErroApp {
             | E::MigracaoDivergente { .. }
             | E::TipoBancoIncorreto { .. } => CodigoErro::VersaoIncompativel,
             E::AuditoriaCorrompida { .. } | E::Inconsistente(_) => CodigoErro::Integridade,
+            E::DescobertaCancelada => CodigoErro::DescobertaCancelada,
+            E::DescobertaLimite => CodigoErro::DescobertaLimite,
             E::Sqlite(_) | E::Io(_) => CodigoErro::Interno,
         };
         match codigo {
@@ -160,6 +164,13 @@ pub type ResultadoApp<T> = Result<T, ErroApp>;
 #[cfg(test)]
 mod testes {
     use super::*;
+
+    #[test]
+    fn imprime_contrato_codigo_erro_rust() {
+        println!("SIED_CONTRATO_INICIO:CodigoErro.ts");
+        println!("{}", CodigoErro::export_to_string().unwrap());
+        println!("SIED_CONTRATO_FIM:CodigoErro.ts");
+    }
 
     #[test]
     fn falhas_do_sqlite_viram_mensagens_em_portugues() {

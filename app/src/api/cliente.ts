@@ -63,8 +63,70 @@ import type { ResumoLinhaTempo } from "./tipos/ResumoLinhaTempo";
 import type { ResumoChamadas } from "./tipos/ResumoChamadas";
 import type { TelefoneContato } from "./tipos/TelefoneContato";
 import type { TotalApp } from "./tipos/TotalApp";
+import type { EstadoDocumento } from "./tipos/EstadoDocumento";
+import type { TextoDocumento } from "./tipos/TextoDocumento";
+import type { ResultadoDocumento } from "./tipos/ResultadoDocumento";
+import type { DocumentoIndexado } from "./tipos/DocumentoIndexado";
+import type { AchadoDocumento } from "./tipos/AchadoDocumento";
+import type { EntidadeDocumento } from "./tipos/EntidadeDocumento";
+import type { EstadoRevisaoEntidade } from "./tipos/EstadoRevisaoEntidade";
+import type { RevisaoEntidade } from "./tipos/RevisaoEntidade";
+import type { PedidoDescoberta } from "./tipos/PedidoDescoberta";
+import type { ResultadoDescoberta } from "./tipos/ResultadoDescoberta";
+import type { AchadoDescoberta } from "./tipos/AchadoDescoberta";
+import type { VocabularioPesquisa } from "./tipos/VocabularioPesquisa";
+import type { RamoVocabulario } from "./tipos/RamoVocabulario";
+import type { VersaoVocabularioPesquisa } from "./tipos/VersaoVocabularioPesquisa";
+import type { ConsultaDescobertaSalva } from "./tipos/ConsultaDescobertaSalva";
+import type { ExecucaoDescoberta } from "./tipos/ExecucaoDescoberta";
+import type { MecanismoUniversal } from "./tipos/MecanismoUniversal";
+import type { PedidoUniversal } from "./tipos/PedidoUniversal";
+import type { SinalUniversal } from "./tipos/SinalUniversal";
+import type { ItemUniversal } from "./tipos/ItemUniversal";
+import type { ResultadoUniversal } from "./tipos/ResultadoUniversal";
+import type { ContextoRelacoes } from "./tipos/ContextoRelacoes";
+import type { NoRelacao } from "./tipos/NoRelacao";
+import type { ArestaRelacao } from "./tipos/ArestaRelacao";
+import type { VisualIndexado } from "./tipos/VisualIndexado";
+import type { SimilarVisual } from "./tipos/SimilarVisual";
+import type { ResultadoSimilarVisual } from "./tipos/ResultadoSimilarVisual";
+import type { DatasetSupervisionado } from "./tipos/DatasetSupervisionado";
+import type { PedidoAmostraSupervisionada } from "./tipos/PedidoAmostraSupervisionada";
+import type { AmostraSupervisionada } from "./tipos/AmostraSupervisionada";
+import type { AvaliacaoSupervisionada } from "./tipos/AvaliacaoSupervisionada";
 
 export type {
+  MecanismoUniversal,
+  PedidoUniversal,
+  SinalUniversal,
+  ItemUniversal,
+  ResultadoUniversal,
+  ContextoRelacoes,
+  NoRelacao,
+  ArestaRelacao,
+  VisualIndexado,
+  SimilarVisual,
+  ResultadoSimilarVisual,
+  DatasetSupervisionado,
+  PedidoAmostraSupervisionada,
+  AmostraSupervisionada,
+  AvaliacaoSupervisionada,
+  PedidoDescoberta,
+  ResultadoDescoberta,
+  AchadoDescoberta,
+  VocabularioPesquisa,
+  RamoVocabulario,
+  VersaoVocabularioPesquisa,
+  ConsultaDescobertaSalva,
+  ExecucaoDescoberta,
+  DocumentoIndexado,
+  AchadoDocumento,
+  EntidadeDocumento,
+  EstadoRevisaoEntidade,
+  RevisaoEntidade,
+  EstadoDocumento,
+  TextoDocumento,
+  ResultadoDocumento,
   Chamada,
   EventoImportacao,
   NivelEvento,
@@ -225,12 +287,67 @@ export const api = {
     chamar<Pagina<PosicaoMensagem>>("localizar_na_conversa", { conversaId, termo, limite }),
   /** Miniatura de uma imagem do inventário (lida da extração e conferida pelo SHA-256). */
   miniatura: async (arquivoId: number) => (await chamar<Miniatura | undefined>("miniatura", { arquivoId })) ?? null,
+  /** Texto conferido contra o inventário; PDF admite página real. Não recebe caminho ou hash do frontend. */
+  lerDocumento: (arquivoId: number, casoId: CasoId, pagina?: number) =>
+    chamar<ResultadoDocumento>("ler_documento", { arquivoId, casoId, ...(pagina === undefined ? {} : { pagina }) }),
+  /** Relê/confronta a origem no backend antes de armazenar o derivado. Nunca recebe texto/hash do frontend. */
+  indexarDocumento: (arquivoId: number, casoId: CasoId, pagina?: number) =>
+    chamar<DocumentoIndexado>("indexar_documento", { arquivoId, casoId, ...(pagina === undefined ? {} : { pagina }) }),
+  /** Busca somente em textos derivados armazenados; não relê nem confere a origem atual. */
+  buscarDocumentos: (casoId: CasoId, termo: string, deslocamento: number, limite: number) =>
+    chamar<Pagina<AchadoDocumento>>("buscar_documentos", { casoId, termo, deslocamento, limite }),
+  obterDocumento: (casoId: CasoId, documentoId: number) =>
+    chamar<DocumentoIndexado>("obter_documento", { casoId, documentoId }),
+  entidadesDocumento: (casoId: CasoId, documentoId: number) =>
+    chamar<EntidadeDocumento[]>("entidades_documento", { casoId, documentoId }),
+  /** Confirmação é da ocorrência literal, não da identidade ou veracidade do conteúdo. */
+  revisarEntidade: (casoId: CasoId, entidadeId: number, estado: EstadoRevisaoEntidade, nota: string | null) =>
+    chamar<EntidadeDocumento>("revisar_entidade", { casoId, entidadeId, estado, nota }),
+  revisoesEntidade: (casoId: CasoId, entidadeId: number, deslocamento = 0, limite = 20) =>
+    chamar<Pagina<RevisaoEntidade>>("revisoes_entidade", { casoId, entidadeId, deslocamento, limite }),
+  /** Sinal cooperativo; true não significa que a operação já terminou ou foi revertida. */
+  cancelarDocumento: (casoId: CasoId) => chamar<boolean>("cancelar_documento", { casoId }),
+  /** Descritor estrutural local com origem conferida; não detecção/classificação de objetos. */
+  indexarVisual: (casoId: CasoId, arquivoId: number) =>
+    chamar<VisualIndexado>("indexar_visual", { casoId, arquivoId }),
+  semelhantesVisuais: (casoId: CasoId, operacaoId: string, visualId: number, maxBits: number, limite: number) =>
+    chamar<ResultadoSimilarVisual>("semelhantes_visuais", { casoId, operacaoId, visualId, maxBits, limite }),
+  obterArquivo: (casoId: CasoId, extracaoId: ExtracaoId, arquivoId: number) =>
+    chamar<ArquivoExtracao>("obter_arquivo", { casoId, extracaoId, arquivoId }),
+  /** Avaliação local autorizada; nenhum treinamento/exportação automática. */
+  criarDataset: (casoId: CasoId, nome: string, autorizacao: string, retencao: string) =>
+    chamar<DatasetSupervisionado>("criar_dataset", { casoId, nome, autorizacao, retencao }),
+  listarDatasets: (casoId: CasoId, deslocamento = 0, limite = 20) =>
+    chamar<Pagina<DatasetSupervisionado>>("listar_datasets", { casoId, deslocamento, limite }),
+  adicionarAmostra: (casoId: CasoId, datasetId: number, pedido: PedidoAmostraSupervisionada) =>
+    chamar<AmostraSupervisionada>("adicionar_amostra", { casoId, datasetId, pedido }),
+  amostrasDataset: (casoId: CasoId, datasetId: number, deslocamento = 0, limite = 20) =>
+    chamar<Pagina<AmostraSupervisionada>>("amostras_dataset", { casoId, datasetId, deslocamento, limite }),
+  avaliarDataset: (casoId: CasoId, datasetId: number, operacaoId: string) =>
+    chamar<AvaliacaoSupervisionada>("avaliar_dataset", { casoId, datasetId, operacaoId }),
   obterConversa: (conversaId: number) => chamar<Conversa>("obter_conversa", { conversaId }),
   mensagensConversa: (conversaId: number, deslocamento: number, limite: number) =>
     chamar<Pagina<ArtefatoResumo>>("mensagens_conversa", { conversaId, deslocamento, limite }),
   conversaDoArtefato: (artefatoId: number) => chamar<number | null>("conversa_do_artefato", { artefatoId }),
   buscar: (filtro: FiltroBusca, deslocamento: number, limite: number) =>
     chamar<ResultadoBusca>("buscar", { filtro, deslocamento, limite }),
+  /** Pesquisa local explícita: guarda configuração e audita a execução no caso. */
+  executarDescoberta: (pedido: PedidoDescoberta, vocabularioId: number | null, operacaoId: string, casoId: CasoId) =>
+    chamar<ExecucaoDescoberta>("executar_descoberta", { pedido, vocabularioId, operacaoId, casoId }),
+  paginarDescoberta: (consultaId: number, deslocamento: number, limite: number, operacaoId: string, casoId: CasoId) =>
+    chamar<ResultadoDescoberta>("paginar_descoberta", { consultaId, deslocamento, limite, operacaoId, casoId }),
+  /** Sinal aceito não significa operação encerrada: aguarde a resposta original. */
+  cancelarDescoberta: (operacaoId: string) => chamar<boolean>("cancelar_descoberta", { operacaoId }),
+  pesquisarUniversal: (casoId: CasoId, operacaoId: string, pedido: PedidoUniversal, deslocamento: number, limite: number) =>
+    chamar<ResultadoUniversal>("pesquisar_universal", { casoId, operacaoId, pedido, deslocamento, limite }),
+  contextoRelacoes: (casoId: CasoId, operacaoId: string, artefatoId: number, janelaMinutos: number, limite: number) =>
+    chamar<ContextoRelacoes>("contexto_relacoes", { casoId, operacaoId, artefatoId, janelaMinutos, limite }),
+  listarConsultasDescoberta: (casoId: CasoId) => chamar<ConsultaDescobertaSalva[]>("listar_consultas_descoberta", { casoId }),
+  listarVocabulariosPesquisa: (casoId: CasoId) => chamar<VersaoVocabularioPesquisa[]>("listar_vocabularios_pesquisa", { casoId }),
+  salvarVocabularioPesquisa: (casoId: CasoId, dados: VocabularioPesquisa) =>
+    chamar<VersaoVocabularioPesquisa>("salvar_vocabulario_pesquisa", { casoId, dados }),
+  /** JSON versionado, preparado pelo backend; não abre rede nem grava na extração. */
+  exportarVocabularioPesquisa: (casoId: CasoId, id: number) => chamar<string>("exportar_vocabulario_pesquisa", { casoId, id }),
 
   resumoCaso: () => chamar<ResumoCaso>("resumo_caso"),
   listarIdentificadores: (texto: string | null, deslocamento: number, limite: number) =>

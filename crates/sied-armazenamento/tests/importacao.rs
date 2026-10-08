@@ -351,7 +351,15 @@ fn caso_v1_e_migrado_com_copia_de_seguranca() {
     banco.fechar().unwrap();
     let conn = Connection::open(pasta.join("caso.sied.db")).unwrap();
     conn.execute_batch(
-        "DROP INDEX idx_artefato_conversa_ordem;
+        "DROP TABLE visual_derivado; DELETE FROM schema_migracao WHERE versao=10;
+         DROP TABLE amostra_supervisionada; DROP TABLE dataset_supervisionado;
+         DELETE FROM schema_migracao WHERE versao=9;
+         DROP TABLE revisao_entidade_documental; DROP TABLE entidade_documental;
+         DROP TABLE documento_derivado; DROP TABLE busca_documento; DROP TABLE busca_entidade_documental;
+         DELETE FROM schema_migracao WHERE versao = 8;
+         DROP TABLE consulta_descoberta; DROP TABLE vocabulario_pesquisa;
+         DELETE FROM schema_migracao WHERE versao = 7;
+         DROP INDEX idx_artefato_conversa_ordem;
          CREATE INDEX idx_artefato_conversa ON artefato(app, conversa_id_externo, data_hora_ms);
          DELETE FROM schema_migracao WHERE versao = 6;
          DROP TABLE evidencia; DROP TABLE relatorio; DELETE FROM schema_migracao WHERE versao = 5;
@@ -529,7 +537,15 @@ fn caso_v2_ganha_conversas_e_busca_do_que_ja_foi_importado() {
     // Volta o banco para a versão 2 (sem as tabelas derivadas).
     let conn = Connection::open(pasta.join("caso.sied.db")).unwrap();
     conn.execute_batch(
-        "DROP INDEX idx_artefato_conversa_ordem;
+        "DROP TABLE visual_derivado; DELETE FROM schema_migracao WHERE versao=10;
+         DROP TABLE amostra_supervisionada; DROP TABLE dataset_supervisionado;
+         DELETE FROM schema_migracao WHERE versao=9;
+         DROP TABLE revisao_entidade_documental; DROP TABLE entidade_documental;
+         DROP TABLE documento_derivado; DROP TABLE busca_documento; DROP TABLE busca_entidade_documental;
+         DELETE FROM schema_migracao WHERE versao = 8;
+         DROP TABLE consulta_descoberta; DROP TABLE vocabulario_pesquisa;
+         DELETE FROM schema_migracao WHERE versao = 7;
+         DROP INDEX idx_artefato_conversa_ordem;
          CREATE INDEX idx_artefato_conversa ON artefato(app, conversa_id_externo, data_hora_ms);
          DELETE FROM schema_migracao WHERE versao = 6;
          DROP TABLE evidencia; DROP TABLE relatorio; DELETE FROM schema_migracao WHERE versao = 5;

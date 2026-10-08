@@ -59,6 +59,8 @@ pub fn so_digitos(t: &str) -> Option<String> {
 ///
 /// - `sied_normal(x)`: [`normalizar_busca`];
 /// - `sied_digitos(x)`: [`so_digitos`] (NULL quando não há dígitos).
+/// - `sied_data_arquivo_ms(x)`: RFC3339 registrado no inventário em UTC/ms,
+///   sem arredondar nanos nem converter uma data implausível em fato.
 fn registrar_funcoes(conn: &Connection) -> rusqlite::Result<()> {
     conn.create_scalar_function(
         "sied_digitos",
@@ -87,6 +89,20 @@ fn registrar_funcoes(conn: &Connection) -> rusqlite::Result<()> {
                     rusqlite::types::ValueRef::Real(f) => f.to_string(),
                     _ => String::new(),
                 })),
+            })
+        },
+    )?;
+    conn.create_scalar_function(
+        "sied_data_arquivo_ms",
+        1,
+        FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC,
+        |ctx| {
+            Ok(match ctx.get_raw(0) {
+                rusqlite::types::ValueRef::Text(t) => std::str::from_utf8(t)
+                    .ok()
+                    .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+                    .map(|d| d.timestamp_millis()),
+                _ => None,
             })
         },
     )
@@ -157,5 +173,33 @@ mod testes {
         assert_eq!(normalizar_busca("ÁRVORE"), normalizar_busca("arvore"));
         assert_eq!(normalizar_busca("+55 (11) 9"), "+55 (11) 9");
         assert_eq!(normalizar_busca("Mensagem ABC"), "mensagem abc");
+    }
+
+    #[test]
+    fn data_de_arquivo_sql_preserva_milissegundo_com_nanos_e_nao_inventa_data() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        super::registrar_funcoes(&conn).unwrap();
+        for texto in [
+            "2026-10-06T03:02:01.123999999Z",
+            "2026-10-06T00:02:01.123999999-03:00",
+        ] {
+            let ms: Option<i64> = conn
+                .query_row("SELECT sied_data_arquivo_ms(?1)", [texto], |r| r.get(0))
+                .unwrap();
+            assert_eq!(
+                ms,
+                Some(
+                    chrono::DateTime::parse_from_rfc3339(texto)
+                        .unwrap()
+                        .timestamp_millis()
+                )
+            );
+        }
+        for texto in ["2026-10-06", "data desconhecida", ""] {
+            let ms: Option<i64> = conn
+                .query_row("SELECT sied_data_arquivo_ms(?1)", [texto], |r| r.get(0))
+                .unwrap();
+            assert_eq!(ms, None);
+        }
     }
 }

@@ -8,14 +8,17 @@
 //! `SIED_PASTA_DADOS` e `SIED_PASTA_CASOS` substituem os padrões (modo portátil e testes).
 
 mod comandos;
+mod controle_documental;
+mod descobertas;
 mod disco;
+mod documentos;
 mod erro;
 mod log;
 mod servico;
 
 use sied_armazenamento::Sessao;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Manager, RunEvent, WindowEvent};
 
 use comandos::Estado;
@@ -64,6 +67,7 @@ pub fn executar() {
                 };
             app.manage(Estado {
                 servico: Mutex::new(servico),
+                descobertas: Arc::new(descobertas::RegistroDescobertas::default()),
                 falha_inicial,
             });
             if let Some(g) = guarda_log {
@@ -110,10 +114,35 @@ pub fn executar() {
             comandos::posicao_mensagem,
             comandos::localizar_na_conversa,
             comandos::miniatura,
+            comandos::ler_documento,
+            comandos::indexar_documento,
+            comandos::cancelar_documento,
+            comandos::buscar_documentos,
+            comandos::pesquisar_universal,
+            comandos::contexto_relacoes,
+            comandos::indexar_visual,
+            comandos::semelhantes_visuais,
+            comandos::obter_documento,
+            comandos::obter_arquivo,
+            comandos::entidades_documento,
+            comandos::criar_dataset,
+            comandos::listar_datasets,
+            comandos::adicionar_amostra,
+            comandos::amostras_dataset,
+            comandos::avaliar_dataset,
+            comandos::revisar_entidade,
+            comandos::revisoes_entidade,
             comandos::obter_conversa,
             comandos::mensagens_conversa,
             comandos::conversa_do_artefato,
             comandos::buscar,
+            comandos::listar_vocabularios_pesquisa,
+            comandos::salvar_vocabulario_pesquisa,
+            comandos::exportar_vocabulario_pesquisa,
+            comandos::executar_descoberta,
+            comandos::paginar_descoberta,
+            comandos::cancelar_descoberta,
+            comandos::listar_consultas_descoberta,
             comandos::resumo_caso,
             comandos::listar_identificadores,
             comandos::listar_contatos,

@@ -632,6 +632,31 @@ da importação, para que o console de uma importação passada possa ser reaber
 
 ---
 
+### 14.2 Motor de Descoberta Forense Multimodal Local (MDFML)
+
+Planejamento estratégico: [ROADMAP-MDFML.md](ROADMAP-MDFML.md). Preservar distinção entre
+ideias futuras, mecanismos implementados e capacidades efetivamente validadas. OCR,
+documentos, semântica, visão, correlação e assistente são fases distintas; nenhum resultado
+assistido vira fato forense ou evidência automaticamente. Núcleo local, sem envio a terceiros.
+
+Em 02/10/2026, o responsável autorizou iniciar **AI-1**. Branch
+`feat/mdfml-ai1-documentos-locais`, a partir da `main` `f3123f5`, independente da AI-0
+ainda em validação no PR #24. Primeiro incremento: biblioteca interna `sied-documentos`
+para leitura documental UTF-8 com origem/hash conferidos e recursos limitados, sem alterar
+parsers, banco, relatórios ou invariantes. Sem OCR/PDF/entidades implementados, sem nova UI
+ou comandos desktop. Ver [checkpoint AI-1](checkpoints/2026-10-02-ai1-fundacao-documental.md).
+Em seguida foi implementada a primeira entrega visível: **leitor UTF-8 no detalhe de Arquivos**,
+com leitura sob demanda, origem conferida, proveniência e proteção contra troca de caso/seleção.
+O comando desktop resolve os metadados no inventário do caso; não aceita caminhos/hashes do frontend.
+Ver [checkpoint do leitor](checkpoints/2026-10-02-ai1-leitor-documental.md).
+Próximo incremento implementado: **PDF nativo por página em Arquivos**, com contagem
+real e hash do texto derivado separado da origem. Suporte inicial conservador, sem OCR.
+Ver [checkpoint PDF](checkpoints/2026-10-02-ai1-pdf-nativo.md) para formatos, limites e
+validações efetivamente realizadas. AI-1 **parcialmente implementada, ainda não concluída**;
+validação desktop/Windows, OCR/entidades/indexação documental pendentes. Não fazer merge automaticamente.
+
+---
+
 ## 15. Interface: estrutura visual (redesign de 28/09/2026)
 
 Evolução visual e de navegação sobre a base existente: backend, Tauri, bancos, migrações, auditoria,

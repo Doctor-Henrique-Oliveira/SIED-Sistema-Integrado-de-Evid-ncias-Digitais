@@ -15,29 +15,42 @@ use sied_armazenamento::auditoria::{RegistroAuditoria, VerificacaoAuditoria};
 use sied_armazenamento::busca::{AchadoArtefato, FiltroBusca, ResultadoBusca};
 use sied_armazenamento::conversas::{AppConversas, Conversa, FiltroConversas, PosicaoMensagem};
 use sied_armazenamento::derivados::{ConferenciaDerivados, ReconstrucaoDerivados};
+use sied_armazenamento::descoberta::{PedidoDescoberta, ResultadoDescoberta};
+use sied_armazenamento::documentos::{
+    AchadoDocumento, DocumentoIndexado, EntidadeDocumento, EstadoRevisaoEntidade, RevisaoEntidade,
+};
 use sied_armazenamento::evidencias::{Evidencia, Marcacoes, NovaEvidencia, TextosEvidencia};
 use sied_armazenamento::extracoes::{
     ArquivoExtracao, ArtefatoDetalhe, ArtefatoResumo, ExecucaoParser, Extracao, Pagina,
     TotalCategoria,
 };
 use sied_armazenamento::linha_tempo::{FiltroLinhaTempo, ResumoLinhaTempo};
+use sied_armazenamento::pesquisa_local::{
+    ConsultaDescobertaSalva, ExecucaoDescoberta, VersaoVocabularioPesquisa, VocabularioPesquisa,
+};
 use sied_armazenamento::relatorios::{ConferenciaPastaRelatorios, RelatorioRegistrado};
 use sied_armazenamento::resumo::{Identificador, ResumoCaso};
 use sied_armazenamento::CasoCatalogado;
+use sied_documentos::ResultadoDocumento;
 use sied_dominio::{CasoId, Dispositivo, DispositivoId, ExtracaoId, NovoCaso, NovoDispositivo};
 use sied_ingestao::eventos::EventoImportacao;
 use sied_ingestao::importador::Deteccao;
 use sied_midia::Miniatura;
 use sied_relatorio::PedidoRelatorio;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Manager};
 
 use crate::erro::{CodigoErro, ErroApp, ResultadoApp};
 use crate::servico::{CasoAberto, EstadoImportacao, InfoApp, Servico};
 
+/// Leitura e indexação compartilham uma única vaga e cancelamento cooperativo.
+static DOCUMENTOS: crate::controle_documental::OperacoesDocumentais =
+    crate::controle_documental::OperacoesDocumentais::novo();
+
 pub struct Estado {
     pub servico: Mutex<Option<Servico>>,
+    pub(crate) descobertas: Arc<crate::descobertas::RegistroDescobertas>,
     /// Motivo da falha ao iniciar (ex.: banco global de versão mais nova).
     pub falha_inicial: Option<String>,
 }
@@ -103,6 +116,8 @@ pub async fn criar_caso(
     dados: NovoCaso,
     pasta_base: Option<String>,
 ) -> ResultadoApp<CasoAberto> {
+    app_handle.state::<Estado>().descobertas.cancelar_ativa();
+    DOCUMENTOS.cancelar_ativa();
     em_segundo_plano(app_handle, move |estado| {
         estado.com(|s| s.criar_caso(dados, pasta_base))
     })
@@ -111,6 +126,8 @@ pub async fn criar_caso(
 
 #[tauri::command]
 pub async fn abrir_caso(app_handle: AppHandle, caso_id: CasoId) -> ResultadoApp<CasoAberto> {
+    app_handle.state::<Estado>().descobertas.cancelar_ativa();
+    DOCUMENTOS.cancelar_ativa();
     em_segundo_plano(app_handle, move |estado| {
         estado.com(|s| s.abrir_caso(caso_id))
     })
@@ -119,6 +136,8 @@ pub async fn abrir_caso(app_handle: AppHandle, caso_id: CasoId) -> ResultadoApp<
 
 #[tauri::command]
 pub async fn abrir_pasta_caso(app_handle: AppHandle, pasta: String) -> ResultadoApp<CasoAberto> {
+    app_handle.state::<Estado>().descobertas.cancelar_ativa();
+    DOCUMENTOS.cancelar_ativa();
     em_segundo_plano(app_handle, move |estado| {
         estado.com(|s| s.abrir_pasta(&PathBuf::from(pasta)))
     })
@@ -127,6 +146,8 @@ pub async fn abrir_pasta_caso(app_handle: AppHandle, pasta: String) -> Resultado
 
 #[tauri::command]
 pub async fn fechar_caso(app_handle: AppHandle) -> ResultadoApp<()> {
+    app_handle.state::<Estado>().descobertas.cancelar_ativa();
+    DOCUMENTOS.cancelar_ativa();
     em_segundo_plano(app_handle, move |estado| estado.com(|s| s.fechar_caso())).await
 }
 
@@ -408,6 +429,380 @@ pub async fn miniatura(app_handle: AppHandle, arquivo_id: i64) -> ResultadoApp<M
     .await
 }
 
+/// Resolve o inventário sob a trava; abre e interpreta a origem após soltá-la.
+/// O caso esperado é somente uma guarda contra troca/fechamento durante a navegação.
+#[tauri::command]
+pub async fn ler_documento(
+    app_handle: AppHandle,
+    arquivo_id: i64,
+    caso_id: CasoId,
+    pagina: Option<u32>,
+) -> ResultadoApp<ResultadoDocumento> {
+    let guarda = DOCUMENTOS.iniciar(caso_id)?;
+    em_segundo_plano(app_handle, move |estado| {
+        // A guarda permanece na thread mesmo se o frontend descartar a requisição.
+        let pedido = estado.com(|s| s.pedido_documento(arquivo_id, caso_id))?;
+        Ok(pedido.executar_controlado(pagina, guarda.controle()))
+    })
+    .await
+}
+
+/// Reabre/confere a origem; texto e candidatos não vêm do IPC. A escrita curta
+/// ocorre só após a leitura fora da trava e a conferência do caso ainda ativo.
+#[tauri::command]
+pub async fn indexar_documento(
+    app_handle: AppHandle,
+    arquivo_id: i64,
+    caso_id: CasoId,
+    pagina: Option<u32>,
+) -> ResultadoApp<DocumentoIndexado> {
+    let guarda = DOCUMENTOS.iniciar(caso_id)?;
+    em_segundo_plano(app_handle, move |estado| {
+        let pedido = estado.com(|s| s.pedido_documento(arquivo_id, caso_id))?;
+        let leitura = pedido.executar_controlado(pagina, guarda.controle());
+        let novo = crate::documentos::preparar_derivado(leitura, guarda.controle())?;
+        estado.com(|s| {
+            // Confere caso antes do gate: uma operação enfileirada não pode
+            // registrar resultado no caso aberto depois dela.
+            s.banco_documental(caso_id)?;
+            guarda.finalizar()?;
+            s.guardar_documento(novo, guarda.controle())
+        })
+    })
+    .await
+}
+
+/// Pedido de cancelamento, não uma afirmação de término ou aborto preemptivo.
+#[tauri::command]
+pub async fn cancelar_documento(caso_id: CasoId) -> ResultadoApp<bool> {
+    DOCUMENTOS.cancelar(caso_id)
+}
+
+#[tauri::command]
+pub async fn buscar_documentos(
+    app_handle: AppHandle,
+    caso_id: CasoId,
+    termo: String,
+    deslocamento: i64,
+    limite: i64,
+) -> ResultadoApp<Pagina<AchadoDocumento>> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.buscar_documentos(caso_id, &termo, deslocamento, limite))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn pesquisar_universal(
+    app_handle: AppHandle,
+    caso_id: CasoId,
+    operacao_id: String,
+    pedido: sied_armazenamento::universal::PedidoUniversal,
+    deslocamento: i64,
+    limite: i64,
+) -> ResultadoApp<sied_armazenamento::universal::ResultadoUniversal> {
+    let operacao = app_handle
+        .state::<Estado>()
+        .descobertas
+        .iniciar(operacao_id)?;
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| {
+            let resultado = s.banco_documental(caso_id)?.pesquisar_universal(
+                &pedido,
+                deslocamento,
+                limite,
+                &operacao.controle,
+            )?;
+            operacao.controle.concluir()?;
+            Ok(resultado)
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn contexto_relacoes(
+    app_handle: AppHandle,
+    caso_id: CasoId,
+    operacao_id: String,
+    artefato_id: i64,
+    janela_minutos: u32,
+    limite: i64,
+) -> ResultadoApp<sied_armazenamento::relacoes::ContextoRelacoes> {
+    let operacao = app_handle
+        .state::<Estado>()
+        .descobertas
+        .iniciar(operacao_id)?;
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| {
+            s.banco_documental(caso_id)?
+                .contexto_relacoes(artefato_id, janela_minutos, limite, &operacao.controle)
+                .map_err(Into::into)
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn indexar_visual(
+    app_handle: AppHandle,
+    caso_id: CasoId,
+    arquivo_id: i64,
+) -> ResultadoApp<sied_armazenamento::visuais::VisualIndexado> {
+    let guarda = DOCUMENTOS.iniciar(caso_id)?;
+    em_segundo_plano(app_handle, move |estado| {
+        // Cache é histórico: a origem atual não é certificada só por reutilizá-lo.
+        if let Some(d) = estado.com(|s| {
+            Ok(s.banco_documental(caso_id)?.visual_existente(
+                arquivo_id,
+                sied_documentos::visao::MOTOR_ID,
+                sied_documentos::visao::MOTOR_VERSAO,
+            )?)
+        })? {
+            return Ok(d);
+        }
+        let leitura = estado
+            .com(|s| s.pedido_documento(arquivo_id, caso_id))?
+            .executar_visual(guarda.controle());
+        if leitura.estado != sied_documentos::EstadoDocumento::Pronto {
+            let codigo = match leitura.estado {
+                sied_documentos::EstadoDocumento::OrigemDivergente
+                | sied_documentos::EstadoDocumento::HashAusente => CodigoErro::Integridade,
+                sied_documentos::EstadoDocumento::SemSuporte => CodigoErro::NaoSuportado,
+                sied_documentos::EstadoDocumento::Cancelado => CodigoErro::Conflito,
+                sied_documentos::EstadoDocumento::LimiteExcedido => CodigoErro::Validacao,
+                _ => CodigoErro::Interno,
+            };
+            return Err(ErroApp::novo(
+                codigo,
+                leitura
+                    .motivo
+                    .unwrap_or_else(|| "a análise visual não publicou descritor".into()),
+            ));
+        }
+        let a = leitura.assinatura.ok_or_else(|| {
+            ErroApp::novo(
+                CodigoErro::Integridade,
+                leitura
+                    .motivo
+                    .unwrap_or_else(|| "a análise visual pronta não contém descritor".into()),
+            )
+        })?;
+        crate::documentos::conferir_cancelamento(guarda.controle())?;
+        let d = sied_armazenamento::visuais::VisualIndexado {
+            id: 0,
+            caso_id: a.caso_id,
+            extracao_id: a.extracao_id,
+            arquivo_id: a.arquivo_id,
+            caminho: a.caminho.to_string(),
+            sha256_origem: a.sha256,
+            dhash: a.dhash,
+            largura: a.largura,
+            altura: a.altura,
+            luminancia_media: a.luminancia_media,
+            motor_id: a.motor_id,
+            motor_versao: a.motor_versao,
+            executado_em: a.executado_em.to_rfc3339(),
+            hash_derivado: String::new(),
+        };
+        estado.com(|s| {
+            let b = s.banco_documental(caso_id)?;
+            guarda.finalizar()?;
+            Ok(b.guardar_visual(d)?)
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn semelhantes_visuais(
+    app_handle: AppHandle,
+    caso_id: CasoId,
+    operacao_id: String,
+    visual_id: i64,
+    max_bits: u32,
+    limite: usize,
+) -> ResultadoApp<sied_armazenamento::visuais::ResultadoSimilarVisual> {
+    let op = app_handle
+        .state::<Estado>()
+        .descobertas
+        .iniciar(operacao_id)?;
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| {
+            let r = s.banco_documental(caso_id)?.semelhantes_visuais(
+                visual_id,
+                max_bits,
+                limite,
+                &op.controle,
+            )?;
+            op.controle.concluir()?;
+            Ok(r)
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn obter_documento(
+    app_handle: AppHandle,
+    caso_id: CasoId,
+    documento_id: i64,
+) -> ResultadoApp<DocumentoIndexado> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.obter_documento(caso_id, documento_id))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn obter_arquivo(
+    app_handle: AppHandle,
+    caso_id: CasoId,
+    extracao_id: ExtracaoId,
+    arquivo_id: i64,
+) -> ResultadoApp<ArquivoExtracao> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| {
+            let a = s
+                .banco_documental(caso_id)?
+                .arquivo_com_origem(arquivo_id)?;
+            if a.extracao_id != extracao_id {
+                return Err(ErroApp::novo(
+                    CodigoErro::Conflito,
+                    "arquivo não pertence à extração solicitada",
+                ));
+            }
+            Ok(a.arquivo)
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn entidades_documento(
+    app_handle: AppHandle,
+    caso_id: CasoId,
+    documento_id: i64,
+) -> ResultadoApp<Vec<EntidadeDocumento>> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.entidades_documento(caso_id, documento_id))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn criar_dataset(
+    app_handle: AppHandle,
+    caso_id: CasoId,
+    nome: String,
+    autorizacao: String,
+    retencao: String,
+) -> ResultadoApp<sied_armazenamento::supervisao::DatasetSupervisionado> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| {
+            Ok(s.banco_documental(caso_id)?
+                .criar_dataset(&nome, &autorizacao, &retencao)?)
+        })
+    })
+    .await
+}
+#[tauri::command]
+pub async fn listar_datasets(
+    app_handle: AppHandle,
+    caso_id: CasoId,
+    deslocamento: i64,
+    limite: i64,
+) -> ResultadoApp<Pagina<sied_armazenamento::supervisao::DatasetSupervisionado>> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| {
+            Ok(s.banco_documental(caso_id)?
+                .listar_datasets(deslocamento, limite)?)
+        })
+    })
+    .await
+}
+#[tauri::command]
+pub async fn adicionar_amostra(
+    app_handle: AppHandle,
+    caso_id: CasoId,
+    dataset_id: i64,
+    pedido: sied_armazenamento::supervisao::PedidoAmostraSupervisionada,
+) -> ResultadoApp<sied_armazenamento::supervisao::AmostraSupervisionada> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| {
+            Ok(s.banco_documental(caso_id)?
+                .adicionar_amostra(dataset_id, &pedido)?)
+        })
+    })
+    .await
+}
+#[tauri::command]
+pub async fn amostras_dataset(
+    app_handle: AppHandle,
+    caso_id: CasoId,
+    dataset_id: i64,
+    deslocamento: i64,
+    limite: i64,
+) -> ResultadoApp<Pagina<sied_armazenamento::supervisao::AmostraSupervisionada>> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| {
+            Ok(s.banco_documental(caso_id)?
+                .amostras_dataset(dataset_id, deslocamento, limite)?)
+        })
+    })
+    .await
+}
+#[tauri::command]
+pub async fn avaliar_dataset(
+    app_handle: AppHandle,
+    caso_id: CasoId,
+    dataset_id: i64,
+    operacao_id: String,
+) -> ResultadoApp<sied_armazenamento::supervisao::AvaliacaoSupervisionada> {
+    let op = app_handle
+        .state::<Estado>()
+        .descobertas
+        .iniciar(operacao_id)?;
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| {
+            let r = s
+                .banco_documental(caso_id)?
+                .avaliar_dataset_com_controle(dataset_id, &op.controle)?;
+            op.controle.concluir()?;
+            Ok(r)
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn revisar_entidade(
+    app_handle: AppHandle,
+    caso_id: CasoId,
+    entidade_id: i64,
+    estado: EstadoRevisaoEntidade,
+    nota: Option<String>,
+) -> ResultadoApp<EntidadeDocumento> {
+    em_segundo_plano(app_handle, move |servico| {
+        servico.com(|s| s.revisar_entidade(caso_id, entidade_id, estado, nota))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn revisoes_entidade(
+    app_handle: AppHandle,
+    caso_id: CasoId,
+    entidade_id: i64,
+    deslocamento: i64,
+    limite: i64,
+) -> ResultadoApp<Pagina<RevisaoEntidade>> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.revisoes_entidade(caso_id, entidade_id, deslocamento, limite))
+    })
+    .await
+}
+
 #[tauri::command]
 pub async fn obter_conversa(app_handle: AppHandle, conversa_id: i64) -> ResultadoApp<Conversa> {
     em_segundo_plano(app_handle, move |estado| {
@@ -456,6 +851,108 @@ pub async fn buscar(
 #[tauri::command]
 pub async fn resumo_caso(app_handle: AppHandle) -> ResultadoApp<ResumoCaso> {
     em_segundo_plano(app_handle, move |estado| estado.com(|s| s.resumo_caso())).await
+}
+
+#[tauri::command]
+pub async fn listar_vocabularios_pesquisa(
+    app_handle: AppHandle,
+    caso_id: CasoId,
+) -> ResultadoApp<Vec<VersaoVocabularioPesquisa>> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.listar_vocabularios_pesquisa(caso_id))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn salvar_vocabulario_pesquisa(
+    app_handle: AppHandle,
+    caso_id: CasoId,
+    dados: VocabularioPesquisa,
+) -> ResultadoApp<VersaoVocabularioPesquisa> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.salvar_vocabulario_pesquisa(caso_id, dados))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn exportar_vocabulario_pesquisa(
+    app_handle: AppHandle,
+    caso_id: CasoId,
+    id: i64,
+) -> ResultadoApp<String> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.exportar_vocabulario_pesquisa(caso_id, id))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn executar_descoberta(
+    app_handle: AppHandle,
+    caso_id: CasoId,
+    operacao_id: String,
+    pedido: PedidoDescoberta,
+    vocabulario_id: Option<i64>,
+) -> ResultadoApp<ExecucaoDescoberta> {
+    let operacao = app_handle
+        .state::<Estado>()
+        .descobertas
+        .iniciar(operacao_id)?;
+    em_segundo_plano(app_handle, move |estado| {
+        operacao.controle.verificar()?;
+        estado.com(|s| s.executar_descoberta(caso_id, pedido, vocabulario_id, &operacao.controle))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn paginar_descoberta(
+    app_handle: AppHandle,
+    caso_id: CasoId,
+    operacao_id: String,
+    consulta_id: i64,
+    deslocamento: i64,
+    limite: i64,
+) -> ResultadoApp<ResultadoDescoberta> {
+    let operacao = app_handle
+        .state::<Estado>()
+        .descobertas
+        .iniciar(operacao_id)?;
+    em_segundo_plano(app_handle, move |estado| {
+        operacao.controle.verificar()?;
+        estado.com(|s| {
+            s.paginar_descoberta(
+                caso_id,
+                consulta_id,
+                deslocamento,
+                limite,
+                &operacao.controle,
+            )
+        })
+    })
+    .await
+}
+
+/// A sinalização não adquire a trava do serviço ocupada pela consulta.
+#[tauri::command]
+pub async fn cancelar_descoberta(app_handle: AppHandle, operacao_id: String) -> ResultadoApp<bool> {
+    app_handle
+        .state::<Estado>()
+        .descobertas
+        .cancelar(&operacao_id)
+}
+
+#[tauri::command]
+pub async fn listar_consultas_descoberta(
+    app_handle: AppHandle,
+    caso_id: CasoId,
+) -> ResultadoApp<Vec<ConsultaDescobertaSalva>> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.listar_consultas_descoberta(caso_id))
+    })
+    .await
 }
 
 #[tauri::command]

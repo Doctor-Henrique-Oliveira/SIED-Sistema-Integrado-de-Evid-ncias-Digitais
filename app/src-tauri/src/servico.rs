@@ -8,28 +8,35 @@ use sied_armazenamento::agenda::{
 use sied_armazenamento::auditoria::{RegistroAuditoria, VerificacaoAuditoria};
 use sied_armazenamento::busca::{AchadoArtefato, FiltroBusca, ResultadoBusca};
 use sied_armazenamento::caso::{nome_pasta_sugerido, NOME_ARQUIVO_CASO};
+use sied_armazenamento::controle_descoberta::ControleDescoberta;
 use sied_armazenamento::conversas::{AppConversas, Conversa, FiltroConversas, PosicaoMensagem};
 use sied_armazenamento::derivados::{ConferenciaDerivados, ReconstrucaoDerivados};
+use sied_armazenamento::descoberta::{PedidoDescoberta, ResultadoDescoberta};
 use sied_armazenamento::evidencias::{Evidencia, Marcacoes, NovaEvidencia, TextosEvidencia};
 use sied_armazenamento::extracoes::{
     ArquivoExtracao, ArtefatoDetalhe, ArtefatoResumo, ExecucaoParser, Extracao, Pagina,
     TotalCategoria,
 };
 use sied_armazenamento::linha_tempo::{FiltroLinhaTempo, ResumoLinhaTempo};
+use sied_armazenamento::pesquisa_local::{
+    ConsultaDescobertaSalva, ExecucaoDescoberta, VersaoVocabularioPesquisa, VocabularioPesquisa,
+};
 use sied_armazenamento::relatorios::{ConferenciaPastaRelatorios, RelatorioRegistrado};
 use sied_armazenamento::resumo::{Identificador, ResumoCaso};
 use sied_armazenamento::{BancoCaso, CasoCatalogado, CatalogoGlobal, Sessao};
+use sied_documentos::{ControleDocumento, ModoDocumento, PedidoDocumento, ResultadoDocumento};
 use sied_dominio::{
     Caso, CasoId, Dispositivo, DispositivoId, ExtracaoId, NovoCaso, NovoDispositivo,
 };
 use sied_ingestao::eventos::{EventoImportacao, NivelEvento};
 use sied_ingestao::fonte::pasta::PastaSomenteLeitura;
+use sied_ingestao::fonte::{CaminhoFonte, EntradaFonte, FonteSomenteLeitura, LeitorFonte};
 use sied_ingestao::importador::{Deteccao, Suporte};
 use sied_ingestao::pipeline::{self, Controle, Progresso};
-use sied_ingestao::Registro;
+use sied_ingestao::{ErroIngestao, Registro};
 use sied_midia::Pedido as PedidoMiniatura;
 use sied_relatorio::PedidoRelatorio;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use ts_rs::TS;
@@ -37,6 +44,139 @@ use ts_rs::TS;
 use crate::erro::{CodigoErro, ErroApp, ResultadoApp};
 
 const CONFIG_PASTA_CASOS: &str = "pasta_casos_padrao";
+
+/// Dados resolvidos no inventário do caso ativo, nunca fornecidos pelo frontend.
+/// A leitura da origem acontece somente depois de soltar a trava do serviço.
+pub struct LeituraDocumento {
+    pasta_extracao: PathBuf,
+    pedido: PedidoDocumento,
+}
+
+impl LeituraDocumento {
+    #[cfg(test)]
+    pub fn executar(self) -> ResultadoDocumento {
+        self.executar_pagina(None)
+    }
+
+    #[cfg(test)]
+    pub fn executar_pagina(self, pagina: Option<u32>) -> ResultadoDocumento {
+        self.executar_controlado(pagina, &ControleDocumento::novo())
+    }
+
+    pub fn executar_controlado(
+        self,
+        pagina: Option<u32>,
+        controle: &ControleDocumento,
+    ) -> ResultadoDocumento {
+        let fonte = FonteDocumento {
+            pasta: self.pasta_extracao,
+            caminho: self.pedido.caminho.clone(),
+        };
+        sied_documentos::analisar_pagina(&fonte, &self.pedido, controle, pagina)
+    }
+
+    pub fn executar_visual(
+        self,
+        controle: &ControleDocumento,
+    ) -> sied_documentos::visao::ResultadoVisual {
+        let fonte = FonteDocumento {
+            pasta: self.pasta_extracao,
+            caminho: self.pedido.caminho.clone(),
+        };
+        sied_documentos::visao::analisar(&fonte, &self.pedido, controle)
+    }
+}
+
+/// Fonte restrita ao único endereço resolvido no inventário. A abertura é tardia:
+/// formatos sem suporte e pedidos acima dos limites não tocam o disco da evidência.
+struct FonteDocumento {
+    pasta: PathBuf,
+    caminho: CaminhoFonte,
+}
+
+impl FonteDocumento {
+    fn recusar(&self) -> ErroIngestao {
+        ErroIngestao::ItemIgnorado {
+            caminho: self.caminho.to_string(),
+            motivo: "origem documental não é um arquivo regular confinado, sem links".into(),
+        }
+    }
+
+    /// Confere os componentes intermediários também, não apenas o arquivo final.
+    /// Reparse points do Windows (incluindo junções) são recusados. Esta barreira
+    /// não promete proteção rígida contra substituição concorrente do filesystem;
+    /// o hash e o tamanho do inventário continuam obrigatórios antes de publicar.
+    fn conferir_caminho(&self, raiz: &Path) -> sied_ingestao::Resultado<()> {
+        let mut destino = raiz.to_path_buf();
+        let partes: Vec<_> = self.caminho.como_str().split('/').collect();
+        for (indice, parte) in partes.iter().enumerate() {
+            let mut componentes = Path::new(parte).components();
+            if !matches!(
+                (componentes.next(), componentes.next()),
+                (Some(Component::Normal(_)), None)
+            ) {
+                return Err(self.recusar());
+            }
+            #[cfg(windows)]
+            if parte.contains(':') {
+                // Não permitir alternate data streams como um documento do inventário.
+                return Err(self.recusar());
+            }
+            destino.push(parte);
+            let metadados = std::fs::symlink_metadata(&destino)?;
+            if metadados.file_type().is_symlink() || ponto_de_reparse(&metadados) {
+                return Err(self.recusar());
+            }
+            if indice + 1 == partes.len() {
+                if !metadados.is_file() {
+                    return Err(self.recusar());
+                }
+            } else if !metadados.is_dir() {
+                return Err(self.recusar());
+            }
+            if !destino.canonicalize()?.starts_with(raiz) {
+                return Err(self.recusar());
+            }
+        }
+        Ok(())
+    }
+}
+
+#[cfg(windows)]
+fn ponto_de_reparse(metadados: &std::fs::Metadata) -> bool {
+    use std::os::windows::fs::MetadataExt;
+    metadados.file_attributes() & 0x400 != 0 // FILE_ATTRIBUTE_REPARSE_POINT
+}
+
+#[cfg(not(windows))]
+fn ponto_de_reparse(_: &std::fs::Metadata) -> bool {
+    false
+}
+
+impl FonteSomenteLeitura for FonteDocumento {
+    fn descricao(&self) -> String {
+        "Documento restrito ao inventário do caso".into()
+    }
+
+    fn listar(&self) -> Box<dyn Iterator<Item = sied_ingestao::Resultado<EntradaFonte>> + '_> {
+        Box::new(std::iter::empty())
+    }
+
+    fn entrada(&self, _: &CaminhoFonte) -> sied_ingestao::Resultado<Option<EntradaFonte>> {
+        Err(self.recusar())
+    }
+
+    fn abrir(&self, caminho: &CaminhoFonte) -> sied_ingestao::Resultado<Box<dyn LeitorFonte>> {
+        if caminho != &self.caminho {
+            return Err(self.recusar());
+        }
+        let fonte = PastaSomenteLeitura::abrir(&self.pasta)?;
+        self.conferir_caminho(fonte.raiz())?;
+        let leitor = fonte.abrir(caminho)?;
+        self.conferir_caminho(fonte.raiz())?;
+        Ok(leitor)
+    }
+}
 
 #[derive(Debug, Serialize, TS)]
 #[ts(export)]
@@ -253,6 +393,17 @@ impl Servico {
 
     fn banco(&mut self) -> ResultadoApp<&mut BancoCaso> {
         self.caso.as_mut().ok_or_else(ErroApp::nenhum_caso)
+    }
+
+    pub(crate) fn banco_documental(&mut self, caso_id: CasoId) -> ResultadoApp<&mut BancoCaso> {
+        let banco = self.banco()?;
+        if banco.caso().id != caso_id {
+            return Err(ErroApp::novo(
+                CodigoErro::Conflito,
+                "o caso ativo mudou; selecione novamente o documento no caso atual",
+            ));
+        }
+        Ok(banco)
     }
 
     pub fn cadastrar_dispositivo(&mut self, dados: NovoDispositivo) -> ResultadoApp<Dispositivo> {
@@ -544,6 +695,53 @@ impl Servico {
         })
     }
 
+    /// O frontend escolhe apenas o ID do inventário e o caso que espera estar ativo.
+    /// Caminho, extração, tamanho e SHA-256 vêm exclusivamente do banco desse caso.
+    pub fn pedido_documento(
+        &mut self,
+        arquivo_id: i64,
+        caso_id: CasoId,
+    ) -> ResultadoApp<LeituraDocumento> {
+        let banco = self.banco()?;
+        if banco.caso().id != caso_id {
+            return Err(ErroApp::novo(
+                CodigoErro::Conflito,
+                "o caso ativo mudou; selecione novamente o arquivo no caso atual",
+            ));
+        }
+        if arquivo_id <= 0 {
+            return Err(ErroApp::novo(
+                CodigoErro::Validacao,
+                "o identificador do arquivo no inventário é inválido",
+            ));
+        }
+        let a = banco.arquivo_com_origem(arquivo_id)?;
+        let tamanho = u64::try_from(a.arquivo.tamanho).map_err(|_| {
+            ErroApp::novo(
+                CodigoErro::Integridade,
+                "o tamanho registrado no inventário é inválido",
+            )
+        })?;
+        let caminho = CaminhoFonte::novo(&a.arquivo.caminho).map_err(|_| {
+            ErroApp::novo(
+                CodigoErro::Integridade,
+                "o caminho registrado no inventário é inválido",
+            )
+        })?;
+        Ok(LeituraDocumento {
+            pasta_extracao: PathBuf::from(a.origem_caminho),
+            pedido: PedidoDocumento {
+                caso_id: banco.caso().id,
+                extracao_id: a.extracao_id,
+                arquivo_id: a.arquivo.id,
+                caminho,
+                sha256: a.arquivo.sha256,
+                tamanho,
+                modo: ModoDocumento::Automatico,
+            },
+        })
+    }
+
     pub fn obter_conversa(&mut self, conversa_id: i64) -> ResultadoApp<Conversa> {
         Ok(self.banco()?.conversa(conversa_id)?)
     }
@@ -578,6 +776,98 @@ impl Servico {
 
     pub fn resumo_caso(&mut self) -> ResultadoApp<ResumoCaso> {
         Ok(self.banco()?.resumo()?)
+    }
+
+    fn pesquisa_sem_importacao(&self) -> ResultadoApp<()> {
+        if self.importacao.as_ref().is_some_and(|t| t.em_curso()) {
+            return Err(ErroApp::novo(
+                CodigoErro::Conflito,
+                "Há uma importação em andamento. Execute a descoberta quando ela terminar.",
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn listar_vocabularios_pesquisa(
+        &mut self,
+        caso_id: CasoId,
+    ) -> ResultadoApp<Vec<VersaoVocabularioPesquisa>> {
+        Ok(self
+            .banco_documental(caso_id)?
+            .listar_vocabularios_pesquisa()?)
+    }
+
+    pub fn salvar_vocabulario_pesquisa(
+        &mut self,
+        caso_id: CasoId,
+        dados: VocabularioPesquisa,
+    ) -> ResultadoApp<VersaoVocabularioPesquisa> {
+        Ok(self
+            .banco_documental(caso_id)?
+            .salvar_vocabulario_pesquisa(dados)?)
+    }
+
+    pub fn exportar_vocabulario_pesquisa(
+        &mut self,
+        caso_id: CasoId,
+        id: i64,
+    ) -> ResultadoApp<String> {
+        Ok(self
+            .banco_documental(caso_id)?
+            .exportar_vocabulario_pesquisa(id)?)
+    }
+
+    pub fn executar_descoberta(
+        &mut self,
+        caso_id: CasoId,
+        pedido: PedidoDescoberta,
+        vocabulario_id: Option<i64>,
+        controle: &Arc<ControleDescoberta>,
+    ) -> ResultadoApp<ExecucaoDescoberta> {
+        controle.verificar()?;
+        self.pesquisa_sem_importacao()?;
+        let banco = self.banco()?;
+        if banco.caso().id != caso_id {
+            return Err(ErroApp::novo(
+                CodigoErro::Conflito,
+                "o caso ativo mudou; abra a pesquisa no caso atual",
+            ));
+        }
+        Ok(banco.executar_descoberta_com_controle(pedido, vocabulario_id, controle)?)
+    }
+
+    pub fn paginar_descoberta(
+        &mut self,
+        caso_id: CasoId,
+        consulta_id: i64,
+        deslocamento: i64,
+        limite: i64,
+        controle: &Arc<ControleDescoberta>,
+    ) -> ResultadoApp<ResultadoDescoberta> {
+        controle.verificar()?;
+        self.pesquisa_sem_importacao()?;
+        let banco = self.banco()?;
+        if banco.caso().id != caso_id {
+            return Err(ErroApp::novo(
+                CodigoErro::Conflito,
+                "o caso ativo mudou; abra a pesquisa no caso atual",
+            ));
+        }
+        Ok(banco.paginar_descoberta_com_controle(
+            consulta_id,
+            deslocamento.max(0),
+            limite.clamp(1, 200),
+            controle,
+        )?)
+    }
+
+    pub fn listar_consultas_descoberta(
+        &mut self,
+        caso_id: CasoId,
+    ) -> ResultadoApp<Vec<ConsultaDescobertaSalva>> {
+        Ok(self
+            .banco_documental(caso_id)?
+            .listar_consultas_descoberta()?)
     }
 
     pub fn listar_identificadores(
@@ -872,6 +1162,258 @@ mod testes {
             .unwrap();
         assert_eq!(achado.arquivos.total, 1);
         s.verificar_auditoria().unwrap();
+    }
+
+    fn com_documento_sintetico(raiz: &Path) -> (Servico, CasoId, ExtracaoId, i64, PathBuf) {
+        com_documento_sintetico_texto(raiz, "dados sintéticos de teste")
+    }
+
+    fn com_documento_sintetico_texto(
+        raiz: &Path,
+        texto: &str,
+    ) -> (Servico, CasoId, ExtracaoId, i64, PathBuf) {
+        let origem = raiz.join("Extracao-DOCUMENTAL-SINTETICA");
+        extracao_sintetica(&origem);
+        // Constrói a fixture antes da importação normal; nunca altera a evidência
+        // já inventariada para fazer uma conferência passar.
+        std::fs::write(origem.join("SINTETICO.txt"), texto).unwrap();
+        let mut s = servico(raiz);
+        let caso_id = s.criar_caso(caso(), None).unwrap().caso.id;
+        let dispositivo = s
+            .cadastrar_dispositivo(NovoDispositivo {
+                apelido: "Dispositivo SINTÉTICO documental".into(),
+                ..Default::default()
+            })
+            .unwrap();
+        s.iniciar_importacao(dispositivo.id, &origem, "generico")
+            .unwrap();
+        let extracao = esperar(&s).extracao.unwrap();
+        assert_eq!(extracao.status, "concluida");
+        let arquivo_id = s
+            .listar_arquivos(extracao.id, None, None, 0, 10)
+            .unwrap()
+            .itens
+            .into_iter()
+            .find(|a| a.caminho == "SINTETICO.txt")
+            .unwrap()
+            .id;
+        (s, caso_id, extracao.id, arquivo_id, origem)
+    }
+
+    #[test]
+    fn documento_resolve_origem_real_e_nao_grava_dados_ou_auditoria() {
+        let raiz = tempfile::tempdir().unwrap();
+        let (mut s, caso_id, extracao_id, arquivo_id, origem) =
+            com_documento_sintetico(raiz.path());
+        let arquivo = origem.join("SINTETICO.txt");
+        let bytes = std::fs::read(&arquivo).unwrap();
+        let modificado = std::fs::metadata(&arquivo).unwrap().modified().unwrap();
+        let auditoria = serde_json::to_value(s.listar_auditoria(100).unwrap()).unwrap();
+        let inventario =
+            serde_json::to_value(s.listar_arquivos(extracao_id, None, None, 0, 10).unwrap())
+                .unwrap();
+
+        let pedido = s.pedido_documento(arquivo_id, caso_id).unwrap();
+        assert_eq!(pedido.pedido.caso_id, caso_id);
+        assert_eq!(pedido.pedido.extracao_id, extracao_id);
+        assert_eq!(pedido.pedido.arquivo_id, arquivo_id);
+        assert_eq!(pedido.pedido.caminho.como_str(), "SINTETICO.txt");
+        let resultado = pedido.executar();
+        assert_eq!(resultado.estado, sied_documentos::EstadoDocumento::Pronto);
+        let texto = resultado.texto.unwrap();
+        assert_eq!(texto.texto.as_bytes(), bytes);
+        assert_eq!(texto.caso_id, caso_id);
+        assert_eq!(texto.extracao_id, extracao_id);
+        assert_eq!(texto.arquivo_id, arquivo_id);
+        assert_eq!(texto.sha256, texto.sha256_texto);
+        assert!(texto.pagina.is_none());
+        assert_eq!(std::fs::read(&arquivo).unwrap(), bytes);
+        assert_eq!(
+            std::fs::metadata(&arquivo).unwrap().modified().unwrap(),
+            modificado
+        );
+        assert_eq!(
+            serde_json::to_value(s.listar_auditoria(100).unwrap()).unwrap(),
+            auditoria
+        );
+        assert_eq!(
+            serde_json::to_value(s.listar_arquivos(extracao_id, None, None, 0, 10).unwrap())
+                .unwrap(),
+            inventario
+        );
+        s.verificar_auditoria().unwrap();
+    }
+
+    #[test]
+    fn documento_recusa_caso_trocado_e_id_fora_do_inventario() {
+        let raiz = tempfile::tempdir().unwrap();
+        let (mut s, caso_id, _, arquivo_id, _) = com_documento_sintetico(raiz.path());
+        let erro = s.pedido_documento(i64::MAX, caso_id).err().unwrap();
+        assert!(matches!(erro.codigo, CodigoErro::NaoEncontrado));
+        let erro = s.pedido_documento(0, caso_id).err().unwrap();
+        assert!(matches!(erro.codigo, CodigoErro::Validacao));
+
+        let novo_caso_id = s.criar_caso(caso(), None).unwrap().caso.id;
+        assert_ne!(novo_caso_id, caso_id);
+        let erro = s.pedido_documento(arquivo_id, caso_id).err().unwrap();
+        assert!(matches!(erro.codigo, CodigoErro::Conflito));
+        let erro = s.pedido_documento(arquivo_id, novo_caso_id).err().unwrap();
+        assert!(matches!(erro.codigo, CodigoErro::NaoEncontrado));
+        s.fechar_caso().unwrap();
+        let erro = s.pedido_documento(arquivo_id, caso_id).err().unwrap();
+        assert!(matches!(erro.codigo, CodigoErro::NenhumCasoAberto));
+    }
+
+    #[test]
+    fn documento_divergente_nao_publica_texto_sem_adulterar_a_fixture() {
+        let raiz = tempfile::tempdir().unwrap();
+        let (mut s, caso_id, _, arquivo_id, origem) = com_documento_sintetico(raiz.path());
+        let bytes = std::fs::read(origem.join("SINTETICO.txt")).unwrap();
+        let mut pedido = s.pedido_documento(arquivo_id, caso_id).unwrap();
+        // Somente o pedido em memória é divergente; banco e origem continuam intactos.
+        pedido.pedido.sha256 = Some("0".repeat(64));
+        let resultado = pedido.executar();
+        assert_eq!(
+            resultado.estado,
+            sied_documentos::EstadoDocumento::OrigemDivergente
+        );
+        assert!(resultado.texto.is_none());
+        assert_eq!(std::fs::read(origem.join("SINTETICO.txt")).unwrap(), bytes);
+        assert_eq!(
+            s.pedido_documento(arquivo_id, caso_id)
+                .unwrap()
+                .executar()
+                .estado,
+            sied_documentos::EstadoDocumento::Pronto
+        );
+    }
+
+    #[test]
+    fn fonte_documental_recusa_outro_endereco_e_diretorio() {
+        let raiz = tempfile::tempdir().unwrap();
+        std::fs::create_dir(raiz.path().join("diretorio.txt")).unwrap();
+        let caminho = CaminhoFonte::novo("diretorio.txt").unwrap();
+        let fonte = FonteDocumento {
+            pasta: raiz.path().to_path_buf(),
+            caminho: caminho.clone(),
+        };
+        assert!(fonte.abrir(&caminho).is_err());
+        assert!(fonte
+            .abrir(&CaminhoFonte::novo("outro.txt").unwrap())
+            .is_err());
+    }
+
+    #[test]
+    fn fluxo_documental_indexa_pesquisa_reabre_sem_modificar_origem_ou_inventario() {
+        let raiz = tempfile::tempdir().unwrap();
+        let (mut s, caso_id, extracao_id, arquivo_id, origem) = com_documento_sintetico_texto(
+            raiz.path(),
+            "SINTÉTICO 🧪 pessoa@example.test 192.0.2.3 +5511987654321 pessoa@example.test",
+        );
+        let caminho = origem.join("SINTETICO.txt");
+        let bytes = std::fs::read(&caminho).unwrap();
+        let mtime = std::fs::metadata(&caminho).unwrap().modified().unwrap();
+        let inventario =
+            serde_json::to_value(s.listar_arquivos(extracao_id, None, None, 0, 10).unwrap())
+                .unwrap();
+        let controle = ControleDocumento::novo();
+        let leitura = s
+            .pedido_documento(arquivo_id, caso_id)
+            .unwrap()
+            .executar_controlado(None, &controle);
+        let novo = crate::documentos::preparar_derivado(leitura, &controle).unwrap();
+        let guardado = s.guardar_documento(novo.clone(), &controle).unwrap();
+        let repetido = s.guardar_documento(novo, &controle).unwrap();
+        assert_eq!(guardado.id, repetido.id);
+        assert_eq!(guardado.texto.as_bytes(), bytes);
+        assert_eq!(
+            s.buscar_documentos(caso_id, "sintetico", 0, 20)
+                .unwrap()
+                .total,
+            1
+        );
+        let candidatos = s.entidades_documento(caso_id, guardado.id).unwrap();
+        assert_eq!(candidatos.len(), 4);
+        assert_eq!(candidatos[0].literal, "pessoa@example.test");
+        let confirmada = s
+            .revisar_entidade(
+                caso_id,
+                candidatos[0].id,
+                sied_armazenamento::documentos::EstadoRevisaoEntidade::Confirmado,
+                Some("Ocorrência SINTÉTICA conferida; sem atribuição de identidade".into()),
+            )
+            .unwrap();
+        assert_eq!(confirmada.literal, candidatos[0].literal);
+        assert_eq!(
+            s.revisoes_entidade(caso_id, candidatos[0].id, 0, 20)
+                .unwrap()
+                .total,
+            1
+        );
+        assert_eq!(
+            serde_json::to_value(s.listar_arquivos(extracao_id, None, None, 0, 10).unwrap())
+                .unwrap(),
+            inventario
+        );
+        assert_eq!(std::fs::read(&caminho).unwrap(), bytes);
+        assert_eq!(
+            std::fs::metadata(&caminho).unwrap().modified().unwrap(),
+            mtime
+        );
+        s.verificar_auditoria().unwrap();
+        s.fechar_caso().unwrap();
+        s.abrir_caso(caso_id).unwrap();
+        assert_eq!(
+            s.obter_documento(caso_id, guardado.id)
+                .unwrap()
+                .sha256_texto,
+            guardado.sha256_texto
+        );
+    }
+
+    #[test]
+    fn indexacao_cancelada_ou_caso_trocado_nao_grava_snapshot() {
+        let raiz = tempfile::tempdir().unwrap();
+        let (mut s, caso_id, _, arquivo_id, _) = com_documento_sintetico(raiz.path());
+        let controle = ControleDocumento::novo();
+        let leitura = s
+            .pedido_documento(arquivo_id, caso_id)
+            .unwrap()
+            .executar_controlado(None, &controle);
+        let novo = crate::documentos::preparar_derivado(leitura, &controle).unwrap();
+        controle.cancelar();
+        assert!(s.guardar_documento(novo.clone(), &controle).is_err());
+        assert_eq!(s.buscar_documentos(caso_id, "", 0, 20).unwrap().total, 0);
+        let outro = s.criar_caso(caso(), None).unwrap().caso.id;
+        assert!(s
+            .guardar_documento(novo, &ControleDocumento::novo())
+            .is_err());
+        assert!(s.buscar_documentos(caso_id, "", 0, 20).is_err());
+        assert_eq!(s.buscar_documentos(outro, "", 0, 20).unwrap().total, 0);
+        s.verificar_auditoria().unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn fonte_documental_recusa_links_intermediarios_e_no_arquivo_final() {
+        use std::os::unix::fs::symlink;
+
+        let raiz = tempfile::tempdir().unwrap();
+        let origem = raiz.path().join("origem");
+        let externa = raiz.path().join("externa");
+        std::fs::create_dir(&origem).unwrap();
+        std::fs::create_dir(&externa).unwrap();
+        std::fs::write(externa.join("SINTETICO.txt"), "conteúdo SINTÉTICO externo").unwrap();
+        symlink(&externa, origem.join("subpasta")).unwrap();
+        symlink(externa.join("SINTETICO.txt"), origem.join("final.txt")).unwrap();
+        for relativo in ["subpasta/SINTETICO.txt", "final.txt"] {
+            let caminho = CaminhoFonte::novo(relativo).unwrap();
+            let fonte = FonteDocumento {
+                pasta: origem.clone(),
+                caminho: caminho.clone(),
+            };
+            assert!(fonte.abrir(&caminho).is_err(), "{relativo}");
+        }
     }
 
     #[test]

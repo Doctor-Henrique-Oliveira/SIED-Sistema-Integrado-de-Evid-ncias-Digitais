@@ -268,10 +268,22 @@ fn copia_de_seguranca_existente_nao_bloqueia_a_migracao() {
         .unwrap()
         .fechar()
         .unwrap();
-    // Volta o caso para a versão 4 (sem as tabelas da migração 5).
+    // Volta o caso para a versão 4, desmontando somente as tabelas das
+    // migrações posteriores neste banco sintético recém-criado.
     let c = Connection::open(pasta.join(NOME_ARQUIVO_CASO)).unwrap();
     c.execute_batch(
-        "DROP INDEX idx_artefato_conversa_ordem;
+        "DROP TABLE visual_derivado; DELETE FROM schema_migracao WHERE versao=10;
+         DROP TABLE amostra_supervisionada; DROP TABLE dataset_supervisionado;
+         DELETE FROM schema_migracao WHERE versao=9;
+         DROP TABLE revisao_entidade_documental;
+         DROP TABLE entidade_documental;
+         DROP TABLE documento_derivado;
+         DROP TABLE busca_documento;
+         DROP TABLE busca_entidade_documental;
+         DELETE FROM schema_migracao WHERE versao = 8;
+         DROP TABLE consulta_descoberta; DROP TABLE vocabulario_pesquisa;
+         DELETE FROM schema_migracao WHERE versao = 7;
+         DROP INDEX idx_artefato_conversa_ordem;
          CREATE INDEX idx_artefato_conversa ON artefato(app, conversa_id_externo, data_hora_ms);
          DELETE FROM schema_migracao WHERE versao = 6;
          DROP TABLE evidencia; DROP TABLE relatorio; DELETE FROM schema_migracao WHERE versao = 5;

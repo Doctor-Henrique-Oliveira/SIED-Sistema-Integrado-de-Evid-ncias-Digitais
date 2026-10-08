@@ -4,6 +4,7 @@ members = [
     "crates/sied-dominio",
     "crates/sied-armazenamento",
     "crates/sied-ingestao",
+    "crates/sied-documentos",
     "crates/sied-midia",
     "crates/sied-relatorio",
     "app/src-tauri",
@@ -19,7 +20,8 @@ publish = false
 chrono = { version = "0.4", features = ["serde"] }
 hex = "0.4"
 # functions: sied_normal (minúsculas e sem acento, em Rust) nas consultas de filtro.
-rusqlite = { version = "0.32", features = ["bundled", "functions"] }
+# hooks: interrupção cooperativa restrita à descoberta local MDFML.
+rusqlite = { version = "0.32", features = ["bundled", "functions", "hooks"] }
 serde = { version = "1", features = ["derive"] }
 # float_roundtrip: números reais relidos do banco do caso voltam idênticos, bit a bit,
 # para que o hash_registro possa ser recalculado (ver NovoArtefato::hash_registro).
@@ -37,6 +39,7 @@ flate2 = "1"
 sied-dominio = { path = "crates/sied-dominio" }
 sied-armazenamento = { path = "crates/sied-armazenamento" }
 sied-ingestao = { path = "crates/sied-ingestao" }
+sied-documentos = { path = "crates/sied-documentos" }
 sied-midia = { path = "crates/sied-midia" }
 sied-relatorio = { path = "crates/sied-relatorio" }
 

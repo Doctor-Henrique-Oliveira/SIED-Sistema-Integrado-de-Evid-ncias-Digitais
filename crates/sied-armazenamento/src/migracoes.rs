@@ -78,6 +78,26 @@ pub const BANCO_CASO: TipoBanco = TipoBanco {
             nome: "ordem_conversa",
             sql: include_str!("../migracoes/caso/0006_ordem_conversa.sql"),
         },
+        Migracao {
+            versao: 7,
+            nome: "pesquisa_local",
+            sql: include_str!("../migracoes/caso/0007_pesquisa_local.sql"),
+        },
+        Migracao {
+            versao: 8,
+            nome: "documentos_derivados",
+            sql: include_str!("../migracoes/caso/0008_documentos_derivados.sql"),
+        },
+        Migracao {
+            versao: 9,
+            nome: "supervisao_local",
+            sql: include_str!("../migracoes/caso/0009_supervisao_local.sql"),
+        },
+        Migracao {
+            versao: 10,
+            nome: "similaridade_visual",
+            sql: include_str!("../migracoes/caso/0010_similaridade_visual.sql"),
+        },
     ],
 };
 
