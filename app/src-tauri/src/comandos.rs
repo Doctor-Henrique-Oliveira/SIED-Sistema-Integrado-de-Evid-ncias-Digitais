@@ -111,6 +111,14 @@ pub async fn listar_casos(app_handle: AppHandle) -> ResultadoApp<Vec<CasoCatalog
 }
 
 #[tauri::command]
+pub async fn remover_caso_catalogo(app_handle: AppHandle, caso_id: CasoId) -> ResultadoApp<bool> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.remover_caso_catalogo(caso_id))
+    })
+    .await
+}
+
+#[tauri::command]
 pub async fn criar_caso(
     app_handle: AppHandle,
     dados: NovoCaso,

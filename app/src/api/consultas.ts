@@ -50,6 +50,14 @@ export function useCasos() {
   return useQuery({ queryKey: chaves.casos, queryFn: api.listarCasos });
 }
 
+export function useRemoverCasoCatalogo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.removerCasoCatalogo,
+    onSuccess: () => void qc.invalidateQueries({ queryKey: chaves.casos }),
+  });
+}
+
 export function useCasoAtual() {
   return useQuery({ queryKey: chaves.casoAtual, queryFn: api.casoAtual });
 }

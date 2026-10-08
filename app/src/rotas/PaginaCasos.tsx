@@ -1,7 +1,9 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useAbrirPastaCaso, useCasos, useInfoApp } from "../api/consultas";
+import type { CasoId } from "../api/cliente";
+import { useAbrirPastaCaso, useCasos, useInfoApp, useRemoverCasoCatalogo } from "../api/consultas";
+import { Botao } from "../componentes/Botao";
 import { Aviso, Carregando, Selo } from "../componentes/Estrutura";
 import { Icone } from "../componentes/Icone";
 import { dataHora, identificacaoCaso } from "../util/formatar";
@@ -10,8 +12,10 @@ export function PaginaCasos() {
   const casos = useCasos();
   const info = useInfoApp();
   const abrirPasta = useAbrirPastaCaso();
+  const removerCaso = useRemoverCasoCatalogo();
   const navegar = useNavigate();
   const [filtro, setFiltro] = useState("");
+  const [confirmacao, setConfirmacao] = useState<CasoId | null>(null);
 
   async function escolherPasta() {
     const pasta = await open({ directory: true, title: "Selecione a pasta que contém caso.sied.db" });
@@ -42,6 +46,7 @@ export function PaginaCasos() {
       </section>
 
       {abrirPasta.isError && <Aviso>{abrirPasta.error.message}</Aviso>}
+      {removerCaso.isError && <Aviso>{removerCaso.error.message}</Aviso>}
 
       <section className="welcome-sied__acoes" aria-label="Ações iniciais">
         <button type="button" className="welcome-sied__acao" onClick={() => navegar("/casos/novo")}>
@@ -66,13 +71,46 @@ export function PaginaCasos() {
         ) : (
           <ul className="welcome-sied__lista" aria-label="Lista de casos">
             {lista.slice(0, 6).map((c) => (
-              <li key={c.caso_id}>
-                <Link to={c.disponivel ? `/casos/${c.caso_id}` : "#"} aria-disabled={!c.disponivel} className={c.disponivel ? "" : "pointer-events-none opacity-55"}>
-                  <Icone nome="casos" className="size-4 shrink-0 text-texto-3" />
-                  <span className="min-w-0 flex-1"><strong>{identificacaoCaso(c)}</strong><small>{[c.unidade, c.responsavel_analise].filter(Boolean).join(" · ") || "Sem metadados adicionais"}</small></span>
-                  {c.disponivel ? <time>{dataHora(c.ultimo_acesso_em)}</time> : <Selo tom="atencao">Indisponível</Selo>}
-                  <Icone nome="direita" className="size-4 text-texto-4" />
-                </Link>
+              <li key={c.caso_id} className="catalogo-caso">
+                <div className="catalogo-caso__linha flex items-center">
+                  <Link to={c.disponivel ? `/casos/${c.caso_id}` : "#"} aria-disabled={!c.disponivel} className={`min-w-0 flex-1 ${c.disponivel ? "" : "pointer-events-none opacity-55"}`}>
+                    <Icone nome="casos" className="size-4 shrink-0 text-texto-3" />
+                    <span className="min-w-0 flex-1"><strong>{identificacaoCaso(c)}</strong><small>{[c.unidade, c.responsavel_analise].filter(Boolean).join(" · ") || "Sem metadados adicionais"}</small></span>
+                    {c.disponivel ? <time>{dataHora(c.ultimo_acesso_em)}</time> : <Selo tom="atencao">Indisponível</Selo>}
+                    <Icone nome="direita" className="size-4 text-texto-4" />
+                  </Link>
+                  <button
+                    type="button"
+                    className="catalogo-caso__remover"
+                    aria-label={`Remover ${identificacaoCaso(c)} do catálogo local`}
+                    aria-expanded={confirmacao === c.caso_id}
+                    title="Remover do catálogo local"
+                    disabled={removerCaso.isPending}
+                    onClick={() => setConfirmacao((atual) => atual === c.caso_id ? null : c.caso_id)}
+                  >
+                    <Icone nome="fechar" className="size-4" />
+                  </button>
+                </div>
+                {confirmacao === c.caso_id && (
+                  <div className="catalogo-caso__confirmacao" role="alertdialog" aria-label="Confirmar remoção do catálogo">
+                    <Icone nome="alerta" className="mt-0.5 size-4 shrink-0 text-erro" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-texto">Remover este caso do catálogo local?</p>
+                      <p className="mt-0.5 text-xs text-texto-2">A pasta, o banco e todas as evidências permanecerão intactos. O caso poderá ser catalogado novamente por “Abrir caso existente”.</p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <Botao tamanho="p" variante="fantasma" onClick={() => setConfirmacao(null)}>Cancelar</Botao>
+                      <Botao
+                        tamanho="p"
+                        variante="perigo"
+                        carregando={removerCaso.isPending}
+                        onClick={() => removerCaso.mutate(c.caso_id, { onSuccess: () => setConfirmacao(null) })}
+                      >
+                        Remover do catálogo
+                      </Botao>
+                    </div>
+                  </div>
+                )}
               </li>
             ))}
           </ul>

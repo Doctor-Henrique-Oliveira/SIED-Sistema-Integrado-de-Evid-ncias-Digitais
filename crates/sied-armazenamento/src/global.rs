@@ -99,6 +99,16 @@ impl CatalogoGlobal {
             .map(PathBuf::from))
     }
 
+    /// Remove somente a referência desta estação. A pasta do caso e todo o seu
+    /// conteúdo permanecem intocados e podem ser catalogados novamente ao abrir.
+    pub fn remover_caso(&self, caso_id: CasoId) -> Resultado<bool> {
+        let removidos = self.conn.execute(
+            "DELETE FROM caso_catalogo WHERE caso_id = ?1",
+            [caso_id.to_string()],
+        )?;
+        Ok(removidos > 0)
+    }
+
     /// Casos mais recentemente acessados primeiro.
     pub fn listar_casos(&self) -> Resultado<Vec<CasoCatalogado>> {
         let mut stmt = self.conn.prepare(

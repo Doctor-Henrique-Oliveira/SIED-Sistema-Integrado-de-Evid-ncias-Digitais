@@ -298,6 +298,12 @@ impl Servico {
         Ok(self.catalogo.listar_casos()?)
     }
 
+    /// Retira o caso apenas do catálogo global. Não abre, altera ou remove a
+    /// pasta do caso nem qualquer dado forense nela contido.
+    pub fn remover_caso_catalogo(&self, caso_id: CasoId) -> ResultadoApp<bool> {
+        Ok(self.catalogo.remover_caso(caso_id)?)
+    }
+
     fn fechar_atual(&mut self) -> ResultadoApp<()> {
         // Uma importação em curso é cancelada (e registrada como tal) antes de fechar.
         if let Some(mut t) = self.importacao.take() {

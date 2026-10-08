@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
-import type { CasoAberto, InfoApp } from "../api/cliente";
+import type { CasoAberto, CasoCatalogado, InfoApp } from "../api/cliente";
 import { PaginaCasos } from "../rotas/PaginaCasos";
 import { ErroExperiencia, ForensicBootConsole, SplashScreen } from "./Experiencia";
 
@@ -77,6 +77,40 @@ describe("experiência premium de entrada", () => {
     expect(await screen.findByRole("button", { name: /Novo caso/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Abrir caso existente/ })).toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: "Navegação principal" })).not.toBeInTheDocument();
+  });
+
+  it("remove apenas a referência do catálogo após confirmação explícita", async () => {
+    const caso = {
+      caso_id: "11111111-1111-4111-8111-111111111111",
+      pasta: "C:/Casos/IP-001-2026",
+      numero_procedimento: "IP-001/2026",
+      numero_bo: null,
+      unidade: "Unidade Sintética",
+      responsavel_analise: "Analista Sintético",
+      criado_em: "2026-01-01T10:00:00Z",
+      ultimo_acesso_em: "2026-01-02T10:00:00Z",
+      disponivel: true,
+    } as CasoCatalogado;
+    let removido = false;
+    vi.mocked(invoke).mockImplementation(async (comando: string) => {
+      if (comando === "info_app") return info;
+      if (comando === "listar_casos") return removido ? [] : [caso];
+      if (comando === "remover_caso_catalogo") { removido = true; return true; }
+      return null;
+    });
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter><PaginaCasos /></MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: /Remover IP-001\/2026 do catálogo local/ }));
+    expect(screen.getByRole("alertdialog", { name: "Confirmar remoção do catálogo" })).toHaveTextContent(
+      "A pasta, o banco e todas as evidências permanecerão intactos",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Remover do catálogo" }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("remover_caso_catalogo", { casoId: caso.caso_id }));
+    await waitFor(() => expect(screen.queryByText("IP-001/2026")).not.toBeInTheDocument());
   });
 
   it("console usa a verificação real e preserva a ordem dos marcos", async () => {

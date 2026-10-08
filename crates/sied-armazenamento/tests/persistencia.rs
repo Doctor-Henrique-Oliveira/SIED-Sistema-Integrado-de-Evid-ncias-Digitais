@@ -107,6 +107,28 @@ fn criar_fechar_reabrir_preserva_dados() {
 }
 
 #[test]
+fn remover_do_catalogo_nao_apaga_a_pasta_nem_os_dados_do_caso() {
+    let raiz = tempfile::tempdir().unwrap();
+    let dados_app = raiz.path().join("appdata");
+    let pasta_caso = raiz.path().join("Casos").join("CASO-SINTETICO");
+    let catalogo = CatalogoGlobal::abrir(&dados_app).unwrap();
+    let banco = BancoCaso::criar(&pasta_caso, novo_caso(), sessao()).unwrap();
+    let caso_id = banco.caso().id;
+    catalogo
+        .registrar_caso(banco.caso(), banco.pasta())
+        .unwrap();
+    banco.fechar().unwrap();
+    let marcador = pasta_caso.join("arquivo-sintetico-preservado.txt");
+    std::fs::write(&marcador, b"fixture sintetica").unwrap();
+
+    assert!(catalogo.remover_caso(caso_id).unwrap());
+    assert!(catalogo.listar_casos().unwrap().is_empty());
+    assert!(pasta_caso.join(NOME_ARQUIVO_CASO).is_file());
+    assert_eq!(std::fs::read(&marcador).unwrap(), b"fixture sintetica");
+    assert!(!catalogo.remover_caso(caso_id).unwrap());
+}
+
+#[test]
 fn pasta_do_caso_copiada_continua_valida() {
     let raiz = tempfile::tempdir().unwrap();
     let original = raiz.path().join("original");

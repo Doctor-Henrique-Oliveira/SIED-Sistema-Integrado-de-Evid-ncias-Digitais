@@ -228,6 +228,7 @@ async function chamar<T>(comando: string, args?: Record<string, unknown>): Promi
 export const api = {
   infoApp: () => chamar<InfoApp>("info_app"),
   listarCasos: () => chamar<CasoCatalogado[]>("listar_casos"),
+  removerCasoCatalogo: (casoId: CasoId) => chamar<boolean>("remover_caso_catalogo", { casoId }),
   criarCaso: (dados: NovoCaso, pastaBase: string | null) =>
     chamar<CasoAberto>("criar_caso", { dados, pastaBase }),
   abrirCaso: (casoId: CasoId) => chamar<CasoAberto>("abrir_caso", { casoId }),
