@@ -316,14 +316,85 @@ textarea:focus-visible {
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--color-sup) 45%, transparent), transparent 26%),
     var(--color-lateral);
-  box-shadow: 12px 0 34px rgb(0 0 0 / 0.12);
+  box-shadow: 12px 0 34px rgb(0 0 0 / 0.16);
+}
+
+.sied-sidebar__marca {
+  position: relative;
+  background: color-mix(in srgb, var(--color-lateral) 88%, var(--color-sup));
+}
+
+.sied-sidebar__marca::after {
+  content: "";
+  position: absolute;
+  inset: auto 1rem -1px;
+  height: 1px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--color-ouro) 48%, transparent), transparent 72%);
+}
+
+.sied-sidebar__caso {
+  background: linear-gradient(115deg, color-mix(in srgb, var(--color-sup-2) 52%, transparent), transparent 76%);
+}
+
+.sied-sidebar__pulso {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-ok) 10%, transparent);
+}
+
+.sied-sidebar__grupo + .sied-sidebar__grupo {
+  position: relative;
+}
+
+.sied-sidebar__item {
+  letter-spacing: -0.006em;
+}
+
+.sied-sidebar__item[aria-current="page"] {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--color-ouro) 9%, var(--color-sup-2)), var(--color-sup-2));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-borda-2) 70%, transparent);
+}
+
+.sied-sidebar__rodape {
+  background: color-mix(in srgb, var(--color-fundo) 28%, var(--color-lateral));
+}
+
+.sied-topbar {
+  position: relative;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--color-sup) 56%, transparent), transparent 46%),
+    var(--color-lateral);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.11);
+}
+
+.sied-topbar::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 -1px;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--color-ouro) 24%, transparent), var(--color-borda) 25%, var(--color-borda));
+}
+
+.sied-topbar__caso {
+  max-width: 19rem;
+}
+
+.sied-topbar__acao {
+  border: 1px solid transparent;
+}
+
+.sied-topbar__acao:hover {
+  border-color: var(--color-borda);
+}
+
+.sied-topbar__local {
+  background: color-mix(in srgb, var(--color-ok) 4%, transparent);
 }
 
 .dashboard-caso {
   background:
-    linear-gradient(105deg, color-mix(in srgb, var(--color-sup-2) 54%, transparent), transparent 48%),
+    linear-gradient(105deg, color-mix(in srgb, var(--color-sup-2) 62%, transparent), transparent 53%),
     var(--color-sup);
-  box-shadow: 0 16px 38px rgb(0 0 0 / 0.13);
+  box-shadow: 0 16px 38px rgb(0 0 0 / 0.15);
 }
 
 .dashboard-caso::after {
@@ -333,6 +404,25 @@ textarea:focus-visible {
   width: 34%;
   height: 1px;
   background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--color-ouro) 46%, transparent));
+}
+
+.dashboard-caso__estado {
+  padding: 0.2rem;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-fundo) 32%, transparent);
+}
+
+.dashboard-secao {
+  position: relative;
+}
+
+.dashboard-secao::after {
+  content: "";
+  position: absolute;
+  inset: auto auto -1px 0;
+  width: 7rem;
+  height: 1px;
+  background: linear-gradient(90deg, var(--color-ouro), transparent);
 }
 
 .dashboard-indicadores {
@@ -406,8 +496,96 @@ a.dashboard-metrica-principal:hover {
   box-shadow: 0 14px 34px rgb(0 0 0 / 0.12);
 }
 
+.preparacao-sied__marca {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-ouro) 4%, transparent);
+}
+
+.preparacao-sied__fluxo {
+  align-items: start;
+}
+
+.preparacao-sied__trilho {
+  position: sticky;
+  top: 1.5rem;
+  padding: 0.9rem 0 0;
+}
+
+.preparacao-sied__marco {
+  position: relative;
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  gap: 0.7rem;
+  min-height: 5.3rem;
+  color: var(--color-texto-3);
+}
+
+.preparacao-sied__marco:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: calc(1rem - 0.5px);
+  top: 2rem;
+  bottom: 0.15rem;
+  width: 1px;
+  background: var(--color-borda-2);
+}
+
+.preparacao-sied__numero {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border: 1px solid var(--color-borda-2);
+  border-radius: 999px;
+  background: var(--color-lateral);
+  font-family: var(--font-mono);
+  font-size: var(--text-3xs);
+  color: var(--color-texto-3);
+}
+
+.preparacao-sied__marco.is-ativo .preparacao-sied__numero {
+  border-color: color-mix(in srgb, var(--color-ouro) 62%, var(--color-borda-2));
+  color: var(--color-ouro-claro);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-ouro) 6%, transparent);
+}
+
+.preparacao-sied__marco.is-completo .preparacao-sied__numero {
+  border-color: color-mix(in srgb, var(--color-ok) 46%, var(--color-borda-2));
+  color: var(--color-ok-claro);
+}
+
+.preparacao-sied__marco.is-completo:not(:last-child)::after {
+  background: color-mix(in srgb, var(--color-ok) 42%, var(--color-borda-2));
+}
+
 .preparacao-sied__etapa {
   position: relative;
+  border-radius: var(--radius-xl);
+  transition: opacity 150ms;
+}
+
+.preparacao-sied__etapa.is-bloqueada {
+  opacity: 0.56;
+}
+
+.preparacao-sied__rotulo-etapa {
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
+.preparacao-sied__etapa.is-ativa > div:first-child::before {
+  content: "";
+  width: 0.28rem;
+  height: 0.28rem;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--color-ouro);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-ouro) 7%, transparent);
+}
+
+.preparacao-sied__rodape {
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--color-sup) 40%, transparent), transparent);
 }
 
 .conversas-workbench > * {
@@ -418,11 +596,11 @@ a.dashboard-metrica-principal:hover {
 .conversa-chat,
 .inspector-sied {
   border-radius: var(--radius-xl);
-  box-shadow: 0 12px 28px rgb(0 0 0 / 0.1);
+  box-shadow: 0 14px 32px rgb(0 0 0 / 0.14);
 }
 
 .conversas-lista {
-  background: color-mix(in srgb, var(--color-sup) 96%, var(--color-lateral));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-sup-2) 28%, var(--color-sup)), var(--color-sup) 8rem);
 }
 
 .conversa-item {
@@ -431,7 +609,7 @@ a.dashboard-metrica-principal:hover {
 
 .conversa-item--ativa {
   color: var(--color-texto);
-  background: linear-gradient(90deg, color-mix(in srgb, var(--color-ouro) 11%, var(--color-sup)), var(--color-sup-2));
+  background: linear-gradient(90deg, color-mix(in srgb, var(--color-ouro) 13%, var(--color-sup)), color-mix(in srgb, var(--color-sup-2) 94%, var(--color-sup)));
   box-shadow: inset 2px 0 0 var(--color-ouro);
 }
 
@@ -445,7 +623,8 @@ a.dashboard-metrica-principal:hover {
 
 .conversa-chat {
   overflow: hidden;
-  background: color-mix(in srgb, var(--color-fundo) 82%, var(--color-sup));
+  border-color: color-mix(in srgb, var(--color-borda-2) 74%, var(--color-borda));
+  background: color-mix(in srgb, var(--color-fundo) 84%, var(--color-sup));
 }
 
 .conversa-chat__cabecalho {
@@ -454,14 +633,14 @@ a.dashboard-metrica-principal:hover {
 
 .conversa-mensagens {
   background:
-    linear-gradient(color-mix(in srgb, var(--color-borda) 14%, transparent) 1px, transparent 1px),
-    linear-gradient(90deg, color-mix(in srgb, var(--color-borda) 12%, transparent) 1px, transparent 1px),
+    linear-gradient(color-mix(in srgb, var(--color-borda) 11%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--color-borda) 9%, transparent) 1px, transparent 1px),
     color-mix(in srgb, var(--color-fundo) 88%, var(--color-sup));
-  background-size: 36px 36px;
+  background-size: 40px 40px;
 }
 
 .conversa-bolha {
-  box-shadow: 0 5px 14px rgb(0 0 0 / 0.12);
+  box-shadow: 0 5px 15px rgb(0 0 0 / 0.15);
 }
 
 .conversa-bolha--enviada {
@@ -483,7 +662,8 @@ a.dashboard-metrica-principal:hover {
 }
 
 .inspector-sied {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--color-sup-2) 35%, var(--color-sup)), var(--color-sup) 9rem);
+  border-color: color-mix(in srgb, var(--color-borda-2) 68%, var(--color-borda));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-sup-2) 42%, var(--color-sup)), var(--color-sup) 10rem);
 }
 
 @media (max-width: 1180px) {
@@ -494,6 +674,7 @@ a.dashboard-metrica-principal:hover {
 @media (max-width: 820px) {
   .dashboard-indicadores__principais { grid-template-columns: 1fr; }
   .dashboard-indicadores__secundarios { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .preparacao-sied__trilho { position: static; }
 }
 
 @media (prefers-reduced-motion: reduce) {
