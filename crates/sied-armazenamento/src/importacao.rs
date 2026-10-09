@@ -94,6 +94,25 @@ impl Importacao {
         if !existe {
             return Err(ErroArmazenamento::NaoEncontrado("dispositivo".into()));
         }
+        // Uma execução que ficou aberta após queda/cancelamento do processo não pode
+        // ser duplicada silenciosamente. A retomada automática continua desativada;
+        // o operador deve recuperar a execução existente ou iniciar uma nova depois
+        // que ela tenha um estado final explícito.
+        let origem_texto = origem.display().to_string();
+        let em_andamento: bool = conn.query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM extracao
+                WHERE dispositivo_id = ?1 AND origem_caminho = ?2 AND importador = ?3
+                  AND status = 'em_andamento'
+            )",
+            params![dispositivo_id.to_string(), &origem_texto, importador.id],
+            |r| r.get(0),
+        )?;
+        if em_andamento {
+            return Err(ErroArmazenamento::Recusado(
+                "já existe uma importação desta origem em andamento; recupere ou finalize a execução existente antes de iniciar outra".into(),
+            ));
+        }
         let id = ExtracaoId::novo();
         let agora = Utc::now().to_rfc3339();
         let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -107,7 +126,7 @@ impl Importacao {
                 importador.id,
                 importador.nome,
                 importador.versao,
-                origem.display().to_string(),
+                origem_texto,
                 env!("CARGO_PKG_VERSION"),
                 sessao.usuario,
                 sessao.maquina,

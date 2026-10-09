@@ -324,6 +324,20 @@ fn importacao_interrompida_e_detectada_ao_reabrir() {
 }
 
 #[test]
+fn recusa_importacao_concorrente_da_mesma_origem() {
+    let raiz = tempfile::tempdir().unwrap();
+    let origem = raiz.path().join("ext");
+    extracao_sintetica(&origem);
+    let (banco, d) = caso(raiz.path());
+    let info = ImportadorGenerico.info();
+    let _aberta = banco.iniciar_importacao(d.id, &info, &origem).unwrap();
+    assert!(matches!(
+        banco.iniciar_importacao(d.id, &info, &origem),
+        Err(ErroArmazenamento::Recusado(mensagem)) if mensagem.contains("já existe uma importação")
+    ));
+}
+
+#[test]
 fn recusa_extracao_dentro_do_caso_e_vice_versa() {
     let raiz = tempfile::tempdir().unwrap();
     let (banco, d) = caso(raiz.path());

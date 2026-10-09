@@ -9,6 +9,8 @@
 - leitor validado de checkpoint (`ler_checkpoint`) que recusa schema/estado/contadores fora do contrato;
 - avaliação de compatibilidade da fonte (`avaliar_retomada`), que exige conferência humana e recusa fonte divergente;
 - estados `iniciada`, `inventariando`, `inventario_concluido`, `cancelada` e `interrompida`;
+- bloqueio persistente de uma segunda importação da mesma origem/dispositivo/importador
+  enquanto a primeira está `em_andamento`, evitando duplicação após reinício;
 - limites e progresso preservados no log da importação;
 - testes sintéticos para lote paralelo, cancelamento e volume de hash.
 

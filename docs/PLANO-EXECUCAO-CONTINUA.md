@@ -172,7 +172,10 @@ substituição via arquivo temporário, com fonte, estado, progresso, limites e 
 formato. O avaliador `avaliar_retomada` compara a fonte registrada com a fonte atual e
 sempre devolve conferência obrigatória; fonte divergente não pode ser reaproveitada.
 Estados interrompidos nunca são tratados como sucesso; a retomada automática da mesma
-transação ainda não é habilitada para evitar duplicação de registros.
+transação ainda não é habilitada para evitar duplicação de registros. O armazenamento
+também recusa uma segunda importação da mesma origem, dispositivo e importador enquanto
+a primeira permanece `em_andamento`, inclusive após reinício do aplicativo. Execuções
+canceladas, falhas ou interrompidas continuam exigindo uma nova decisão explícita.
 
 Fixtures sintéticas cobrem hashing paralelo, cancelamento e leitura de lote. O benchmark
 `cargo bench -p sied-ingestao --bench inventario` mede o núcleo de hash com bytes sintéticos
