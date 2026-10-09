@@ -154,5 +154,8 @@ describe("Localizações", () => {
     expect(await screen.findByText("-23.55052, -46.633308")).toBeInTheDocument();
     expect(pedidos.filter((p) => p.cmd === "linha_do_tempo").every((p) => p.filtro.com_coordenadas === true)).toBe(true);
     expect(screen.getByText("Mapa offline")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Abrir mapa" }));
+    expect(await screen.findByRole("img", { name: "Pontos de localização do caso" })).toBeInTheDocument();
+    expect(screen.getByText("1 ponto(s) nesta janela")).toBeInTheDocument();
   });
 });

@@ -448,11 +448,12 @@ export function useResumoChamadas(casoId: CasoId) {
 }
 
 /** Linha do tempo: registros com data de todas as extrações, em ordem cronológica. */
-export function useLinhaDoTempo(casoId: CasoId, filtro: FiltroLinhaTempo, deslocamento: number, limite: number) {
+export function useLinhaDoTempo(casoId: CasoId, filtro: FiltroLinhaTempo, deslocamento: number, limite: number, ativo = true) {
   return useQuery({
     queryKey: [...chaves.conversas(casoId), "linha-do-tempo", filtro, deslocamento, limite],
     queryFn: () => api.linhaDoTempo(filtro, deslocamento, limite),
     placeholderData: keepPreviousData,
+    enabled: ativo,
   });
 }
 

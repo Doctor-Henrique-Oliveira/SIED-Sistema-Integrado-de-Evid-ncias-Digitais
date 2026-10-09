@@ -336,8 +336,8 @@ novas telas nem modificar o trabalho visual/premium atual como parte deste regis
 ## 18. Faseamento proposto AI-0 → AI-7
 
 A AI-0 tem implementação inicial autorizada posteriormente, ainda sem validação completa;
-AI-1–AI-3 possuem fundações locais incorporadas e a AI-4 recebeu agora uma primeira
-implementação funcional de pesquisa multimodal, ainda sujeita aos portões de validação
+AI-1–AI-4 possuem fundações locais incorporadas e a AI-5 recebeu agora uma primeira
+implementação funcional de contexto temporal, mapa offline e grafo investigativo, ainda sujeita aos portões de validação
 descritos abaixo. As demais fases continuam planejadas, sem datas; cada entrega exige
 desenho técnico e validação proporcionais.
 A existência de FTS/linha do tempo hoje é base, não conclusão da fase.
@@ -349,7 +349,7 @@ A existência de FTS/linha do tempo hoje é base, não conclusão da fase.
 | AI-2 | Embeddings locais, pesquisa semântica e ranking híbrido. | Índices versionados/reconstruíveis, justificativa por sinal e desempenho comparado à pesquisa tradicional. |
 | AI-3 | Visão/classificação, objetos/regiões e near-duplicates. | Scores/limitações avaliados, acesso à imagem completa, similaridade distinta de identidade e fila de revisão. |
 | AI-4 | Pesquisa multimodal: imagem + texto + OCR + contexto. **Base local implementada na E05; validação ampliada pendente.** | Combinação de sinais preserva proveniência individual e usa apenas capacidades instaladas/validadas. |
-| AI-5 | Correlação, timeline assistida e grafo experimental. | Relação direta/sugerida visualmente distinta, fuso/origem preservados, sem inferir causalidade ou identidade. |
+| AI-5 | Correlação, timeline assistida e grafo experimental. **Base local implementada na E06; validação ampliada pendente.** | Relação direta/sugerida visualmente distinta, fuso/origem preservados, sem inferir causalidade ou identidade. |
 | AI-6 | Assistente local explicável e consultas naturais sobre o caso. | Respostas referenciadas, "não sei" quando necessário, dados não executam instruções e controle humano das ações. |
 | AI-7 | Feedback supervisionado, datasets internos autorizados e avaliação/melhoria de modelos. | Treinamento explícito/versionado, governança/retenção, avaliação independente e nenhum aprendizado global silencioso. |
 

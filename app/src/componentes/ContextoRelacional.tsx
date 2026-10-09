@@ -15,6 +15,14 @@ function destino(casoId: string, no: NoRelacao) {
   return `/casos/${casoId}/extracoes/${no.extracao_id}`;
 }
 
+function GrafoVisual({ nos, arestas, onSelect }: { nos: NoRelacao[]; arestas: ArestaRelacao[]; onSelect: (aresta: ArestaRelacao) => void }) {
+  const posicoes = new Map(nos.map((no, indice) => [no.chave, { x: 50 + 38 * Math.cos((indice / Math.max(nos.length, 1)) * Math.PI * 2), y: 50 + 38 * Math.sin((indice / Math.max(nos.length, 1)) * Math.PI * 2) }]));
+  return <div className="overflow-hidden rounded-md border border-borda bg-fundo p-2"><svg viewBox="0 0 100 100" role="img" aria-label="Grafo investigativo local" className="h-64 w-full">
+    {arestas.map((aresta, indice) => { const de = posicoes.get(aresta.de); const para = posicoes.get(aresta.para); if (!de || !para) return null; return <line key={`${aresta.de}:${aresta.para}:${indice}`} x1={de.x} y1={de.y} x2={para.x} y2={para.y} stroke={aresta.classe === "direta" ? "#6ea8fe" : "#d6a94f"} strokeWidth="1.4" strokeDasharray={aresta.classe === "sugerida" ? "3 2" : undefined} tabIndex={0} role="button" aria-label={`Selecionar relação ${aresta.classe}`} onClick={() => onSelect(aresta)} onKeyDown={(evento) => { if (evento.key === "Enter" || evento.key === " ") onSelect(aresta); }} />; })}
+    {nos.map((no) => { const p = posicoes.get(no.chave)!; return <g key={no.chave}><circle cx={p.x} cy={p.y} r="4" fill={no.artefato_id !== null ? "#d6a94f" : "#6ea8fe"} stroke="#0b1220" strokeWidth="1.2" /><text x={p.x} y={p.y + 7} textAnchor="middle" fill="currentColor" fontSize="3.1">{no.rotulo.slice(0, 24)}</text><title>{no.rotulo}</title></g>; })}
+  </svg><p className="px-1 text-2xs text-texto-3">Linhas azuis = relação direta registrada · linhas douradas tracejadas = sugestão temporal. Selecione uma linha para explicar a origem.</p></div>;
+}
+
 /** Grafo limitado de relações verificáveis e contexto temporal do registro selecionado. */
 export function ContextoRelacional({ caso, artefatoId }: { caso: Caso; artefatoId: number }) {
   const [janela, setJanela] = useState<(typeof JANELAS)[number]>(30);
@@ -73,6 +81,7 @@ export function ContextoRelacional({ caso, artefatoId }: { caso: Caso; artefatoI
       {resultado.avisos.length > 0 && <ul className="list-inside list-disc space-y-1 text-xs text-texto-2">{resultado.avisos.map((aviso, indice) => <li key={indice}>{aviso}</li>)}</ul>}
       <div className="border-t border-borda pt-3"><p className="sobrelinha">Grafo local · selecione a ligação para conferir sua origem</p>
         {origem && <p className="mt-2 text-sm text-texto">Origem: <Link className="text-ouro-claro hover:underline" to={destino(caso.id, origem)}>{origem.rotulo}</Link></p>}
+        {resultado.nos.length > 0 && <div className="mt-3"><GrafoVisual nos={resultado.nos} arestas={resultado.arestas} onSelect={setAresta} /></div>}
         {resultado.arestas.length === 0 ? <Vazio titulo="Nenhum vínculo nesta página">A ausência aqui não prova que não existam relações fora da janela ou dos limites.</Vazio> :
           <ul aria-label="Ligações do grafo" className="mt-2 grid gap-2 lg:grid-cols-2">{resultado.arestas.map((ligacao, indice) => {
             const de = nos.get(ligacao.de); const para = nos.get(ligacao.para);

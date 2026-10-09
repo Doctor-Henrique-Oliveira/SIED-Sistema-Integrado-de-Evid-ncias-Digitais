@@ -8,6 +8,7 @@ import type { Caso } from "../api/cliente";
 import { useInfoApp } from "../api/consultas";
 import { Abas, Cabecalho, Cartao, Carregando, Definicoes, Indisponivel, Selo } from "../componentes/Estrutura";
 import { LinhaDoTempo } from "../componentes/LinhaTempo";
+import { MapaOffline } from "../componentes/MapaOffline";
 import { identificacaoCaso } from "../util/formatar";
 import { ComCasoAberto } from "./PaginaCaso";
 
@@ -27,11 +28,8 @@ function Localizacoes({ caso }: { caso: Caso }) {
         subtitulo="Registros com coordenadas extraídos dos aparelhos, em ordem cronológica, com latitude e longitude como lidas."
       />
       <div className="space-y-4">
+        <MapaOffline caso={caso} />
         <LinhaDoTempo casoId={caso.id} fuso={caso.fuso_horario} fixo={SO_COORDENADAS} coordenadas rotulo="Localizações" />
-        <Indisponivel titulo="Mapa offline" icone="mapa" previsto={["Pontos no mapa sem serviço de mapas da internet", "Mesma origem técnica de cada registro"]}>
-          O SIED não usa internet e ainda não tem mapas locais. Por isso as coordenadas aparecem só em lista; cada ponto abre o registro
-          de origem (conversa, arquivo, tabela e registro).
-        </Indisponivel>
       </div>
     </>
   );

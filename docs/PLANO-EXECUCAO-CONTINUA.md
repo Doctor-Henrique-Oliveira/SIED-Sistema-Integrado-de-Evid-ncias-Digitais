@@ -4,7 +4,7 @@ Atualizado em 08/10/2026. Este documento transforma a visão, o README e o ROADM
 
 ## Ponteiro atual
 
-**Próxima etapa: E06 — Timeline inteligente, mapa offline e grafo investigativo.**
+**Próxima etapa: E07 — Assistente local explicável.**
 
 O código incorporado à `main` até `87b10e8` é a linha de base. AI-0–AI-7 possuem fundações e interfaces, porém vários motores continuam conservadores ou ausentes. As etapas abaixo aprofundam essas fundações sem duplicá-las.
 
@@ -88,9 +88,11 @@ Limites deliberados: a visão continua dependente de descritores/provider local 
 
 ### E06 — Timeline inteligente, mapa offline e grafo investigativo
 
-**Status: PENDENTE**
+**Status: IMPLEMENTADA LOCALMENTE (E06)**
 
-Evoluir a timeline e o grafo limitados já existentes. Adicionar mapa realmente offline, filtros temporais/geográficos, agrupamento, expansão progressiva e persistência incremental das relações. Distinguir relação direta de sugerida e nunca inferir causalidade.
+Evoluída a linha do tempo e o contexto relacional existentes sem duplicar os índices. A tela de Localizações agora oferece um mapa esquemático offline, com projeção local limitada a 200 pontos, pontos navegáveis para a origem e aviso explícito de que proximidade espacial não prova trajeto ou causalidade. O contexto relacional ganhou grafo SVG interativo, expansão sob demanda por registro, limite de 30 eventos/60 referências e seleção de arestas com explicação de mecanismo, origem e classe direta/sugerida.
+
+Limites deliberados: o mapa não usa tiles nem rede; o grafo continua experimental e carrega apenas a vizinhança solicitada, evitando materializar o caso inteiro.
 
 **Concluída quando:** eventos e relações abrem seus artefatos originais; mapas funcionam sem rede; grandes casos não carregam o grafo inteiro; toda aresta explica sua origem.
 
