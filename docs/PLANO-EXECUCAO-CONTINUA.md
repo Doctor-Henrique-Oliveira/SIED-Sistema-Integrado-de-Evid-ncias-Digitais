@@ -179,6 +179,9 @@ canceladas, falhas ou interrompidas continuam exigindo uma nova decisão explíc
 Na tela da extração, a ação “Marcar interrompida” fecha somente uma execução órfã,
 registra auditoria e não retoma, apaga ou reinterpreta registros. A mesma tela mostra
 o estado do checkpoint como diagnóstico, sem transformá-lo em autorização de retomada.
+Um checkpoint `concluida` é reconhecido como encerrado e não é candidato à recuperação
+manual; uma nova execução exige decisão explícita e passa pelas mesmas proteções contra
+duplicação.
 
 Fixtures sintéticas cobrem hashing paralelo, cancelamento e leitura de lote. O benchmark
 `cargo bench -p sied-ingestao --bench inventario` mede o núcleo de hash com bytes sintéticos

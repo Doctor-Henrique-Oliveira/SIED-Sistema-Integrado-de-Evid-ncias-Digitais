@@ -15,6 +15,8 @@
   com auditoria, sem iniciar retomada ou apagar dados;
 - leitura do estado do checkpoint na mesma tela para tornar a recuperação observável,
   mantendo o checkpoint somente como diagnóstico;
+- checkpoints `concluida` são reconhecidos explicitamente como encerrados e não são
+  candidatos à recuperação manual;
 - limites e progresso preservados no log da importação;
 - testes sintéticos para lote paralelo, cancelamento e volume de hash.
 
@@ -28,6 +30,10 @@ hashes antes de evitar qualquer gravação duplicada.
 O leitor público permite que uma camada de recuperação mostre o estado ao operador sem
 precisar interpretar JSON diretamente. Estados parciais permanecem diagnósticos; o banco
 do caso e sua auditoria continuam sendo a fonte de verdade.
+
+Um checkpoint com estado `concluida` representa uma execução já encerrada. Ele não pode ser
+reinterpretado como retomável; qualquer nova execução exige uma decisão explícita e passa
+pelas mesmas proteções contra duplicação.
 
 ## Validação
 

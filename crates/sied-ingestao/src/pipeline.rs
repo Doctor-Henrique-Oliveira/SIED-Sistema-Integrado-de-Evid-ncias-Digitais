@@ -98,7 +98,12 @@ pub struct CheckpointRetomada {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AvaliacaoRetomada {
     SemCheckpoint,
-    FonteDivergente { registrada: String, atual: String },
+    FonteDivergente {
+        registrada: String,
+        atual: String,
+    },
+    /// A fonte já terminou; este checkpoint não é candidato a retomada.
+    Concluida(CheckpointRetomada),
     ConferenciaObrigatoria(CheckpointRetomada),
 }
 
@@ -147,6 +152,9 @@ pub fn avaliar_retomada(caminho: &Path, fonte_atual: &str) -> Resultado<Avaliaca
             registrada: checkpoint.fonte,
             atual: fonte_atual.into(),
         });
+    }
+    if checkpoint.estado == "concluida" {
+        return Ok(AvaliacaoRetomada::Concluida(checkpoint));
     }
     Ok(AvaliacaoRetomada::ConferenciaObrigatoria(checkpoint))
 }
@@ -1662,7 +1670,7 @@ mod testes {
         let caminho = dir.path().join(NOME_CHECKPOINT);
         std::fs::write(
             &caminho,
-            r#"{"schema":1,"estado":"concluida","fonte":"fixture","atualizado_em":"agora","arquivos_inventariados":0,"bytes_lidos":0,"workers_hash":1,"limite_arquivos":1,"limite_bytes":1}"#,
+            r#"{"schema":1,"estado":"desconhecida","fonte":"fixture","atualizado_em":"agora","arquivos_inventariados":0,"bytes_lidos":0,"workers_hash":1,"limite_arquivos":1,"limite_bytes":1}"#,
         )
         .unwrap();
         assert!(matches!(
@@ -1701,6 +1709,23 @@ mod testes {
         assert!(matches!(
             avaliar_retomada(&caminho, "OUTRA FONTE").unwrap(),
             AvaliacaoRetomada::FonteDivergente { .. }
+        ));
+        gravar_checkpoint(
+            &ctx,
+            "FONTE ORIGINAL",
+            "concluida",
+            1,
+            10,
+            LimitesRecursos {
+                max_arquivos: 10,
+                max_bytes: 100,
+                workers_hash: 1,
+            },
+        )
+        .unwrap();
+        assert!(matches!(
+            avaliar_retomada(&caminho, "FONTE ORIGINAL").unwrap(),
+            AvaliacaoRetomada::Concluida(c) if c.estado == "concluida"
         ));
     }
 

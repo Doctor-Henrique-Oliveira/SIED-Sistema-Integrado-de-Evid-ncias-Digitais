@@ -35,7 +35,8 @@ Os limites da ingestão podem ser reduzidos no ambiente do processo:
 
 Cada importação grava `importacoes/<id>/checkpoint-retomada.json`. O arquivo é derivado,
 contém somente estado/contadores/fonte e não é evidência. `iniciada`, `inventariando`,
-`inventario_concluido`, `concluida`, `cancelada` e `interrompida` são estados distintos. Somente o
+`inventario_concluido`, `concluida`, `cancelada` e `interrompida` são estados distintos. Um
+checkpoint `concluida` não é candidato a retomada. Somente o
 estado final persistido no banco pode encerrar uma importação; um checkpoint parcial nunca
 deve ser editado para forçar sucesso.
 
