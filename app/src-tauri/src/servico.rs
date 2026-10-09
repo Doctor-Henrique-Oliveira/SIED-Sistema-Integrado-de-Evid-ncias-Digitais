@@ -12,6 +12,7 @@ use sied_armazenamento::controle_descoberta::ControleDescoberta;
 use sied_armazenamento::conversas::{AppConversas, Conversa, FiltroConversas, PosicaoMensagem};
 use sied_armazenamento::derivados::{ConferenciaDerivados, ReconstrucaoDerivados};
 use sied_armazenamento::descoberta::{PedidoDescoberta, ResultadoDescoberta};
+use sied_armazenamento::embeddings::{ResultadoBuscaHibrida, ResumoIndexacaoEmbeddings};
 use sied_armazenamento::evidencias::{Evidencia, Marcacoes, NovaEvidencia, TextosEvidencia};
 use sied_armazenamento::extracoes::{
     ArquivoExtracao, ArtefatoDetalhe, ArtefatoResumo, ExecucaoParser, Extracao, Pagina,
@@ -890,6 +891,38 @@ impl Servico {
         Ok(self
             .banco()?
             .buscar(filtro, deslocamento.max(0), limite.clamp(1, 200))?)
+    }
+
+    pub fn indexar_embeddings(
+        &mut self,
+        caso_id: CasoId,
+        controle: &Arc<ControleDescoberta>,
+    ) -> ResultadoApp<ResumoIndexacaoEmbeddings> {
+        controle.verificar()?;
+        self.pesquisa_sem_importacao()?;
+        Ok(self
+            .banco_documental(caso_id)?
+            .indexar_embeddings(controle)?)
+    }
+
+    pub fn buscar_hibrida(
+        &mut self,
+        caso_id: CasoId,
+        texto: String,
+        deslocamento: i64,
+        limite: i64,
+        peso_semantico: f64,
+        controle: &Arc<ControleDescoberta>,
+    ) -> ResultadoApp<ResultadoBuscaHibrida> {
+        controle.verificar()?;
+        self.pesquisa_sem_importacao()?;
+        Ok(self.banco_documental(caso_id)?.buscar_hibrida(
+            &texto,
+            deslocamento.max(0),
+            limite.clamp(1, 200),
+            peso_semantico.clamp(0.0, 1.0),
+            controle,
+        )?)
     }
 
     pub fn resumo_caso(&mut self) -> ResultadoApp<ResumoCaso> {

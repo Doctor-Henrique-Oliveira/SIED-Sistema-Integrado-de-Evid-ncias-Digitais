@@ -150,6 +150,8 @@ pub fn executar() {
             comandos::executar_descoberta,
             comandos::paginar_descoberta,
             comandos::cancelar_descoberta,
+            comandos::indexar_embeddings,
+            comandos::buscar_hibrida,
             comandos::listar_consultas_descoberta,
             comandos::resumo_caso,
             comandos::listar_identificadores,

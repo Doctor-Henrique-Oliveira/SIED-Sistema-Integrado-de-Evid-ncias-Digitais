@@ -62,9 +62,9 @@ Adicionar motor offline, extração segura de áudio, segmentos com timestamps, 
 
 ### E03 — Embeddings locais e busca híbrida real
 
-**Status: PENDENTE**
+**Status: EM ANDAMENTO (índice local e busca híbrida funcional; modelo neural local ainda pendente)**
 
-Adicionar modelo local versionado, índices reconstruíveis, processamento incremental e ranking híbrido entre FTS e similaridade semântica. Expor score por mecanismo e impedir que um sinal domine silenciosamente o ranking.
+Foi adicionado o índice reconstruível `embedding_derivado` e a aba de pesquisa híbrida local. O motor atual `hash-embedding-local/tfidf-hash-v1` é determinístico, offline e explicitamente lexical: combina FTS5 com similaridade vetorial, pagina, permite cancelamento cooperativo e mostra a contribuição de cada mecanismo. Ele ainda não substitui um modelo neural local autorizado; OCR e demais derivados entram quando já existem no banco.
 
 **Concluída quando:** mensagens, documentos, OCR e transcrições sintéticas semanticamente relacionadas são recuperadas; índices podem ser reconstruídos; ranking é explicável e comparado à busca tradicional.
 

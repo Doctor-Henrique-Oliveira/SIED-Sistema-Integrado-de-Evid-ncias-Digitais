@@ -20,6 +20,7 @@ use sied_armazenamento::documentos::{
     AchadoDocumento, DocumentoIndexado, EntidadeDocumento, EstadoRevisaoEntidade, RegiaoDocumento,
     RevisaoEntidade,
 };
+use sied_armazenamento::embeddings::{ResultadoBuscaHibrida, ResumoIndexacaoEmbeddings};
 use sied_armazenamento::evidencias::{Evidencia, Marcacoes, NovaEvidencia, TextosEvidencia};
 use sied_armazenamento::extracoes::{
     ArquivoExtracao, ArtefatoDetalhe, ArtefatoResumo, ExecucaoParser, Extracao, Pagina,
@@ -1036,6 +1037,53 @@ pub async fn cancelar_descoberta(app_handle: AppHandle, operacao_id: String) -> 
         .state::<Estado>()
         .descobertas
         .cancelar(&operacao_id)
+}
+
+#[tauri::command]
+pub async fn indexar_embeddings(
+    app_handle: AppHandle,
+    caso_id: CasoId,
+    operacao_id: String,
+) -> ResultadoApp<ResumoIndexacaoEmbeddings> {
+    let operacao = app_handle
+        .state::<Estado>()
+        .descobertas
+        .iniciar(operacao_id)?;
+    em_segundo_plano(app_handle, move |estado| {
+        operacao.controle.verificar()?;
+        estado.com(|s| s.indexar_embeddings(caso_id, &operacao.controle))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn buscar_hibrida(
+    app_handle: AppHandle,
+    caso_id: CasoId,
+    operacao_id: String,
+    texto: String,
+    deslocamento: i64,
+    limite: i64,
+    peso_semantico: f64,
+) -> ResultadoApp<ResultadoBuscaHibrida> {
+    let operacao = app_handle
+        .state::<Estado>()
+        .descobertas
+        .iniciar(operacao_id)?;
+    em_segundo_plano(app_handle, move |estado| {
+        operacao.controle.verificar()?;
+        estado.com(|s| {
+            s.buscar_hibrida(
+                caso_id,
+                texto,
+                deslocamento,
+                limite,
+                peso_semantico,
+                &operacao.controle,
+            )
+        })
+    })
+    .await
 }
 
 #[tauri::command]

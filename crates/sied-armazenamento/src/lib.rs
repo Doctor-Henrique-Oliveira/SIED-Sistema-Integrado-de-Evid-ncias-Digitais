@@ -19,6 +19,7 @@ pub mod conversas;
 pub mod derivados;
 pub mod descoberta;
 pub mod documentos;
+pub mod embeddings;
 pub mod erro;
 pub mod evidencias;
 pub mod extracoes;
