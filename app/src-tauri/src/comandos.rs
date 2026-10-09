@@ -17,7 +17,8 @@ use sied_armazenamento::conversas::{AppConversas, Conversa, FiltroConversas, Pos
 use sied_armazenamento::derivados::{ConferenciaDerivados, ReconstrucaoDerivados};
 use sied_armazenamento::descoberta::{PedidoDescoberta, ResultadoDescoberta};
 use sied_armazenamento::documentos::{
-    AchadoDocumento, DocumentoIndexado, EntidadeDocumento, EstadoRevisaoEntidade, RevisaoEntidade,
+    AchadoDocumento, DocumentoIndexado, EntidadeDocumento, EstadoRevisaoEntidade, RegiaoDocumento,
+    RevisaoEntidade,
 };
 use sied_armazenamento::evidencias::{Evidencia, Marcacoes, NovaEvidencia, TextosEvidencia};
 use sied_armazenamento::extracoes::{
@@ -664,6 +665,20 @@ pub async fn obter_documento(
 ) -> ResultadoApp<DocumentoIndexado> {
     em_segundo_plano(app_handle, move |estado| {
         estado.com(|s| s.obter_documento(caso_id, documento_id))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn regioes_documento(
+    app_handle: AppHandle,
+    caso_id: CasoId,
+    documento_id: i64,
+    deslocamento: i64,
+    limite: i64,
+) -> ResultadoApp<Pagina<RegiaoDocumento>> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.regioes_documento(caso_id, documento_id, deslocamento, limite))
     })
     .await
 }

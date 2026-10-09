@@ -37,7 +37,7 @@ use crate::derivados::{self, ConferenciaDerivados, ReconstrucaoDerivados};
 use crate::descoberta::{PedidoDescoberta, ResultadoDescoberta};
 use crate::documentos::{
     self, AchadoDocumento, DocumentoIndexado, EntidadeDocumento, EstadoRevisaoEntidade,
-    NovoDocumento, RevisaoEntidade,
+    NovoDocumento, RegiaoDocumento, RevisaoEntidade,
 };
 use crate::evidencias::{self, Evidencia, Marcacoes, NovaEvidencia, TextosEvidencia};
 use crate::extracoes::{
@@ -365,6 +365,15 @@ impl BancoCaso {
 
     pub fn obter_documento(&self, id: i64) -> Resultado<DocumentoIndexado> {
         documentos::obter(&self.conn, id)
+    }
+
+    pub fn regioes_documento(
+        &self,
+        id: i64,
+        deslocamento: i64,
+        limite: i64,
+    ) -> Resultado<Pagina<RegiaoDocumento>> {
+        documentos::regioes(&self.conn, id, deslocamento, limite)
     }
 
     pub fn entidades_documento(&self, id: i64) -> Resultado<Vec<EntidadeDocumento>> {

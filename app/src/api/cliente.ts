@@ -299,6 +299,9 @@ export const api = {
     chamar<Pagina<AchadoDocumento>>("buscar_documentos", { casoId, termo, deslocamento, limite }),
   obterDocumento: (casoId: CasoId, documentoId: number) =>
     chamar<DocumentoIndexado>("obter_documento", { casoId, documentoId }),
+  /** Resposta validada na tela até os contratos ts-rs poderem ser regenerados pelo Rust. */
+  regioesDocumento: (casoId: CasoId, documentoId: number, deslocamento: number, limite: number) =>
+    chamar<unknown>("regioes_documento", { casoId, documentoId, deslocamento, limite }),
   entidadesDocumento: (casoId: CasoId, documentoId: number) =>
     chamar<EntidadeDocumento[]>("entidades_documento", { casoId, documentoId }),
   /** Confirmação é da ocorrência literal, não da identidade ou veracidade do conteúdo. */

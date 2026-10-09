@@ -101,7 +101,8 @@ pub struct DocumentoIndexado {
     pub total_paginas: Option<u32>,
     pub largura_px: Option<u32>,
     pub altura_px: Option<u32>,
-    pub regioes: Vec<RegiaoDocumento>,
+    #[ts(type = "number")]
+    pub total_regioes: i64,
     pub motor_id: String,
     pub motor_versao: String,
     pub executado_em: String,
@@ -180,7 +181,8 @@ pub struct RevisaoEntidade {
 const COLUNAS: &str = "d.id, d.caso_id, d.extracao_id, d.arquivo_id, d.caminho,
     d.sha256_origem, d.sha256_texto, d.texto, d.pagina, d.total_paginas,
     d.motor_id, d.motor_versao, d.executado_em, d.entidades_limitadas,
-    d.entidades_motor_versao, d.largura_px, d.altura_px";
+    d.entidades_motor_versao, d.largura_px, d.altura_px,
+    (SELECT COUNT(*) FROM regiao_documental r WHERE r.documento_id = d.id)";
 
 fn recusar(motivo: &str) -> ErroArmazenamento {
     ErroArmazenamento::Recusado(motivo.into())
@@ -333,30 +335,44 @@ fn ler_documento(r: &Row<'_>) -> rusqlite::Result<DocumentoIndexado> {
         entidades_motor_versao: r.get(14)?,
         largura_px: r.get(15)?,
         altura_px: r.get(16)?,
-        regioes: Vec::new(),
+        total_regioes: r.get(17)?,
     })
 }
 
-fn regioes(conn: &Connection, documento_id: i64) -> Resultado<Vec<RegiaoDocumento>> {
+fn ler_regiao(r: &Row<'_>) -> rusqlite::Result<RegiaoDocumento> {
+    Ok(RegiaoDocumento {
+        id: r.get(0)?,
+        documento_id: r.get(1)?,
+        ordem: r.get(2)?,
+        inicio_utf8: r.get(3)?,
+        fim_utf8: r.get(4)?,
+        texto: r.get(5)?,
+        x: r.get(6)?,
+        y: r.get(7)?,
+        largura: r.get(8)?,
+        altura: r.get(9)?,
+        confianca: r.get(10)?,
+    })
+}
+
+fn regioes_originais(conn: &Connection, documento_id: i64) -> Resultado<Vec<NovaRegiaoDocumento>> {
     let mut stmt = conn.prepare(
-        "SELECT id, documento_id, ordem, inicio_utf8, fim_utf8, texto,
+        "SELECT ordem, inicio_utf8, fim_utf8, texto,
                 x, y, largura, altura, confianca
          FROM regiao_documental WHERE documento_id = ?1 ORDER BY ordem LIMIT 50001",
     )?;
     let itens = stmt
         .query_map([documento_id], |r| {
-            Ok(RegiaoDocumento {
-                id: r.get(0)?,
-                documento_id: r.get(1)?,
-                ordem: r.get(2)?,
-                inicio_utf8: r.get(3)?,
-                fim_utf8: r.get(4)?,
-                texto: r.get(5)?,
-                x: r.get(6)?,
-                y: r.get(7)?,
-                largura: r.get(8)?,
-                altura: r.get(9)?,
-                confianca: r.get(10)?,
+            Ok(NovaRegiaoDocumento {
+                ordem: r.get(0)?,
+                inicio_utf8: r.get(1)?,
+                fim_utf8: r.get(2)?,
+                texto: r.get(3)?,
+                x: r.get(4)?,
+                y: r.get(5)?,
+                largura: r.get(6)?,
+                altura: r.get(7)?,
+                confianca: r.get(8)?,
             })
         })?
         .collect::<std::result::Result<Vec<_>, _>>()?;
@@ -372,7 +388,7 @@ pub fn obter(conn: &Connection, id: i64) -> Resultado<DocumentoIndexado> {
     if id <= 0 {
         return Err(recusar("identificador documental inválido"));
     }
-    let mut documento = conn
+    let documento = conn
         .query_row(
             &format!("SELECT {COLUNAS} FROM documento_derivado d WHERE d.id = ?1"),
             [id],
@@ -396,7 +412,6 @@ pub fn obter(conn: &Connection, id: i64) -> Resultado<DocumentoIndexado> {
         &documento.caminho,
         &documento.sha256_origem,
     )?;
-    documento.regioes = regioes(conn, documento.id)?;
     Ok(documento)
 }
 
@@ -477,22 +492,7 @@ pub fn guardar(
             || guardado.total_paginas != novo.total_paginas
             || guardado.largura_px != novo.largura_px
             || guardado.altura_px != novo.altura_px
-            || guardado
-                .regioes
-                .iter()
-                .map(|r| NovaRegiaoDocumento {
-                    ordem: r.ordem,
-                    inicio_utf8: r.inicio_utf8,
-                    fim_utf8: r.fim_utf8,
-                    texto: r.texto.clone(),
-                    x: r.x,
-                    y: r.y,
-                    largura: r.largura,
-                    altura: r.altura,
-                    confianca: r.confianca,
-                })
-                .collect::<Vec<_>>()
-                != novo.regioes
+            || regioes_originais(tx, id)?.as_slice() != novo.regioes.as_slice()
             || guardado.entidades_limitadas != novo.entidades_limitadas
             || candidatos_originais(tx, id)? != esperados
         {
@@ -582,6 +582,37 @@ fn paginacao(deslocamento: i64, limite: i64) -> Resultado<(i64, i64)> {
         ));
     }
     Ok((deslocamento, limite))
+}
+
+/// Regiões OCR são carregadas sob demanda. Abrir o documento valida primeiro o
+/// hash do derivado e sua origem registrada; nenhuma página transporta mais de
+/// 100 caixas, mesmo quando o snapshot atingiu o limite técnico de 50.000.
+pub fn regioes(
+    conn: &Connection,
+    documento_id: i64,
+    deslocamento: i64,
+    limite: i64,
+) -> Resultado<Pagina<RegiaoDocumento>> {
+    let (deslocamento, limite) = paginacao(deslocamento, limite)?;
+    let documento = obter(conn, documento_id)?;
+    if documento.total_regioes > 50_000 {
+        return Err(ErroArmazenamento::Inconsistente(
+            "snapshot OCR excede o limite de regiões".into(),
+        ));
+    }
+    let mut stmt = conn.prepare(
+        "SELECT id, documento_id, ordem, inicio_utf8, fim_utf8, texto,
+                x, y, largura, altura, confianca
+         FROM regiao_documental WHERE documento_id = ?1
+         ORDER BY ordem LIMIT ?2 OFFSET ?3",
+    )?;
+    let itens = stmt
+        .query_map(params![documento_id, limite, deslocamento], ler_regiao)?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    Ok(Pagina {
+        total: documento.total_regioes,
+        itens,
+    })
 }
 
 /// Pesquisa somente os derivados já analisados. Não processa arquivos nem faz

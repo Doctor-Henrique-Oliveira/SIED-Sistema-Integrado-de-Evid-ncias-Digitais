@@ -124,6 +124,7 @@ pub fn executar() {
             comandos::indexar_visual,
             comandos::semelhantes_visuais,
             comandos::obter_documento,
+            comandos::regioes_documento,
             comandos::obter_arquivo,
             comandos::entidades_documento,
             comandos::criar_dataset,

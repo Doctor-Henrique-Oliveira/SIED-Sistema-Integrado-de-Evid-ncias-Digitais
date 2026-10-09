@@ -17,29 +17,41 @@ const ROTULOS: Record<EstadoRevisaoEntidade, string> = {
 const TIPOS: Record<string, string> = { email: "E-mail", telefone: "Telefone", url: "URL", dominio: "Domínio", ip: "IP" };
 
 type RegiaoOcr = { id: number; documento_id: number; ordem: number; inicio_utf8: number; fim_utf8: number; texto: string; x: number; y: number; largura: number; altura: number; confianca: number | null };
-type DocumentoComOcr = DocumentoIndexado & { largura_px?: number | null; altura_px?: number | null; regioes?: RegiaoOcr[] };
+type PaginaRegioes = { total: number; itens: RegiaoOcr[] };
+type DocumentoComOcr = DocumentoIndexado & { largura_px?: number | null; altura_px?: number | null; total_regioes?: number };
 
 function metadadosOcr(documento: DocumentoIndexado) {
   const candidato = documento as DocumentoComOcr;
   const largura = Number.isSafeInteger(candidato.largura_px) && candidato.largura_px! > 0 ? candidato.largura_px! : null;
   const altura = Number.isSafeInteger(candidato.altura_px) && candidato.altura_px! > 0 ? candidato.altura_px! : null;
+  const total = Number.isSafeInteger(candidato.total_regioes) && candidato.total_regioes! >= 0 && candidato.total_regioes! <= 50_000 ? candidato.total_regioes! : 0;
+  return { largura, altura, total };
+}
+
+function paginaRegioesCompativel(valor: unknown, documento: DocumentoIndexado, largura: number, altura: number, total: number): PaginaRegioes | null {
+  if (typeof valor !== "object" || valor === null) return null;
+  const candidata = valor as { total?: unknown; itens?: unknown };
+  if (candidata.total !== total || !Array.isArray(candidata.itens) || candidata.itens.length > 100) return null;
   const bytes = new TextEncoder().encode(documento.texto);
   const ids = new Set<number>();
-  const regioes = largura !== null && altura !== null && Array.isArray(candidato.regioes) ? candidato.regioes.filter((r) => {
+  const regioes: RegiaoOcr[] = [];
+  for (const desconhecida of candidata.itens) {
+    if (typeof desconhecida !== "object" || desconhecida === null) return null;
+    const r = desconhecida as RegiaoOcr;
     if (!Number.isSafeInteger(r.id) || r.id <= 0 || ids.has(r.id) || r.documento_id !== documento.id ||
       !Number.isSafeInteger(r.ordem) || r.ordem < 0 || !Number.isSafeInteger(r.inicio_utf8) ||
       !Number.isSafeInteger(r.fim_utf8) || r.inicio_utf8 < 0 || r.fim_utf8 <= r.inicio_utf8 || r.fim_utf8 > bytes.length ||
       typeof r.texto !== "string" || ![r.x, r.y].every((n) => Number.isSafeInteger(n) && n >= 0) ||
       ![r.largura, r.altura].every((n) => Number.isSafeInteger(n) && n > 0) ||
       r.x + r.largura > largura || r.y + r.altura > altura ||
-      !(r.confianca === null || (Number.isInteger(r.confianca) && r.confianca >= 0 && r.confianca <= 100))) return false;
+      !(r.confianca === null || (Number.isInteger(r.confianca) && r.confianca >= 0 && r.confianca <= 100))) return null;
     try {
-      if (new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes.subarray(r.inicio_utf8, r.fim_utf8)) !== r.texto) return false;
-    } catch { return false; }
+      if (new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes.subarray(r.inicio_utf8, r.fim_utf8)) !== r.texto) return null;
+    } catch { return null; }
     ids.add(r.id);
-    return true;
-  }) : [];
-  return { regioes, largura, altura };
+    regioes.push(r);
+  }
+  return { total, itens: regioes };
 }
 
 function mensagem(erro: unknown) {
@@ -72,8 +84,11 @@ function SessaoAnalise({ caso, documento, exibirTexto }: { caso: Caso; documento
   const [deslocamentoCandidatos, setDeslocamentoCandidatos] = useState(0);
   const [deslocamentoRegioes, setDeslocamentoRegioes] = useState(0);
   const [regiaoSelecionada, setRegiaoSelecionada] = useState<number | null>(null);
+  const [paginaRegioes, setPaginaRegioes] = useState<PaginaRegioes | null>(null);
+  const [carregandoRegioes, setCarregandoRegioes] = useState(false);
+  const [erroRegioes, setErroRegioes] = useState<string | null>(null);
   const ocr = metadadosOcr(documento);
-  const regioesVisiveis = ocr.regioes.slice(deslocamentoRegioes, deslocamentoRegioes + 100);
+  const regioesVisiveis = paginaRegioes?.itens ?? [];
   const ativa = useRef(true);
   useEffect(() => {
     ativa.current = true;
@@ -91,6 +106,26 @@ function SessaoAnalise({ caso, documento, exibirTexto }: { caso: Caso; documento
     });
     return () => { atual = false; ativa.current = false; };
   }, [caso.id, documento]);
+  useEffect(() => {
+    let atual = true;
+    setPaginaRegioes(null); setErroRegioes(null); setRegiaoSelecionada(null);
+    if (ocr.total === 0 || ocr.largura === null || ocr.altura === null) { setCarregandoRegioes(false); return; }
+    setCarregandoRegioes(true);
+    void api.regioesDocumento(caso.id, documento.id, deslocamentoRegioes, 100).then((retorno) => {
+      if (!atual || !ativa.current) return;
+      const pagina = paginaRegioesCompativel(retorno, documento, ocr.largura!, ocr.altura!, ocr.total);
+      if (pagina === null) {
+        setErroRegioes("As regiões recebidas não correspondem ao documento ou à paginação solicitada.");
+        return;
+      }
+      setPaginaRegioes(pagina);
+    }).catch((falha) => {
+      if (atual && ativa.current) setErroRegioes(mensagem(falha));
+    }).finally(() => {
+      if (atual && ativa.current) setCarregandoRegioes(false);
+    });
+    return () => { atual = false; };
+  }, [caso.id, documento, deslocamentoRegioes, ocr.altura, ocr.largura, ocr.total]);
 
   return (
     <section aria-label="Análise documental armazenada" className="mt-4 space-y-3 border-t border-borda pt-4">
@@ -112,7 +147,7 @@ function SessaoAnalise({ caso, documento, exibirTexto }: { caso: Caso; documento
           <div><dt className="sobrelinha">Motor documental</dt><dd className="mt-1 font-mono">{documento.motor_id} v{documento.motor_versao}</dd></div>
           <div><dt className="sobrelinha">Indexação realizada em</dt><dd className="mt-1">{dataHora(documento.executado_em, caso.fuso_horario)}</dd></div>
           <div><dt className="sobrelinha">Página</dt><dd className="mt-1">{documento.pagina === null ? "Não se aplica ao texto nativo" : `${documento.pagina} de ${documento.total_paginas}`}</dd></div>
-          {ocr.largura !== null && ocr.altura !== null && <div><dt className="sobrelinha">Imagem processada</dt><dd className="mt-1 font-mono">{ocr.largura} × {ocr.altura} px · {ocr.regioes.length.toLocaleString("pt-BR")} região(ões)</dd></div>}
+          {ocr.largura !== null && ocr.altura !== null && <div><dt className="sobrelinha">Imagem processada</dt><dd className="mt-1 font-mono">{ocr.largura} × {ocr.altura} px · {ocr.total.toLocaleString("pt-BR")} região(ões)</dd></div>}
           <div><dt className="sobrelinha">Motor de candidatos</dt><dd className="mt-1 font-mono">{documento.entidades_motor_versao}</dd></div>
         </dl>
       </details>
@@ -121,15 +156,17 @@ function SessaoAnalise({ caso, documento, exibirTexto }: { caso: Caso; documento
           <pre role="region" aria-label="Texto documental armazenado" tabIndex={0} className="max-h-[28rem] overflow-auto p-3 font-mono text-sm leading-relaxed text-texto">{documento.texto}</pre>
         )}
       </div>}
-      {ocr.regioes.length > 0 && <section aria-label="Regiões OCR" className="border-t border-borda pt-3">
+      {ocr.total > 0 && <section aria-label="Regiões OCR" className="border-t border-borda pt-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h4 className="text-sm font-semibold text-texto">Mapa de regiões OCR</h4>
             <p className="mt-1 text-xs text-texto-2">Coordenadas na página/imagem renderizada; cada palavra permanece vinculada ao texto e à origem acima.</p>
           </div>
-          <Selo tom="neutro">{ocr.regioes.length.toLocaleString("pt-BR")} REGIÕES</Selo>
+          <Selo tom="neutro">{ocr.total.toLocaleString("pt-BR")} REGIÕES</Selo>
         </div>
-        {ocr.largura !== null && ocr.altura !== null && <div className="mt-3 rounded-md border border-borda bg-fundo p-3">
+        {carregandoRegioes && <Carregando texto="Carregando regiões OCR desta página…" />}
+        {erroRegioes && <div className="mt-3"><Aviso>{erroRegioes}</Aviso></div>}
+        {paginaRegioes && ocr.largura !== null && ocr.altura !== null && <div className="mt-3 rounded-md border border-borda bg-fundo p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs font-medium text-texto">Mapa espacial da página</p>
             <p className="text-2xs text-texto-3">Geometria derivada · não substitui a imagem original</p>
@@ -159,22 +196,22 @@ function SessaoAnalise({ caso, documento, exibirTexto }: { caso: Caso; documento
             />)}
           </svg>
           {regiaoSelecionada !== null && (() => {
-            const selecionada = ocr.regioes.find((regiao) => regiao.id === regiaoSelecionada);
+            const selecionada = regioesVisiveis.find((regiao) => regiao.id === regiaoSelecionada);
             return selecionada ? <p role="status" className="mt-2 break-words text-xs text-texto-2">
               Região #{selecionada.ordem + 1} selecionada: <span className="font-medium text-texto">{selecionada.texto}</span>
               <span className="ml-2 font-mono text-texto-3">x {selecionada.x} · y {selecionada.y} · {selecionada.largura} × {selecionada.altura}px</span>
             </p> : null;
           })()}
         </div>}
-        <ol className="mt-3 grid gap-2 md:grid-cols-2" aria-label="Palavras e coordenadas OCR">
+        {paginaRegioes && <ol className="mt-3 grid gap-2 md:grid-cols-2" aria-label="Palavras e coordenadas OCR">
           {regioesVisiveis.map((regiao) => <li key={regiao.id} className={`rounded-sm border px-3 py-2 ${regiaoSelecionada === regiao.id ? "border-ouro/60 bg-ouro/5" : "border-borda bg-sup-2/40"}`}>
             <div className="flex items-start justify-between gap-2"><span className="break-words text-sm text-texto">{regiao.texto}</span><span className="font-mono text-2xs text-texto-3">#{regiao.ordem + 1}</span></div>
             <p className="mt-1 font-mono text-2xs text-texto-3">x {regiao.x} · y {regiao.y} · {regiao.largura} × {regiao.altura}px · bytes [{regiao.inicio_utf8}, {regiao.fim_utf8})</p>
             <p className="mt-1 text-2xs text-texto-3">Confiança: {regiao.confianca === null ? "não fornecida pelo motor" : `${regiao.confianca}%`}</p>
             <button type="button" className="mt-2 text-2xs font-medium text-info-claro hover:text-texto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ouro" onClick={() => setRegiaoSelecionada(regiao.id)}>Localizar no mapa</button>
           </li>)}
-        </ol>
-        <Paginacao total={ocr.regioes.length} deslocamento={deslocamentoRegioes} limite={100} mudar={(novo) => { setDeslocamentoRegioes(novo); setRegiaoSelecionada(null); }} />
+        </ol>}
+        <Paginacao total={ocr.total} deslocamento={deslocamentoRegioes} limite={100} mudar={(novo) => { setDeslocamentoRegioes(novo); setRegiaoSelecionada(null); }} />
       </section>}
       <div className="border-t border-borda pt-3">
         <h4 className="text-sm font-semibold text-texto">Candidatos literais para revisão</h4>

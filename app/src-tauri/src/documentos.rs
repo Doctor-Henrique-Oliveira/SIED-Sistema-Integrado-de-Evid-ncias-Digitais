@@ -3,7 +3,7 @@
 
 use sied_armazenamento::documentos::{
     AchadoDocumento, DocumentoIndexado, EntidadeDocumento, EstadoRevisaoEntidade,
-    NovaEntidadeDocumento, NovaRegiaoDocumento, NovoDocumento, RevisaoEntidade,
+    NovaEntidadeDocumento, NovaRegiaoDocumento, NovoDocumento, RegiaoDocumento, RevisaoEntidade,
 };
 use sied_armazenamento::extracoes::Pagina;
 use sied_documentos::{ControleDocumento, EstadoDocumento, ResultadoDocumento};
@@ -135,6 +135,20 @@ impl Servico {
         Ok(self
             .banco_documental(caso_id)?
             .obter_documento(documento_id)?)
+    }
+
+    pub fn regioes_documento(
+        &mut self,
+        caso_id: CasoId,
+        documento_id: i64,
+        deslocamento: i64,
+        limite: i64,
+    ) -> ResultadoApp<Pagina<RegiaoDocumento>> {
+        Ok(self.banco_documental(caso_id)?.regioes_documento(
+            documento_id,
+            deslocamento.max(0),
+            limite.clamp(1, 100),
+        )?)
     }
 
     pub fn entidades_documento(

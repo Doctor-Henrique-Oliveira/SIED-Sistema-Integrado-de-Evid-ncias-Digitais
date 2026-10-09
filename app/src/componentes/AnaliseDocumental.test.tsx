@@ -159,22 +159,46 @@ describe("indexação explícita no leitor", () => {
 
 describe("derivados e candidatos separados da evidência", () => {
   it("exibe regiões OCR paginadas com coordenadas e ausência honesta de confiança", async () => {
-    vi.mocked(invoke).mockResolvedValue([]);
+    const regiao = { id: 91, documento_id: documento.id, ordem: 0, inicio_utf8: 0,
+      fim_utf8: new TextEncoder().encode("SINTÉTICO").length, texto: "SINTÉTICO", x: 100, y: 80, largura: 240, altura: 52, confianca: null };
+    vi.mocked(invoke).mockImplementation((comando) => Promise.resolve(comando === "regioes_documento"
+      ? { total: 1, itens: [regiao] }
+      : []));
     const ocr = {
       ...documento, pagina: 1, total_paginas: 1, motor_id: "windows_media_ocr",
-      motor_versao: "1.0.0+pt-BR", largura_px: 1200, altura_px: 800,
-      regioes: [{ id: 91, documento_id: documento.id, ordem: 0, inicio_utf8: 0,
-        fim_utf8: new TextEncoder().encode("SINTÉTICO").length, texto: "SINTÉTICO", x: 100, y: 80, largura: 240, altura: 52, confianca: null }],
+      motor_versao: "1.0.0+pt-BR", largura_px: 1200, altura_px: 800, total_regioes: 1,
     } as DocumentoIndexado;
     render(<PainelAnaliseDocumento caso={caso} documento={ocr} />);
     const regioes = screen.getByRole("region", { name: "Regiões OCR" });
-    expect(within(regioes).getByText("SINTÉTICO")).toBeInTheDocument();
+    expect(await within(regioes).findByText("SINTÉTICO")).toBeInTheDocument();
+    expect(invoke).toHaveBeenCalledWith("regioes_documento", { casoId: caso.id, documentoId: documento.id, deslocamento: 0, limite: 100 });
     expect(within(regioes).getByText(/x 100 · y 80 · 240 × 52px/)).toBeInTheDocument();
     expect(within(regioes).getByText(/Confiança: não fornecida pelo motor/)).toBeInTheDocument();
     expect(screen.getByText(/1200 × 800 px · 1 região/)).toBeInTheDocument();
     expect(within(regioes).getByRole("img", { name: "Mapa espacial das regiões OCR" })).toBeInTheDocument();
     await userEvent.click(within(regioes).getByRole("button", { name: "Localizar no mapa" }));
     expect(within(regioes).getByRole("status")).toHaveTextContent("Região #1 selecionada: SINTÉTICO");
+  });
+  it("busca somente a página visível de regiões OCR", async () => {
+    const fim = new TextEncoder().encode("SINTÉTICO").length;
+    const montarRegiao = (ordem: number) => ({ id: ordem + 1, documento_id: documento.id, ordem,
+      inicio_utf8: 0, fim_utf8: fim, texto: "SINTÉTICO", x: ordem, y: 80, largura: 1, altura: 52, confianca: null });
+    vi.mocked(invoke).mockImplementation((comando, argumentos) => {
+      if (comando === "entidades_documento") return Promise.resolve([]);
+      if (comando === "regioes_documento") {
+        const deslocamento = argumentos && "deslocamento" in argumentos ? argumentos.deslocamento : -1;
+        return Promise.resolve({ total: 101, itens: deslocamento === 0
+          ? Array.from({ length: 100 }, (_, ordem) => montarRegiao(ordem))
+          : [montarRegiao(100)] });
+      }
+      return Promise.reject(new Error(`Comando sintético inesperado: ${comando}`));
+    });
+    const ocr = { ...documento, largura_px: 1200, altura_px: 800, total_regioes: 101 } as DocumentoIndexado;
+    render(<PainelAnaliseDocumento caso={caso} documento={ocr} />);
+    expect(await screen.findByText("1–100 de 101")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Próxima" }));
+    expect(await screen.findByText("101–101 de 101")).toBeInTheDocument();
+    expect(invoke).toHaveBeenCalledWith("regioes_documento", { casoId: caso.id, documentoId: documento.id, deslocamento: 100, limite: 100 });
   });
   it("exibe texto inerte, proveniência persistida e nunca selo de conferência da origem atual", async () => {
     const conteudo = '<script>window.__siedCacheExecutou=true</script><img src="https://nao-acessar.invalid/">';
