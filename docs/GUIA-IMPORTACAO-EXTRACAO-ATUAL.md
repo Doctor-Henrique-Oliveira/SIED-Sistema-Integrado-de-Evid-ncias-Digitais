@@ -92,7 +92,7 @@ Durante a execução, o console permanece dentro da preparação central. Sideba
 
 | Importador | Situação atual | Conteúdo interpretado |
 |---|---|---|
-| Pasta genérica | Disponível com suporte parcial | Inventário completo e bancos Android/WhatsApp conhecidos encontrados na pasta |
+| Pasta genérica | Disponível com suporte parcial | Inventário completo; SMS/MMS, WhatsApp, contatos/chamadas Android, SMS iOS, históricos Chrome/Firefox/Safari, Telegram JSON e `.eml` quando o esquema/formato é reconhecido |
 | ADB (`.ab`) | Disponível | Backup Android não cifrado, incluindo itens internos; backup cifrado permanece apenas inventariado |
 | IPED | Disponível | Lista de itens CSV mantida pelo IPED e bancos conhecidos exportados fora da pasta interna `iped/` |
 | ALEAPP / iLEAPP | Disponível | Exportações `_TSV Exports`; demais produtos do relatório permanecem inventariados |
@@ -135,6 +135,7 @@ Somente nesse momento a sidebar aparece. A Auditoria fica disponível em sua pr�
 - Backups ADB cifrados não são descriptografados automaticamente.
 - Índice Lucene e bancos internos privados do IPED não são interpretados; usa-se o formato de troca suportado.
 - ALEAPP/iLEAPP dependem das exportações TSV para gerar registros interpretados.
+- RCS, bases de contatos do iOS, formatos proprietários de e-mail e extensões avançadas do WhatsApp ainda ficam no inventário até existir contrato/amostra suficiente.
 - Nem todo arquivo inventariado possui parser; permanecer no inventário é diferente de ter o conteúdo interpretado.
 - A velocidade depende do volume, disco, quantidade de hashes e bancos. O SIED mostra medidas reais, não um prazo fixo.
 

@@ -24,7 +24,8 @@ use crate::importador::{
     ArquivoParaParser, Deteccao, Importador, PlanoImportacao, Suporte, TarefaParser,
 };
 use crate::parsers::{
-    android_chamadas, android_contatos, android_mms, android_sms, whatsapp_android,
+    android_chamadas, android_contatos, android_mms, android_sms, browser_history, email_eml,
+    ios_sms, telegram_json, whatsapp_android,
 };
 use crate::{InfoComponente, Resultado};
 
@@ -92,6 +93,63 @@ impl Importador for ImportadorGenerico {
 
         for c in &arquivos {
             let n = nome(c);
+            let caminho_lower = c.como_str().to_ascii_lowercase();
+            if n == "sms.db" {
+                plano.observacoes.push(format!(
+                    "{c} → parser {} (banco message do iOS; esquema conferido pelo conteúdo)",
+                    ios_sms::ID
+                ));
+                plano.tarefas.push(TarefaParser {
+                    parser_id: ios_sms::ID.into(),
+                    arquivos: vec![ArquivoParaParser {
+                        papel: ios_sms::PAPEL.into(),
+                        caminho: c.clone(),
+                    }],
+                });
+                continue;
+            }
+            if n == "history" || n == "places.sqlite" || n == "history.db" {
+                plano.observacoes.push(format!(
+                    "{c} → parser {} (histórico SQLite; esquema Chrome/Firefox/Safari conferido)",
+                    browser_history::ID
+                ));
+                plano.tarefas.push(TarefaParser {
+                    parser_id: browser_history::ID.into(),
+                    arquivos: vec![ArquivoParaParser {
+                        papel: browser_history::PAPEL.into(),
+                        caminho: c.clone(),
+                    }],
+                });
+                continue;
+            }
+            if n == "result.json" && caminho_lower.contains("telegram") {
+                plano.observacoes.push(format!(
+                    "{c} → parser {} (exportação JSON oficial do Telegram)",
+                    telegram_json::ID
+                ));
+                plano.tarefas.push(TarefaParser {
+                    parser_id: telegram_json::ID.into(),
+                    arquivos: vec![ArquivoParaParser {
+                        papel: telegram_json::PAPEL.into(),
+                        caminho: c.clone(),
+                    }],
+                });
+                continue;
+            }
+            if n.ends_with(".eml") {
+                plano.observacoes.push(format!(
+                    "{c} → parser {} (mensagem RFC 5322; MIME complexo permanece nos brutos)",
+                    email_eml::ID
+                ));
+                plano.tarefas.push(TarefaParser {
+                    parser_id: email_eml::ID.into(),
+                    arquivos: vec![ArquivoParaParser {
+                        papel: email_eml::PAPEL.into(),
+                        caminho: c.clone(),
+                    }],
+                });
+                continue;
+            }
             if let Some((_, parser, papel)) = CONHECIDOS.iter().find(|(x, _, _)| *x == n) {
                 plano
                     .observacoes
@@ -281,5 +339,32 @@ mod testes {
             .observacoes
             .iter()
             .any(|o| o.contains("crypt14") && o.contains("não interpretado")));
+    }
+
+    #[test]
+    fn plano_reconhece_fontes_documentadas_adicionais() {
+        let d = tempfile::tempdir().unwrap();
+        for p in [
+            "Library/SMS/sms.db",
+            "Chrome/Default/History",
+            "Firefox/places.sqlite",
+            "Telegram/result.json",
+            "mail/arquivo.eml",
+        ] {
+            fs::create_dir_all(d.path().join(p).parent().unwrap()).unwrap();
+            fs::write(d.path().join(p), b"sintetico").unwrap();
+        }
+        let fonte = PastaSomenteLeitura::abrir(d.path()).unwrap();
+        let plano = ImportadorGenerico.planejar(&fonte).unwrap();
+        let ids: Vec<_> = plano.tarefas.iter().map(|t| t.parser_id.as_str()).collect();
+        assert!(ids.contains(&"ios_sms"));
+        assert_eq!(
+            ids.iter()
+                .filter(|id| **id == "historico_navegador")
+                .count(),
+            2
+        );
+        assert!(ids.contains(&"telegram_json"));
+        assert!(ids.contains(&"email_eml"));
     }
 }

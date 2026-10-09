@@ -342,9 +342,13 @@ Artefato: `normalizar()` (−0.0 → 0.0; `app` vazio → ausente) e depois `has
 |---|---|---|---|
 | `android_sms` | `mmssms` | 1.0.0 | tabela `sms` de `mmssms.db`, inclusive registros só no `-wal` |
 | `android_mms` | `mmssms` | 1.0.0 | tabelas `pdu`, `addr`, `part` do mesmo `mmssms.db`; §10.2 |
-| `whatsapp_android` | `msgstore`, `wa` | 1.0.0 | §11 |
+| `whatsapp_android` | `msgstore`, `wa` | 1.1.0 | §11; reações, enquetes e chamadas opcionais preservadas quando presentes |
 | `android_contatos` | `contacts2` | 1.0.0 | agenda (`raw_contacts`, `data`, `mimetypes`, `accounts`, `contacts`); §10.1 |
 | `android_chamadas` | `chamadas` | 1.0.0 | tabela `calls` de `calllog.db` (ou de `contacts2.db` antigo); §10.1 |
+| `ios_sms` | `ios_sms` | 1.0.0 | tabela `message` de `sms.db`, com esquema conferido pelo conteúdo |
+| `historico_navegador` | `historico_navegador` | 1.0.0 | visitas Chrome/Chromium/Edge, Firefox ou Safari/WebKit em SQLite |
+| `telegram_json` | `telegram_json` | 1.0.0 | exportação JSON oficial do Telegram Desktop |
+| `email_eml` | `email_eml` | 1.0.0 | cabeçalhos RFC 5322 e corpo textual de `.eml`; MIME complexo fica nos brutos |
 | `iped_lista_arquivos` | `lista_iped` | 1.0.0 | lista de itens do IPED em CSV; §9.2 |
 | `aleapp_tsv`, `ileapp_tsv`, `xleapp_tsv` | `tsv_leapp` | 1.0.0 | exportações TSV do ALEAPP/iLEAPP; §9.4 |
 
@@ -568,9 +572,10 @@ Testes de UI com virtualização: jsdom precisa de `offsetHeight`, `offsetWidth`
 Funcionais:
 - Avilla sem importador (§26). `.tar` e `.ab` sem cifra lidos por dentro (§9.3); `.zip`, `.ab`
   cifrado e contêiner dentro de contêiner só inventariados.
-- Interpretados: SMS e MMS, WhatsApp Android, agenda e chamadas do Android. Sem fotos de
-  contato, `deleted_contacts`, chamadas de apps nem junção de contatos repetidos. MMS: só a
-  primeira mídia vira anexo (as demais ficam listadas nas partes); RCS não é lido.
+- Interpretados: SMS e MMS, WhatsApp Android, agenda e chamadas do Android; início de SMS iOS,
+  histórico de navegador, exportação Telegram JSON e e-mail `.eml`. Sem fotos de contato,
+  `deleted_contacts`, chamadas de apps nem junção de contatos repetidos. MMS: só a primeira
+  mídia vira anexo (as demais ficam listadas nas partes); RCS não é lido.
 - WhatsApp, MMS, agenda e chamadas conferidos só com bancos sintéticos (§10.1, §10.2, §11).
 - IPED: só a lista de itens em CSV; conferida só com o caso sintético (§9.2).
 - ADB: conferido só com backup sintético; `f/`, `sp/` e `shared/` só inventariados (§9.3).

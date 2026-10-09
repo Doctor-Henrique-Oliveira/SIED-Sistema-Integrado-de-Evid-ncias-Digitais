@@ -98,6 +98,9 @@ fn conversas(conn: &Connection, app: &str, e: &mut Emissor) -> Resultado<()> {
 fn mensagens(conn: &Connection, app: &str, e: &mut Emissor) -> Resultado<()> {
     let midia = Auxiliar::carregar(conn, "message_media", "message_row_id")?;
     let citacoes = Auxiliar::carregar(conn, "messages_quotes", "_id")?;
+    let reacoes = Auxiliar::carregar(conn, "message_reaction", "message_row_id")?;
+    let enquetes = Auxiliar::carregar(conn, "message_poll_option", "message_row_id")?;
+    let chamadas = Auxiliar::carregar(conn, "message_call_log", "message_row_id")?;
     let cols = colunas(conn, "messages")?;
     let mut stmt = conn.prepare(CONSULTA)?;
     let mut rs = stmt.query([])?;
@@ -223,6 +226,20 @@ fn mensagens(conn: &Connection, app: &str, e: &mut Emissor) -> Resultado<()> {
         }
         if subtipo == Some("apagada") {
             m.insert("apagada_para_todos".into(), json!(true));
+        }
+        for (nome, aux) in [
+            ("reacoes", &reacoes),
+            ("enquetes", &enquetes),
+            ("chamadas", &chamadas),
+        ] {
+            let linhas = aux.todas(id);
+            if !linhas.is_empty() {
+                m.insert(nome.into(), json!(linhas));
+                for linha in linhas {
+                    a.origens_adicionais
+                        .push(aux.referencia(PAPEL_MSGSTORE, linha));
+                }
+            }
         }
         a.metadados = m;
         e.emitir(a)?;

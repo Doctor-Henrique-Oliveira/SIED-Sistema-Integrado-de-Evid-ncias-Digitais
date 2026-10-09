@@ -87,7 +87,7 @@ impl Parser for ParserWhatsAppAndroid {
         InfoComponente {
             id: ID.into(),
             nome: "WhatsApp (Android)".into(),
-            versao: "1.0.0".into(),
+            versao: "1.1.0".into(),
         }
     }
 

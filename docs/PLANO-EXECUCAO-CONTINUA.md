@@ -131,8 +131,10 @@ inseguros/duplicados, limita a 200.000 entradas e limita a materialização de c
 512 MiB em temporário derivado descartável. Itens internos recebem o mesmo endereço estável
 `arquivo.zip!/caminho`, entram no inventário/hash e podem ser entregues a parsers existentes;
 fixtures sintéticas cobrem leitura, preservação da origem e traversal. Os demais formatos com
-documentação e amostras autorizadas (iOS, RCS, Telegram, navegadores, e-mail e extensões do
-WhatsApp) continuam pendentes; não implementar parser por suposição.
+documentação e amostras autorizadas foram iniciados com parsers versionados para SMS do iOS,
+histórico Chrome/Firefox/Safari, exportação JSON oficial do Telegram e e-mail RFC 5322 (`.eml`).
+RCS, bases de contatos do iOS, formatos proprietários de e-mail e extensões avançadas do
+WhatsApp continuam pendentes; não implementar parser por suposição.
 
 **Concluída quando:** cada novo formato possui detecção, fixture sintética identificada, teste de origem/intacto, parser versionado, integração visual e limites explícitos.
 

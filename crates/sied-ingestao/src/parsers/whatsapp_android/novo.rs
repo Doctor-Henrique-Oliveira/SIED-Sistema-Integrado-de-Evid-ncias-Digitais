@@ -151,6 +151,9 @@ struct Auxiliares {
     encaminhada: Auxiliar,
     sistema: Auxiliar,
     revogada: Auxiliar,
+    reacao: Auxiliar,
+    enquete: Auxiliar,
+    chamada: Auxiliar,
 }
 
 fn mensagens(
@@ -168,6 +171,11 @@ fn mensagens(
         encaminhada: Auxiliar::carregar(conn, "message_forwarded", "message_row_id")?,
         sistema: Auxiliar::carregar(conn, "message_system", "message_row_id")?,
         revogada: Auxiliar::carregar(conn, "message_revoked", "message_row_id")?,
+        // Tabelas opcionais: versões que não as possuem continuam válidas. Quando
+        // presentes, o conteúdo é derivado e preserva a linha como origem adicional.
+        reacao: Auxiliar::carregar(conn, "message_reaction", "message_row_id")?,
+        enquete: Auxiliar::carregar(conn, "message_poll_option", "message_row_id")?,
+        chamada: Auxiliar::carregar(conn, "message_call_log", "message_row_id")?,
     };
     let cols = colunas(conn, "message")?;
     let mut stmt = conn.prepare(CONSULTA)?;
@@ -331,6 +339,20 @@ fn mensagens(
         if let Some(rv) = x.revogada.primeira(id) {
             a.origens_adicionais
                 .push(x.revogada.referencia(PAPEL_MSGSTORE, rv));
+        }
+        for (nome, aux) in [
+            ("reacoes", &x.reacao),
+            ("enquetes", &x.enquete),
+            ("chamadas", &x.chamada),
+        ] {
+            let linhas = aux.todas(id);
+            if !linhas.is_empty() {
+                m.insert(nome.into(), json!(linhas));
+                for linha in linhas {
+                    a.origens_adicionais
+                        .push(aux.referencia(PAPEL_MSGSTORE, linha));
+                }
+            }
         }
         a.metadados = m;
         e.emitir(a)?;

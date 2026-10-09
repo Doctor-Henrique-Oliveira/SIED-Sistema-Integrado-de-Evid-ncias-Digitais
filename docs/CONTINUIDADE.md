@@ -187,8 +187,16 @@ Branches não são apagadas.
   - mensagens de texto, mídia, localização, contato, sistema, resposta, encaminhada e apagada;
   - situação de envio, grupos e membros;
   - backups `.crypt*` só inventariados.
+  - tabelas opcionais `message_reaction`, `message_poll_option` e `message_call_log`, quando
+    presentes e vinculadas por `message_row_id`, passam para metadados e origens adicionais;
+    ausência ou esquema diferente gera apenas ausência do derivado, nunca dado inventado.
 - Anexos que o app cita são ligados ao arquivo do inventário (caminho exato ou sufixo único com
   tamanho conferido). O motivo de não ligar fica gravado.
+- Parsers adicionais iniciados na E10: SMS iOS (`sms.db`), histórico SQLite de Chrome/Chromium/Edge
+  e Firefox, Safari/WebKit, exportação JSON oficial do Telegram Desktop e mensagens RFC 5322 em
+  `.eml`. Todos exigem esquema/formato reconhecível e preservam os valores de origem; RCS, bancos
+  de contatos do iOS, formatos proprietários de e-mail e extensões avançadas do WhatsApp continuam
+  sem parser até haver contrato/amostra suficiente.
 
 **Extração**
 - Tela da extração com resumo, inventário, registros e visão técnica da origem de cada registro.
