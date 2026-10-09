@@ -19,6 +19,8 @@
   candidatos à recuperação manual;
 - a tela da extração diferencia checkpoint final, parcial e divergente do status persistido,
   sem oferecer retomada automática;
+- o diagnóstico exposto pelo backend compara a fonte do checkpoint com a origem registrada
+  da extração e sinaliza `fonte_divergente` quando não coincidem;
 - falha ao persistir o checkpoint final agora entra como aviso e observação da própria
   importação, permanecendo visível no caso e no log;
 - limites e progresso preservados no log da importação;
@@ -42,7 +44,7 @@ pelas mesmas proteções contra duplicação.
 ## Validação
 
 `cargo fmt --all` passou. A interface passou no gate local com `npm.cmd run typecheck`,
-30 arquivos/216 testes (`npm.cmd test -- --run`) e `npm.cmd run build`; o build mantém
+30 arquivos/217 testes (`npm.cmd test -- --run`) e `npm.cmd run build`; o build mantém
 apenas o aviso conhecido de chunk grande. `cargo metadata --no-deps` também passou. A
 compilação/testes Rust locais continuam bloqueados por `link.exe`/MSVC ausente no ambiente
 Windows atual; não foi instalado nenhum toolchain nem alterado código para contornar o bloqueio.

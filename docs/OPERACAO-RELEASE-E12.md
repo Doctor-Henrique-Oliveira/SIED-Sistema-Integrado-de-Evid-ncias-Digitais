@@ -47,8 +47,9 @@ mas o SIED registra um aviso e uma observação para exigir conferência operaci
 1. Preservar o caso e sua auditoria; não apagar `importacoes/` nem `cache/bancos/` para
    “limpar” uma execução.
 2. Abrir o checkpoint e o log da importação para identificar o último estado e a origem.
-3. Avaliar a compatibilidade da fonte com `avaliar_retomada`; fonte divergente deve ser
-   tratada como uma nova importação, nunca como continuação.
+3. Conferir o diagnóstico exibido pelo SIED. A fonte divergente é sinalizada pelo backend;
+   em validações de baixo nível, avaliar a compatibilidade com `avaliar_retomada`. Fonte
+   divergente deve ser tratada como uma nova importação, nunca como continuação.
 4. Conferir os hashes do manifesto e a integridade do banco antes de qualquer nova
    tentativa.
 5. Iniciar uma nova importação somente após decisão explícita do analista. A retomada

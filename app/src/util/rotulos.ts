@@ -26,6 +26,7 @@ export const nomeEstadoCheckpoint: Record<string, string> = {
   concluida: "Concluída",
   cancelada: "Cancelada",
   interrompida: "Interrompida",
+  fonte_divergente: "Fonte divergente",
 };
 
 export type DiagnosticoCheckpoint = {
@@ -49,6 +50,13 @@ export function diagnosticoCheckpoint(estado: string, statusExtracao: string): D
       tipo: "atencao",
       titulo: `Checkpoint final: ${rotulo}`,
       detalhe: `O checkpoint está concluído, mas o registro da extração está “${nomeStatusExtracao[statusExtracao] ?? statusExtracao}”. Confira a auditoria antes de uma nova execução.`,
+    };
+  }
+  if (estado === "fonte_divergente") {
+    return {
+      tipo: "atencao",
+      titulo: "Checkpoint com fonte divergente",
+      detalhe: "A origem registrada no checkpoint não coincide com a extração atual. Não reutilize este estado; faça uma nova conferência explícita.",
     };
   }
   return {

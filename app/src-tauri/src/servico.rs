@@ -733,17 +733,26 @@ impl Servico {
         Ok(self.banco()?.extracao(id)?)
     }
 
-    /// Lê apenas o estado do checkpoint derivado. O estado nunca autoriza
-    /// retomada automática e não altera o banco do caso.
+    /// Lê o diagnóstico do checkpoint derivado. Além do estado, confere a fonte
+    /// registrada na extração; divergência nunca autoriza retomada automática.
     pub fn estado_checkpoint(&mut self, id: ExtracaoId) -> ResultadoApp<Option<String>> {
         let banco = self.banco()?;
-        let _ = banco.extracao(id)?;
+        let extracao = banco.extracao(id)?;
         let caminho = banco
             .pasta()
             .join("importacoes")
             .join(id.to_string())
             .join(NOME_CHECKPOINT);
-        Ok(pipeline::ler_checkpoint(&caminho)?.map(|c| c.estado))
+        Ok(
+            match pipeline::avaliar_retomada(&caminho, &extracao.origem_caminho)? {
+                pipeline::AvaliacaoRetomada::SemCheckpoint => None,
+                pipeline::AvaliacaoRetomada::FonteDivergente { .. } => {
+                    Some("fonte_divergente".into())
+                }
+                pipeline::AvaliacaoRetomada::Concluida(c)
+                | pipeline::AvaliacaoRetomada::ConferenciaObrigatoria(c) => Some(c.estado),
+            },
+        )
     }
 
     /// Registra a recuperação manual de uma importação que ficou aberta após

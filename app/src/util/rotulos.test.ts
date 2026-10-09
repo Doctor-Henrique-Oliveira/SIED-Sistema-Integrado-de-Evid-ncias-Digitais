@@ -15,4 +15,11 @@ describe("diagnosticoCheckpoint", () => {
     expect(diagnostico.tipo).toBe("atencao");
     expect(diagnostico.detalhe).toContain("retomada automática permanece desativada");
   });
+
+  it("expõe divergência de fonte como atenção", () => {
+    const diagnostico = diagnosticoCheckpoint("fonte_divergente", "interrompida");
+    expect(diagnostico.tipo).toBe("atencao");
+    expect(diagnostico.titulo).toBe("Checkpoint com fonte divergente");
+    expect(diagnostico.detalhe).toContain("não coincide");
+  });
 });
