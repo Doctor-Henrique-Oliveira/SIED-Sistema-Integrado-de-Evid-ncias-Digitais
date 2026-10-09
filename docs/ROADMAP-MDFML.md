@@ -350,7 +350,7 @@ A existência de FTS/linha do tempo hoje é base, não conclusão da fase.
 | AI-3 | Visão/classificação, objetos/regiões e near-duplicates. | Scores/limitações avaliados, acesso à imagem completa, similaridade distinta de identidade e fila de revisão. |
 | AI-4 | Pesquisa multimodal: imagem + texto + OCR + contexto. **Base local implementada na E05; validação ampliada pendente.** | Combinação de sinais preserva proveniência individual e usa apenas capacidades instaladas/validadas. |
 | AI-5 | Correlação, timeline assistida e grafo experimental. **Base local implementada na E06; validação ampliada pendente.** | Relação direta/sugerida visualmente distinta, fuso/origem preservados, sem inferir causalidade ou identidade. |
-| AI-6 | Assistente local explicável e consultas naturais sobre o caso. | Respostas referenciadas, "não sei" quando necessário, dados não executam instruções e controle humano das ações. |
+| AI-6 | Assistente local explicável e consultas naturais sobre o caso. **Base local implementada na E07; validação ampliada pendente.** | Respostas referenciadas, "não sei" quando necessário, dados não executam instruções e controle humano das ações. |
 | AI-7 | Feedback supervisionado, datasets internos autorizados e avaliação/melhoria de modelos. | Treinamento explícito/versionado, governança/retenção, avaliação independente e nenhum aprendizado global silencioso. |
 
 Portão obrigatório de **cada fase**, antes de merge: escopo/autorização próprios; design

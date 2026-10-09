@@ -4,7 +4,7 @@ Atualizado em 08/10/2026. Este documento transforma a visão, o README e o ROADM
 
 ## Ponteiro atual
 
-**Próxima etapa: E07 — Assistente local explicável.**
+**Próxima etapa: E08 — Revisão humana, avaliação e governança de modelos.**
 
 O código incorporado à `main` até `87b10e8` é a linha de base. AI-0–AI-7 possuem fundações e interfaces, porém vários motores continuam conservadores ou ausentes. As etapas abaixo aprofundam essas fundações sem duplicá-las.
 
@@ -98,9 +98,11 @@ Limites deliberados: o mapa não usa tiles nem rede; o grafo continua experiment
 
 ### E07 — Assistente local explicável
 
-**Status: PENDENTE**
+**Status: IMPLEMENTADA LOCALMENTE (E07)**
 
-Substituir a limitação da gramática atual por consultas naturais locais sobre recuperação seletiva. Produzir respostas estruturadas, fontes clicáveis, filtros usados, scores e “Por que esta resposta?”. Implementar recusa por falta de suporte e isolamento contra instruções contidas na evidência.
+Adicionada a aba Assistente local à Busca. A consulta natural é interpretada por regras determinísticas locais, executa recuperação seletiva no motor multimodal, mostra os mecanismos escolhidos antes da resposta e apresenta suporte, origem navegável, score, motor/versão, hashes e “Por que esta resposta?”. O assistente informa explicitamente quando não há suporte suficiente, não executa ações, não acessa outros casos e trata o texto recuperado como dado inerte. Mensagens permitem abrir o contexto temporal/grafo já existente.
+
+Limites deliberados: esta primeira camada não é chatbot nem modelo generativo; perguntas complexas exigem termos literais ou a Pesquisa profunda para controlar os mecanismos com precisão.
 
 **Concluída quando:** perguntas sintéticas recebem respostas verificáveis com artefatos de suporte; o assistente diz que não encontrou suporte quando necessário; nenhuma resposta importante existe sem origem.
 
