@@ -14,6 +14,17 @@ Windows. Ele serve para reproduzir o estado de uma versão sem alterar evidênci
 5. Conferir que o commit e o artefato do instalador correspondem ao mesmo SHA; não
    instalar um artefato de outro commit apenas porque tem o mesmo nome.
 
+Para obter uma métrica reproduzível apenas do hash local, usar em um runner Rust/MSVC:
+
+```powershell
+cargo bench -p sied-ingestao --bench inventario
+$env:SIED_BENCH_BYTES = 268435456
+cargo bench -p sied-ingestao --bench inventario
+```
+
+O benchmark usa bytes sintéticos e não representa a velocidade de um parser ou de um
+disco de evidência. Compare somente execuções no mesmo ambiente.
+
 ## Limites e retomada
 
 Os limites da ingestão podem ser reduzidos no ambiente do processo:

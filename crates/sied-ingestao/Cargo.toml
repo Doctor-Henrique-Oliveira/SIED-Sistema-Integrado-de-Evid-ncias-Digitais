@@ -23,3 +23,7 @@ walkdir.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+
+[[bench]]
+name = "inventario"
+harness = false

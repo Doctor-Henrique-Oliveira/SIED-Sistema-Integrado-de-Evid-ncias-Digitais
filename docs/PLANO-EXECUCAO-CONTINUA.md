@@ -171,7 +171,9 @@ formato. Estados interrompidos nunca são tratados como sucesso; a retomada auto
 da mesma transação ainda não é habilitada para evitar duplicação de registros.
 
 Fixtures sintéticas cobrem hashing paralelo, cancelamento e leitura de lote. O benchmark
-reprodutível de volume deve ser executado em ambiente Rust/MSVC suportado. Consolidação
+`cargo bench -p sied-ingestao --bench inventario` mede o núcleo de hash com bytes sintéticos
+e permite comparar execuções pelo mesmo ambiente. Ele deve ser executado em ambiente Rust/MSVC
+suportado. Consolidação
 do instalador, atualização e recuperação operacional ainda dependem do pipeline de CI e
 da validação Windows correspondente.
 
