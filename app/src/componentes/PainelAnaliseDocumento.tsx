@@ -21,15 +21,24 @@ type DocumentoComOcr = DocumentoIndexado & { largura_px?: number | null; altura_
 
 function metadadosOcr(documento: DocumentoIndexado) {
   const candidato = documento as DocumentoComOcr;
-  const regioes = Array.isArray(candidato.regioes) ? candidato.regioes.filter((r) =>
-    Number.isSafeInteger(r.id) && r.id > 0 && r.documento_id === documento.id &&
-    Number.isSafeInteger(r.ordem) && r.ordem >= 0 && Number.isSafeInteger(r.inicio_utf8) &&
-    Number.isSafeInteger(r.fim_utf8) && r.inicio_utf8 >= 0 && r.fim_utf8 > r.inicio_utf8 &&
-    typeof r.texto === "string" && [r.x, r.y, r.largura, r.altura].every((n) => Number.isSafeInteger(n) && n >= 0) &&
-    (r.confianca === null || (Number.isInteger(r.confianca) && r.confianca >= 0 && r.confianca <= 100)),
-  ) : [];
   const largura = Number.isSafeInteger(candidato.largura_px) && candidato.largura_px! > 0 ? candidato.largura_px! : null;
   const altura = Number.isSafeInteger(candidato.altura_px) && candidato.altura_px! > 0 ? candidato.altura_px! : null;
+  const bytes = new TextEncoder().encode(documento.texto);
+  const ids = new Set<number>();
+  const regioes = largura !== null && altura !== null && Array.isArray(candidato.regioes) ? candidato.regioes.filter((r) => {
+    if (!Number.isSafeInteger(r.id) || r.id <= 0 || ids.has(r.id) || r.documento_id !== documento.id ||
+      !Number.isSafeInteger(r.ordem) || r.ordem < 0 || !Number.isSafeInteger(r.inicio_utf8) ||
+      !Number.isSafeInteger(r.fim_utf8) || r.inicio_utf8 < 0 || r.fim_utf8 <= r.inicio_utf8 || r.fim_utf8 > bytes.length ||
+      typeof r.texto !== "string" || ![r.x, r.y].every((n) => Number.isSafeInteger(n) && n >= 0) ||
+      ![r.largura, r.altura].every((n) => Number.isSafeInteger(n) && n > 0) ||
+      r.x + r.largura > largura || r.y + r.altura > altura ||
+      !(r.confianca === null || (Number.isInteger(r.confianca) && r.confianca >= 0 && r.confianca <= 100))) return false;
+    try {
+      if (new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes.subarray(r.inicio_utf8, r.fim_utf8)) !== r.texto) return false;
+    } catch { return false; }
+    ids.add(r.id);
+    return true;
+  }) : [];
   return { regioes, largura, altura };
 }
 
@@ -62,7 +71,9 @@ function SessaoAnalise({ caso, documento, exibirTexto }: { caso: Caso; documento
   const [erro, setErro] = useState<string | null>(null);
   const [deslocamentoCandidatos, setDeslocamentoCandidatos] = useState(0);
   const [deslocamentoRegioes, setDeslocamentoRegioes] = useState(0);
+  const [regiaoSelecionada, setRegiaoSelecionada] = useState<number | null>(null);
   const ocr = metadadosOcr(documento);
+  const regioesVisiveis = ocr.regioes.slice(deslocamentoRegioes, deslocamentoRegioes + 100);
   const ativa = useRef(true);
   useEffect(() => {
     ativa.current = true;
@@ -118,14 +129,52 @@ function SessaoAnalise({ caso, documento, exibirTexto }: { caso: Caso; documento
           </div>
           <Selo tom="neutro">{ocr.regioes.length.toLocaleString("pt-BR")} REGIÕES</Selo>
         </div>
+        {ocr.largura !== null && ocr.altura !== null && <div className="mt-3 rounded-md border border-borda bg-fundo p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-medium text-texto">Mapa espacial da página</p>
+            <p className="text-2xs text-texto-3">Geometria derivada · não substitui a imagem original</p>
+          </div>
+          <svg
+            role="img"
+            aria-label="Mapa espacial das regiões OCR"
+            viewBox={`0 0 ${ocr.largura} ${ocr.altura}`}
+            className="mt-3 max-h-80 w-full rounded-sm border border-borda bg-sup-2/40"
+            preserveAspectRatio="xMidYMid meet"
+          >
+            {regioesVisiveis.map((regiao) => <rect
+              key={regiao.id}
+              x={regiao.x} y={regiao.y} width={regiao.largura} height={regiao.altura}
+              tabIndex={0}
+              role="button"
+              aria-label={`Região ${regiao.ordem + 1}: ${regiao.texto}`}
+              className={regiaoSelecionada === regiao.id ? "fill-ouro/25 stroke-ouro" : "fill-info/10 stroke-info/70"}
+              vectorEffect="non-scaling-stroke"
+              strokeWidth={regiaoSelecionada === regiao.id ? 2 : 1}
+              onClick={() => setRegiaoSelecionada(regiao.id)}
+              onKeyDown={(evento) => {
+                if (evento.key === "Enter" || evento.key === " ") {
+                  evento.preventDefault(); setRegiaoSelecionada(regiao.id);
+                }
+              }}
+            />)}
+          </svg>
+          {regiaoSelecionada !== null && (() => {
+            const selecionada = ocr.regioes.find((regiao) => regiao.id === regiaoSelecionada);
+            return selecionada ? <p role="status" className="mt-2 break-words text-xs text-texto-2">
+              Região #{selecionada.ordem + 1} selecionada: <span className="font-medium text-texto">{selecionada.texto}</span>
+              <span className="ml-2 font-mono text-texto-3">x {selecionada.x} · y {selecionada.y} · {selecionada.largura} × {selecionada.altura}px</span>
+            </p> : null;
+          })()}
+        </div>}
         <ol className="mt-3 grid gap-2 md:grid-cols-2" aria-label="Palavras e coordenadas OCR">
-          {ocr.regioes.slice(deslocamentoRegioes, deslocamentoRegioes + 100).map((regiao) => <li key={regiao.id} className="rounded-sm border border-borda bg-sup-2/40 px-3 py-2">
+          {regioesVisiveis.map((regiao) => <li key={regiao.id} className={`rounded-sm border px-3 py-2 ${regiaoSelecionada === regiao.id ? "border-ouro/60 bg-ouro/5" : "border-borda bg-sup-2/40"}`}>
             <div className="flex items-start justify-between gap-2"><span className="break-words text-sm text-texto">{regiao.texto}</span><span className="font-mono text-2xs text-texto-3">#{regiao.ordem + 1}</span></div>
             <p className="mt-1 font-mono text-2xs text-texto-3">x {regiao.x} · y {regiao.y} · {regiao.largura} × {regiao.altura}px · bytes [{regiao.inicio_utf8}, {regiao.fim_utf8})</p>
             <p className="mt-1 text-2xs text-texto-3">Confiança: {regiao.confianca === null ? "não fornecida pelo motor" : `${regiao.confianca}%`}</p>
+            <button type="button" className="mt-2 text-2xs font-medium text-info-claro hover:text-texto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ouro" onClick={() => setRegiaoSelecionada(regiao.id)}>Localizar no mapa</button>
           </li>)}
         </ol>
-        <Paginacao total={ocr.regioes.length} deslocamento={deslocamentoRegioes} limite={100} mudar={setDeslocamentoRegioes} />
+        <Paginacao total={ocr.regioes.length} deslocamento={deslocamentoRegioes} limite={100} mudar={(novo) => { setDeslocamentoRegioes(novo); setRegiaoSelecionada(null); }} />
       </section>}
       <div className="border-t border-borda pt-3">
         <h4 className="text-sm font-semibold text-texto">Candidatos literais para revisão</h4>

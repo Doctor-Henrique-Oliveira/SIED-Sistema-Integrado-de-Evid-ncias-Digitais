@@ -546,6 +546,31 @@ fn regioes_ocr_sao_append_only_pesquisaveis_e_reutilizadas_sem_perder_origem() {
 }
 
 #[test]
+fn regiao_ocr_sem_area_e_rejeitada_antes_de_persistir() {
+    let (_raiz, _origem, mut banco, mut novo) = preparado();
+    novo.motor_id = "windows_media_ocr".into();
+    novo.motor_versao = "1.0.0".into();
+    novo.pagina = Some(1);
+    novo.total_paginas = Some(1);
+    novo.largura_px = Some(1200);
+    novo.altura_px = Some(800);
+    novo.regioes = vec![NovaRegiaoDocumento {
+        ordem: 0,
+        inicio_utf8: 0,
+        fim_utf8: "SINTÉTICO".len() as u32,
+        texto: "SINTÉTICO".into(),
+        x: 100,
+        y: 80,
+        largura: 0,
+        altura: 52,
+        confianca: None,
+    }];
+    assert!(banco.guardar_documento(&novo).is_err());
+    assert_eq!(contar(&conn(&banco), "documento_derivado"), 0);
+    assert_eq!(contar(&conn(&banco), "regiao_documental"), 0);
+}
+
+#[test]
 fn filtros_documentais_precedem_janela_e_preservam_data_exata_do_inventario() {
     let (raiz, _origem, mut banco, novo) = preparado();
     banco.guardar_documento(&novo).unwrap();

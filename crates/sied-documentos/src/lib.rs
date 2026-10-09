@@ -307,7 +307,7 @@ pub fn analisar_pagina(
         TAMANHO_MAXIMO
     };
     if p.tamanho > limite_origem {
-        return limite_de_bytes();
+        return limite_de_origem(p.modo);
     }
     if let Some(resultado) = controle.interrupcao(inicio) {
         return resultado;
@@ -361,7 +361,7 @@ pub fn analisar_pagina(
             break;
         }
         if bytes.len() + lido > limite_origem as usize {
-            return limite_de_bytes();
+            return limite_de_origem(p.modo);
         }
         hasher.update(&chunk[..lido]);
         bytes.extend_from_slice(&chunk[..lido]);
@@ -386,7 +386,7 @@ pub fn analisar_pagina(
             Err(resultado) => return *resultado,
         };
         if saida.texto.len() > TAMANHO_MAXIMO as usize {
-            return limite_de_bytes();
+            return limite_de_texto();
         }
         let sha256_texto = hex::encode(Sha256::digest(saida.texto.as_bytes()));
         return ResultadoDocumento {
@@ -519,10 +519,19 @@ fn hash_valido(hash: &str) -> bool {
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
-fn limite_de_bytes() -> ResultadoDocumento {
+fn limite_de_origem(modo: ModoDocumento) -> ResultadoDocumento {
+    let motivo = if modo == ModoDocumento::Ocr {
+        "A origem excede o limite de 64 MiB do OCR local neste incremento."
+    } else {
+        "O documento excede o limite de 2 MiB para leitura nativa neste incremento."
+    };
+    ResultadoDocumento::sem(EstadoDocumento::LimiteExcedido, motivo)
+}
+
+fn limite_de_texto() -> ResultadoDocumento {
     ResultadoDocumento::sem(
         EstadoDocumento::LimiteExcedido,
-        "O documento excede o limite de 2 MiB para leitura e texto neste incremento.",
+        "O texto derivado excede o limite de 2 MiB deste incremento.",
     )
 }
 

@@ -258,6 +258,8 @@ fn validar_novo(novo: &NovoDocumento) -> Resultado<()> {
             || inicio >= fim
             || novo.texto.get(inicio..fim) != Some(regiao.texto.as_str())
             || regiao.confianca.is_some_and(|c| c > 100)
+            || regiao.largura == 0
+            || regiao.altura == 0
             || regiao.x.saturating_add(regiao.largura) > novo.largura_px.unwrap_or(0)
             || regiao.y.saturating_add(regiao.altura) > novo.altura_px.unwrap_or(0)
         {
