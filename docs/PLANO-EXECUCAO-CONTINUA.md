@@ -4,7 +4,7 @@ Atualizado em 08/10/2026. Este documento transforma a visão, o README e o ROADM
 
 ## Ponteiro atual
 
-**Próxima etapa: E01 — OCR local e documentos pesquisáveis.**
+**Próxima etapa: E06 — Timeline inteligente, mapa offline e grafo investigativo.**
 
 O código incorporado à `main` até `87b10e8` é a linha de base. AI-0–AI-7 possuem fundações e interfaces, porém vários motores continuam conservadores ou ausentes. As etapas abaixo aprofundam essas fundações sem duplicá-las.
 
@@ -78,9 +78,11 @@ Evoluir o dHash existente com classificação/detecção local, regiões e bound
 
 ### E05 — Motor multimodal unificado
 
-**Status: PENDENTE**
+**Status: IMPLEMENTADA LOCALMENTE (E05)**
 
-Integrar texto original, documentos, OCR, transcrições, entidades, embeddings, visão e metadados numa única execução. Normalizar, deduplicar e paginar resultados; permitir escolha prévia e filtro posterior de mecanismos.
+Integrado o motor `pesquisar_multimodal` ao cliente Tauri e à aba Pesquisa profunda. A execução reutiliza os índices locais de mensagens, documentos/OCR, transcrições com timestamps, entidades documentais, embeddings, descritores visuais e metadados. Os candidatos são deduplicados pela origem, ranqueados por RRF com pesos explícitos, paginados e filtráveis por mecanismo após a consulta. Cada sinal preserva motivo, motor/versão e hash derivado quando aplicável; a interface mantém navegação para o artefato original e destaca que ranking não é confiança pericial.
+
+Limites deliberados: a visão continua dependente de descritores/provider local opt-in da E04; OCR, transcrição e embeddings só retornam dados previamente indexados; não há envio para rede nem fabricação de sinais ausentes.
 
 **Concluída quando:** uma consulta sintética retorna artefatos de modalidades diferentes numa lista coerente e cada resultado explica separadamente todos os sinais que contribuíram.
 

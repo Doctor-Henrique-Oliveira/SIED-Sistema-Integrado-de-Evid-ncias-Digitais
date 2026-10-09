@@ -335,9 +335,11 @@ novas telas nem modificar o trabalho visual/premium atual como parte deste regis
 
 ## 18. Faseamento proposto AI-0 → AI-7
 
-AI-0 tem implementação inicial autorizada posteriormente, ainda sem validação completa;
-AI-1–AI-7 continuam **PLANEJADAS, NÃO IMPLEMENTADAS**, sem datas; a continuidade foi
-autorizada no chat, mas cada entrega ainda exige desenho técnico e validação proporcionais.
+A AI-0 tem implementação inicial autorizada posteriormente, ainda sem validação completa;
+AI-1–AI-3 possuem fundações locais incorporadas e a AI-4 recebeu agora uma primeira
+implementação funcional de pesquisa multimodal, ainda sujeita aos portões de validação
+descritos abaixo. As demais fases continuam planejadas, sem datas; cada entrega exige
+desenho técnico e validação proporcionais.
 A existência de FTS/linha do tempo hoje é base, não conclusão da fase.
 
 | Fase | Escopo planejado | Entrega a validar antes de avançar |
@@ -346,7 +348,7 @@ A existência de FTS/linha do tempo hoje é base, não conclusão da fase.
 | AI-1 | OCR local, PDF/documentos e entidades. | Origem/hash/página/região conferíveis, erros visíveis, busca em derivados e entidades candidatas corrigíveis. |
 | AI-2 | Embeddings locais, pesquisa semântica e ranking híbrido. | Índices versionados/reconstruíveis, justificativa por sinal e desempenho comparado à pesquisa tradicional. |
 | AI-3 | Visão/classificação, objetos/regiões e near-duplicates. | Scores/limitações avaliados, acesso à imagem completa, similaridade distinta de identidade e fila de revisão. |
-| AI-4 | Pesquisa multimodal: imagem + texto + OCR + contexto. | Combinação de sinais preserva proveniência individual e usa apenas capacidades instaladas/validadas. |
+| AI-4 | Pesquisa multimodal: imagem + texto + OCR + contexto. **Base local implementada na E05; validação ampliada pendente.** | Combinação de sinais preserva proveniência individual e usa apenas capacidades instaladas/validadas. |
 | AI-5 | Correlação, timeline assistida e grafo experimental. | Relação direta/sugerida visualmente distinta, fuso/origem preservados, sem inferir causalidade ou identidade. |
 | AI-6 | Assistente local explicável e consultas naturais sobre o caso. | Respostas referenciadas, "não sei" quando necessário, dados não executam instruções e controle humano das ações. |
 | AI-7 | Feedback supervisionado, datasets internos autorizados e avaliação/melhoria de modelos. | Treinamento explícito/versionado, governança/retenção, avaliação independente e nenhum aprendizado global silencioso. |

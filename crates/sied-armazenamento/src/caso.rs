@@ -48,6 +48,7 @@ use crate::extracoes::{
 use crate::importacao::{Importacao, PASTA_IMPORTACOES};
 use crate::linha_tempo::{self, FiltroLinhaTempo, ResumoLinhaTempo};
 use crate::migracoes::{self, BANCO_CASO};
+use crate::multimodal::{PedidoMultimodal, ResultadoMultimodal};
 use crate::pesquisa_local::{
     self, ConsultaDescobertaSalva, ExecucaoDescoberta, VersaoVocabularioPesquisa,
     VocabularioPesquisa,
@@ -339,6 +340,23 @@ impl BancoCaso {
         controle: &Arc<ControleDescoberta>,
     ) -> Resultado<ResultadoUniversal> {
         universal::pesquisar(
+            &self.conn,
+            self.caso.id,
+            pedido,
+            deslocamento,
+            limite,
+            controle,
+        )
+    }
+
+    pub fn pesquisar_multimodal(
+        &self,
+        pedido: &PedidoMultimodal,
+        deslocamento: i64,
+        limite: i64,
+        controle: &Arc<ControleDescoberta>,
+    ) -> Resultado<ResultadoMultimodal> {
+        crate::multimodal::pesquisar(
             &self.conn,
             self.caso.id,
             pedido,

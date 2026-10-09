@@ -7,6 +7,7 @@ import { BuscaDocumentos } from "../componentes/BuscaDocumentos";
 import { Abas, Aviso, Cabecalho, Cartao, Carregando, entrada, Paginacao, Selo, tabela, Vazio } from "../componentes/Estrutura";
 import { DescobertaLocal, type ModoDescobertaLocal } from "../componentes/DescobertaLocal";
 import { PesquisaUniversal } from "../componentes/PesquisaUniversal";
+import { PesquisaMultimodal } from "../componentes/PesquisaMultimodal";
 import { DatasetsLocais } from "../componentes/DatasetsLocais";
 import { BuscaHibridaLocal } from "../componentes/BuscaHibridaLocal";
 import { Icone } from "../componentes/Icone";
@@ -39,7 +40,7 @@ export function TrechoDestacado({ partes }: { partes: PedacoTrecho[] }) {
 }
 
 function Busca({ caso }: { caso: Caso }) {
-  const [modo, setModo] = useState<"tradicional" | "universal" | "hibrida" | "supervisao" | ModoDescobertaLocal>("tradicional");
+  const [modo, setModo] = useState<"tradicional" | "universal" | "multimodal" | "hibrida" | "supervisao" | ModoDescobertaLocal>("tradicional");
   const [params] = useSearchParams();
   const q = params.get("q");
   // Ctrl+K preserva a pesquisa tradicional, sem expansão/inferência implícita.
@@ -53,14 +54,14 @@ function Busca({ caso }: { caso: Caso }) {
         subtitulo="Pesquisa no caso · registros, documentos indexados e descoberta local explicável."
       />
       <div className="mb-4">
-        <Abas<"tradicional" | "universal" | "hibrida" | "supervisao" | ModoDescobertaLocal>
+        <Abas<"tradicional" | "universal" | "multimodal" | "hibrida" | "supervisao" | ModoDescobertaLocal>
           rotulo="Mecanismo de busca"
           atual={modo}
           mudar={setModo}
-          abas={[["tradicional", "Tradicional"], ["universal", "Integrada"], ["hibrida", "Híbrida local"], ["expansao", "Expansão"], ["literal", "Literal / emojis"], ["indicadores", "Indicadores"], ["supervisao", "Revisão e avaliação"]]}
+          abas={[["tradicional", "Tradicional"], ["universal", "Integrada"], ["multimodal", "Pesquisa profunda"], ["hibrida", "Híbrida local"], ["expansao", "Expansão"], ["literal", "Literal / emojis"], ["indicadores", "Indicadores"], ["supervisao", "Revisão e avaliação"]]}
         />
       </div>
-      {modo === "tradicional" ? <BuscaTradicional key={caso.id} caso={caso} /> : modo === "universal" ? <PesquisaUniversal caso={caso} filtro={q ? { texto: q } : undefined} /> : modo === "hibrida" ? <BuscaHibridaLocal caso={caso} /> : modo === "supervisao" ? <DatasetsLocais caso={caso} /> : <DescobertaLocal key={caso.id} caso={caso} modo={modo} />}
+      {modo === "tradicional" ? <BuscaTradicional key={caso.id} caso={caso} /> : modo === "universal" ? <PesquisaUniversal caso={caso} filtro={q ? { texto: q } : undefined} /> : modo === "multimodal" ? <PesquisaMultimodal caso={caso} filtro={q ? { texto: q } : undefined} /> : modo === "hibrida" ? <BuscaHibridaLocal caso={caso} /> : modo === "supervisao" ? <DatasetsLocais caso={caso} /> : <DescobertaLocal key={caso.id} caso={caso} modo={modo} />}
     </>
   );
 }

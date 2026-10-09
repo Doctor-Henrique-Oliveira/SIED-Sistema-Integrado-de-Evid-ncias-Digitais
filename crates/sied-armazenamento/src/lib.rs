@@ -27,6 +27,7 @@ pub mod global;
 pub mod importacao;
 pub mod linha_tempo;
 pub mod migracoes;
+pub mod multimodal;
 pub mod pesquisa_local;
 pub mod relacoes;
 pub mod relatorios;

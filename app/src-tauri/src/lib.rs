@@ -127,6 +127,7 @@ pub fn executar() {
             comandos::caminho_midia_transcricao,
             comandos::buscar_documentos,
             comandos::pesquisar_universal,
+            comandos::pesquisar_multimodal,
             comandos::contexto_relacoes,
             comandos::indexar_visual,
             comandos::analisar_visual_local,

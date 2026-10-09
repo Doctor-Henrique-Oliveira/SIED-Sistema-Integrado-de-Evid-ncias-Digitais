@@ -97,6 +97,7 @@ import type { AvaliacaoSupervisionada } from "./tipos/AvaliacaoSupervisionada";
 import type { PaginaTranscricao, SegmentoTranscricao, TranscricaoLocal } from "./transcricao";
 import type { ResumoIndexacaoEmbeddings, ResultadoBuscaHibrida } from "./embeddings";
 import type { ResultadoVisaoLocal } from "./visual";
+import type { ItemMultimodal, MecanismoMultimodal, PedidoMultimodal, ResultadoMultimodal } from "./multimodal";
 
 export type {
   MecanismoUniversal,
@@ -120,6 +121,10 @@ export type {
   ResumoIndexacaoEmbeddings,
   ResultadoBuscaHibrida,
   ResultadoVisaoLocal,
+  PedidoMultimodal,
+  ResultadoMultimodal,
+  ItemMultimodal,
+  MecanismoMultimodal,
   PedidoDescoberta,
   ResultadoDescoberta,
   AchadoDescoberta,
@@ -366,6 +371,8 @@ export const api = {
   cancelarDescoberta: (operacaoId: string) => chamar<boolean>("cancelar_descoberta", { operacaoId }),
   pesquisarUniversal: (casoId: CasoId, operacaoId: string, pedido: PedidoUniversal, deslocamento: number, limite: number) =>
     chamar<ResultadoUniversal>("pesquisar_universal", { casoId, operacaoId, pedido, deslocamento, limite }),
+  pesquisarMultimodal: (casoId: CasoId, operacaoId: string, pedido: PedidoMultimodal, deslocamento: number, limite: number) =>
+    chamar<ResultadoMultimodal>("pesquisar_multimodal", { casoId, operacaoId, pedido, deslocamento, limite }),
   indexarEmbeddings: (casoId: CasoId, operacaoId: string) =>
     chamar<ResumoIndexacaoEmbeddings>("indexar_embeddings", { casoId, operacaoId }),
   buscarHibrida: (casoId: CasoId, operacaoId: string, texto: string, deslocamento: number, limite: number, pesoSemantico: number) =>

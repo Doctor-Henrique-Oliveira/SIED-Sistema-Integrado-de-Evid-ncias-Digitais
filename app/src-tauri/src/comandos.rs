@@ -602,6 +602,34 @@ pub async fn pesquisar_universal(
 }
 
 #[tauri::command]
+pub async fn pesquisar_multimodal(
+    app_handle: AppHandle,
+    caso_id: CasoId,
+    operacao_id: String,
+    pedido: sied_armazenamento::multimodal::PedidoMultimodal,
+    deslocamento: i64,
+    limite: i64,
+) -> ResultadoApp<sied_armazenamento::multimodal::ResultadoMultimodal> {
+    let operacao = app_handle
+        .state::<Estado>()
+        .descobertas
+        .iniciar(operacao_id)?;
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| {
+            let resultado = s.banco_documental(caso_id)?.pesquisar_multimodal(
+                &pedido,
+                deslocamento,
+                limite,
+                &operacao.controle,
+            )?;
+            operacao.controle.concluir()?;
+            Ok(resultado)
+        })
+    })
+    .await
+}
+
+#[tauri::command]
 pub async fn contexto_relacoes(
     app_handle: AppHandle,
     caso_id: CasoId,
