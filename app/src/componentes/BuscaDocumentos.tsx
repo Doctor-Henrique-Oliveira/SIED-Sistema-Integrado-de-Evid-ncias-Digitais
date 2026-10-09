@@ -7,9 +7,29 @@ import { PainelAnaliseDocumento } from "./PainelAnaliseDocumento";
 
 const LIMITE = 20;
 const MAXIMO_TERMO = 256;
+type FaixaUtf8 = { inicio: number; fim: number };
 
 function mensagem(erro: unknown) {
   return erro instanceof Error ? erro.message : "Não foi possível consultar os documentos indexados.";
+}
+
+function faixaLiteralUtf8(conteudo: string, termo: string): FaixaUtf8 | null {
+  const procurado = termo.trim();
+  if (!procurado) return null;
+  let indice = conteudo.indexOf(procurado);
+  if (indice < 0) {
+    const normalizado = procurado.toLocaleLowerCase("pt-BR");
+    for (let i = 0; i <= conteudo.length - procurado.length; i += 1) {
+      if (conteudo.slice(i, i + procurado.length).toLocaleLowerCase("pt-BR") === normalizado) {
+        indice = i; break;
+      }
+    }
+  }
+  if (indice < 0) return null;
+  const codificador = new TextEncoder();
+  const inicio = codificador.encode(conteudo.slice(0, indice)).length;
+  const fim = inicio + codificador.encode(conteudo.slice(indice, indice + procurado.length)).length;
+  return { inicio, fim };
 }
 
 export function BuscaDocumentos({ caso, termo = "" }: { caso: Caso; termo?: string }) {
@@ -23,6 +43,7 @@ function SessaoBusca({ caso, termo }: { caso: Caso; termo: string }) {
   const [buscando, setBuscando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [documento, setDocumento] = useState<DocumentoIndexado | null>(null);
+  const [destaque, setDestaque] = useState<FaixaUtf8 | null>(null);
   const [abrindo, setAbrindo] = useState(false);
   const [erroAbertura, setErroAbertura] = useState<string | null>(null);
   const ativa = useRef(true);
@@ -34,7 +55,7 @@ function SessaoBusca({ caso, termo }: { caso: Caso; termo: string }) {
   useEffect(() => {
     setTexto(termo);
     setPedido(termo.trim() ? { termo: termo.trim(), deslocamento: 0 } : null);
-    setDocumento(null); setErroAbertura(null); setAbrindo(false); abertura.current += 1;
+    setDocumento(null); setDestaque(null); setErroAbertura(null); setAbrindo(false); abertura.current += 1;
   }, [termo]);
 
   useEffect(() => {
@@ -65,12 +86,12 @@ function SessaoBusca({ caso, termo }: { caso: Caso; termo: string }) {
     evento.preventDefault();
     const normalizado = texto.trim();
     setPedido(normalizado ? { termo: normalizado, deslocamento: 0 } : null);
-    setDocumento(null); setErroAbertura(null); setAbrindo(false); abertura.current += 1;
+    setDocumento(null); setDestaque(null); setErroAbertura(null); setAbrindo(false); abertura.current += 1;
   }
 
   async function abrir(achado: AchadoDocumento) {
     const atual = ++abertura.current;
-    setDocumento(null); setErroAbertura(null); setAbrindo(true);
+    setDocumento(null); setDestaque(null); setErroAbertura(null); setAbrindo(true);
     try {
       const completo = await api.obterDocumento(caso.id, achado.id);
       if (!ativa.current || abertura.current !== atual) return;
@@ -82,6 +103,7 @@ function SessaoBusca({ caso, termo }: { caso: Caso; termo: string }) {
         setErroAbertura("O documento recebido não corresponde ao resultado selecionado. O conteúdo não foi exibido.");
         return;
       }
+      setDestaque(faixaLiteralUtf8(completo.texto, pedido?.termo ?? ""));
       setDocumento(completo);
     } catch (falha) {
       if (ativa.current && abertura.current === atual) setErroAbertura(mensagem(falha));
@@ -92,7 +114,7 @@ function SessaoBusca({ caso, termo }: { caso: Caso; termo: string }) {
 
   function mudarPagina(deslocamento: number) {
     if (!pedido || buscando) return;
-    setPedido({ ...pedido, deslocamento }); setDocumento(null); setErroAbertura(null);
+    setPedido({ ...pedido, deslocamento }); setDocumento(null); setDestaque(null); setErroAbertura(null);
     setAbrindo(false); abertura.current += 1;
   }
 
@@ -144,8 +166,8 @@ function SessaoBusca({ caso, termo }: { caso: Caso; termo: string }) {
       {erroAbertura && <div className="mt-3"><Aviso>{erroAbertura}</Aviso></div>}
       {documento && (
         <>
-          <div className="mt-3 flex justify-end"><Botao tamanho="p" variante="fantasma" onClick={() => { abertura.current += 1; setDocumento(null); }}>Fechar documento indexado</Botao></div>
-          <PainelAnaliseDocumento caso={caso} documento={documento} />
+          <div className="mt-3 flex justify-end"><Botao tamanho="p" variante="fantasma" onClick={() => { abertura.current += 1; setDocumento(null); setDestaque(null); }}>Fechar documento indexado</Botao></div>
+          <PainelAnaliseDocumento caso={caso} documento={documento} destaqueUtf8={destaque} />
         </>
       )}
     </section>

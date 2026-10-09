@@ -302,6 +302,8 @@ export const api = {
   /** Resposta validada na tela até os contratos ts-rs poderem ser regenerados pelo Rust. */
   regioesDocumento: (casoId: CasoId, documentoId: number, deslocamento: number, limite: number) =>
     chamar<unknown>("regioes_documento", { casoId, documentoId, deslocamento, limite }),
+  localizarRegiaoDocumento: (casoId: CasoId, documentoId: number, inicioUtf8: number, fimUtf8: number) =>
+    chamar<number | null>("localizar_regiao_documento", { casoId, documentoId, inicioUtf8, fimUtf8 }),
   entidadesDocumento: (casoId: CasoId, documentoId: number) =>
     chamar<EntidadeDocumento[]>("entidades_documento", { casoId, documentoId }),
   /** Confirmação é da ocorrência literal, não da identidade ou veracidade do conteúdo. */

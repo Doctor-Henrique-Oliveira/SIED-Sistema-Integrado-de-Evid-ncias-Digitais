@@ -540,6 +540,20 @@ fn regioes_ocr_sao_append_only_pesquisaveis_e_reutilizadas_sem_perder_origem() {
     assert_eq!(regioes.itens.len(), 1);
     assert_eq!(regioes.itens[0].texto, "SINTÉTICO");
     assert_eq!(regioes.itens[0].confianca, None);
+    assert_eq!(
+        banco
+            .localizar_regiao_documento(repetido.id, 0, "SINTÉTICO".len() as u32)
+            .unwrap(),
+        Some(0)
+    );
+    let fora = TEXTO.find("Contato").unwrap() as u32;
+    assert_eq!(
+        banco
+            .localizar_regiao_documento(repetido.id, fora, fora + "Contato".len() as u32)
+            .unwrap(),
+        None
+    );
+    assert!(banco.localizar_regiao_documento(repetido.id, 2, 1).is_err());
     let pagina_vazia = banco.regioes_documento(repetido.id, 1, 100).unwrap();
     assert_eq!(pagina_vazia.total, 1);
     assert!(pagina_vazia.itens.is_empty());

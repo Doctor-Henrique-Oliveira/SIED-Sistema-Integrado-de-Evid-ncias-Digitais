@@ -302,6 +302,27 @@ describe("busca documental paginada", () => {
     await userEvent.click(screen.getByRole("button", { name: "Fechar documento indexado" }));
     expect(screen.queryByRole("region", { name: "Texto documental armazenado" })).not.toBeInTheDocument();
   });
+  it("abre resultado OCR diretamente na região que intersecta o termo pesquisado", async () => {
+    const fim = new TextEncoder().encode("SINTÉTICO").length;
+    const ocr = { ...documento, pagina: 1, total_paginas: 1, largura_px: 1200, altura_px: 800,
+      total_regioes: 1, motor_id: "windows_media_ocr", motor_versao: "1.0.0+pt-BR" } as DocumentoIndexado;
+    const regiao = { id: 91, documento_id: documento.id, ordem: 0, inicio_utf8: 0, fim_utf8: fim,
+      texto: "SINTÉTICO", x: 100, y: 80, largura: 240, altura: 52, confianca: null };
+    vi.mocked(invoke).mockImplementation((comando) => {
+      if (comando === "buscar_documentos") return Promise.resolve({ total: 1, itens: [achado(ocr)] });
+      if (comando === "obter_documento") return Promise.resolve(ocr);
+      if (comando === "localizar_regiao_documento") return Promise.resolve(0);
+      if (comando === "regioes_documento") return Promise.resolve({ total: 1, itens: [regiao] });
+      if (comando === "entidades_documento") return Promise.resolve([]);
+      return Promise.reject(new Error(`Comando sintético inesperado: ${comando}`));
+    });
+    render(<BuscaDocumentos caso={caso} termo="SINTÉTICO" />);
+    await userEvent.click(await screen.findByRole("button", { name: "Abrir texto indexado" }));
+    const regioes = await screen.findByRole("region", { name: "Regiões OCR" });
+    expect(await within(regioes).findByRole("status")).toHaveTextContent("Região #1 selecionada: SINTÉTICO");
+    expect(invoke).toHaveBeenCalledWith("localizar_regiao_documento", { casoId: caso.id, documentoId: documento.id, inicioUtf8: 0, fimUtf8: fim });
+    expect(invoke).toHaveBeenCalledWith("regioes_documento", { casoId: caso.id, documentoId: documento.id, deslocamento: 0, limite: 100 });
+  });
   it("paginação consulta páginas reais de 20 e descarta o documento aberto", async () => {
     responderBusca({ total: 21, itens: [achado()] }); render(<BuscaDocumentos caso={caso} termo="SINTÉTICO" />);
     await screen.findByRole("list", { name: "Resultados documentais" });

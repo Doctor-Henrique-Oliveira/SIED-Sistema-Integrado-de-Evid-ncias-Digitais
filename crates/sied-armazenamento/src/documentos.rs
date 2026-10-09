@@ -615,6 +615,36 @@ pub fn regioes(
     })
 }
 
+/// Resolve uma faixa do texto persistido para a primeira região OCR que a
+/// intersecta. A faixa é conferida contra fronteiras UTF-8 do snapshot antes da
+/// consulta; o frontend não escolhe diretamente uma caixa nem sua ordem.
+pub fn localizar_regiao(
+    conn: &Connection,
+    documento_id: i64,
+    inicio_utf8: u32,
+    fim_utf8: u32,
+) -> Resultado<Option<u32>> {
+    let documento = obter(conn, documento_id)?;
+    let inicio = inicio_utf8 as usize;
+    let fim = fim_utf8 as usize;
+    if inicio >= fim
+        || fim > documento.texto.len()
+        || !documento.texto.is_char_boundary(inicio)
+        || !documento.texto.is_char_boundary(fim)
+    {
+        return Err(recusar("faixa textual para localização OCR é inválida"));
+    }
+    Ok(conn
+        .query_row(
+            "SELECT ordem FROM regiao_documental
+             WHERE documento_id = ?1 AND inicio_utf8 < ?3 AND fim_utf8 > ?2
+             ORDER BY ordem LIMIT 1",
+            params![documento_id, inicio_utf8, fim_utf8],
+            |r| r.get(0),
+        )
+        .optional()?)
+}
+
 /// Pesquisa somente os derivados já analisados. Não processa arquivos nem faz
 /// rede; os operadores digitados são escapados pela consulta FTS existente.
 pub fn buscar(

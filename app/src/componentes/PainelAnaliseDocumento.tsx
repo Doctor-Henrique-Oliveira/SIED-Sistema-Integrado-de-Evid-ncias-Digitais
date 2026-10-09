@@ -71,14 +71,16 @@ function candidatoCompativel(entidade: EntidadeDocumento, documento: DocumentoIn
   }
 }
 
-export function PainelAnaliseDocumento({ caso, documento, exibirTexto = true }: { caso: Caso; documento: DocumentoIndexado; exibirTexto?: boolean }) {
+type FaixaUtf8 = { inicio: number; fim: number };
+
+export function PainelAnaliseDocumento({ caso, documento, exibirTexto = true, destaqueUtf8 = null }: { caso: Caso; documento: DocumentoIndexado; exibirTexto?: boolean; destaqueUtf8?: FaixaUtf8 | null }) {
   if (documento.caso_id !== caso.id) {
     return <Aviso>O documento armazenado não pertence ao caso atual. O conteúdo não foi exibido.</Aviso>;
   }
-  return <SessaoAnalise key={`${caso.id}:${documento.id}:${documento.sha256_texto}:${documento.executado_em}`} caso={caso} documento={documento} exibirTexto={exibirTexto} />;
+  return <SessaoAnalise key={`${caso.id}:${documento.id}:${documento.sha256_texto}:${documento.executado_em}`} caso={caso} documento={documento} exibirTexto={exibirTexto} destaqueUtf8={destaqueUtf8} />;
 }
 
-function SessaoAnalise({ caso, documento, exibirTexto }: { caso: Caso; documento: DocumentoIndexado; exibirTexto: boolean }) {
+function SessaoAnalise({ caso, documento, exibirTexto, destaqueUtf8 }: { caso: Caso; documento: DocumentoIndexado; exibirTexto: boolean; destaqueUtf8: FaixaUtf8 | null }) {
   const [candidatos, setCandidatos] = useState<EntidadeDocumento[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [deslocamentoCandidatos, setDeslocamentoCandidatos] = useState(0);
@@ -87,6 +89,9 @@ function SessaoAnalise({ caso, documento, exibirTexto }: { caso: Caso; documento
   const [paginaRegioes, setPaginaRegioes] = useState<PaginaRegioes | null>(null);
   const [carregandoRegioes, setCarregandoRegioes] = useState(false);
   const [erroRegioes, setErroRegioes] = useState<string | null>(null);
+  const [erroLocalizacao, setErroLocalizacao] = useState<string | null>(null);
+  const [localizandoRegiao, setLocalizandoRegiao] = useState(destaqueUtf8 !== null);
+  const [ordemDestaque, setOrdemDestaque] = useState<number | null>(null);
   const ocr = metadadosOcr(documento);
   const regioesVisiveis = paginaRegioes?.itens ?? [];
   const ativa = useRef(true);
@@ -108,8 +113,28 @@ function SessaoAnalise({ caso, documento, exibirTexto }: { caso: Caso; documento
   }, [caso.id, documento]);
   useEffect(() => {
     let atual = true;
+    setErroLocalizacao(null); setOrdemDestaque(null);
+    if (destaqueUtf8 === null || ocr.total === 0) { setLocalizandoRegiao(false); return; }
+    setLocalizandoRegiao(true);
+    void api.localizarRegiaoDocumento(caso.id, documento.id, destaqueUtf8.inicio, destaqueUtf8.fim).then((ordem) => {
+      if (!atual || !ativa.current) return;
+      if (ordem !== null && (!Number.isSafeInteger(ordem) || ordem < 0 || ordem >= ocr.total)) {
+        setErroLocalizacao("A localização OCR recebida não corresponde ao documento aberto.");
+        return;
+      }
+      setOrdemDestaque(ordem);
+      if (ordem !== null) setDeslocamentoRegioes(Math.floor(ordem / 100) * 100);
+    }).catch((falha) => {
+      if (atual && ativa.current) setErroLocalizacao(mensagem(falha));
+    }).finally(() => {
+      if (atual && ativa.current) setLocalizandoRegiao(false);
+    });
+    return () => { atual = false; };
+  }, [caso.id, destaqueUtf8, documento.id, ocr.total]);
+  useEffect(() => {
+    let atual = true;
     setPaginaRegioes(null); setErroRegioes(null); setRegiaoSelecionada(null);
-    if (ocr.total === 0) { setCarregandoRegioes(false); return; }
+    if (ocr.total === 0 || localizandoRegiao) { setCarregandoRegioes(false); return; }
     if (ocr.largura === null || ocr.altura === null) {
       setCarregandoRegioes(false);
       setErroRegioes("O snapshot OCR informa regiões sem dimensões válidas da página.");
@@ -123,14 +148,20 @@ function SessaoAnalise({ caso, documento, exibirTexto }: { caso: Caso; documento
         setErroRegioes("As regiões recebidas não correspondem ao documento ou à paginação solicitada.");
         return;
       }
+      const alvo = ordemDestaque === null ? null : pagina.itens.find((regiao) => regiao.ordem === ordemDestaque);
+      if (ordemDestaque !== null && !alvo) {
+        setErroRegioes("A região correspondente ao trecho não está na página retornada.");
+        return;
+      }
       setPaginaRegioes(pagina);
+      setRegiaoSelecionada(alvo?.id ?? null);
     }).catch((falha) => {
       if (atual && ativa.current) setErroRegioes(mensagem(falha));
     }).finally(() => {
       if (atual && ativa.current) setCarregandoRegioes(false);
     });
     return () => { atual = false; };
-  }, [caso.id, documento, deslocamentoRegioes, ocr.altura, ocr.largura, ocr.total]);
+  }, [caso.id, documento, deslocamentoRegioes, localizandoRegiao, ocr.altura, ocr.largura, ocr.total, ordemDestaque]);
 
   return (
     <section aria-label="Análise documental armazenada" className="mt-4 space-y-3 border-t border-borda pt-4">
@@ -169,7 +200,8 @@ function SessaoAnalise({ caso, documento, exibirTexto }: { caso: Caso; documento
           </div>
           <Selo tom="neutro">{ocr.total.toLocaleString("pt-BR")} REGIÕES</Selo>
         </div>
-        {carregandoRegioes && <Carregando texto="Carregando regiões OCR desta página…" />}
+        {(localizandoRegiao || carregandoRegioes) && <Carregando texto={localizandoRegiao ? "Localizando ocorrência no mapa OCR…" : "Carregando regiões OCR desta página…"} />}
+        {erroLocalizacao && <div className="mt-3"><Aviso>{erroLocalizacao}</Aviso></div>}
         {erroRegioes && <div className="mt-3"><Aviso>{erroRegioes}</Aviso></div>}
         {paginaRegioes && ocr.largura !== null && ocr.altura !== null && <div className="mt-3 rounded-md border border-borda bg-fundo p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">

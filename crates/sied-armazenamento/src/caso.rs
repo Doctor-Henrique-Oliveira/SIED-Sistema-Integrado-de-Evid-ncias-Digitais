@@ -376,6 +376,15 @@ impl BancoCaso {
         documentos::regioes(&self.conn, id, deslocamento, limite)
     }
 
+    pub fn localizar_regiao_documento(
+        &self,
+        id: i64,
+        inicio_utf8: u32,
+        fim_utf8: u32,
+    ) -> Resultado<Option<u32>> {
+        documentos::localizar_regiao(&self.conn, id, inicio_utf8, fim_utf8)
+    }
+
     pub fn entidades_documento(&self, id: i64) -> Resultado<Vec<EntidadeDocumento>> {
         documentos::entidades(&self.conn, id)
     }

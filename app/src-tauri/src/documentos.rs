@@ -151,6 +151,20 @@ impl Servico {
         )?)
     }
 
+    pub fn localizar_regiao_documento(
+        &mut self,
+        caso_id: CasoId,
+        documento_id: i64,
+        inicio_utf8: u32,
+        fim_utf8: u32,
+    ) -> ResultadoApp<Option<u32>> {
+        Ok(self.banco_documental(caso_id)?.localizar_regiao_documento(
+            documento_id,
+            inicio_utf8,
+            fim_utf8,
+        )?)
+    }
+
     pub fn entidades_documento(
         &mut self,
         caso_id: CasoId,

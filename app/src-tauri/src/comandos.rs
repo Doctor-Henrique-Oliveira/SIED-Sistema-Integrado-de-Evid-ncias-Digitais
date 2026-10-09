@@ -684,6 +684,20 @@ pub async fn regioes_documento(
 }
 
 #[tauri::command]
+pub async fn localizar_regiao_documento(
+    app_handle: AppHandle,
+    caso_id: CasoId,
+    documento_id: i64,
+    inicio_utf8: u32,
+    fim_utf8: u32,
+) -> ResultadoApp<Option<u32>> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.localizar_regiao_documento(caso_id, documento_id, inicio_utf8, fim_utf8))
+    })
+    .await
+}
+
+#[tauri::command]
 pub async fn obter_arquivo(
     app_handle: AppHandle,
     caso_id: CasoId,
