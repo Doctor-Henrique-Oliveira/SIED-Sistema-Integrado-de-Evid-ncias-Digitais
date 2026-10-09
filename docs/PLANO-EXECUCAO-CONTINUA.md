@@ -40,8 +40,10 @@ Uma etapa só muda para `CONCLUÍDA` quando seus critérios forem atendidos no c
 
 Branch de trabalho: `feat/e01-ocr-local-documentos`. O motor local Windows,
 persistência append-only, pesquisa, mapa de bounding boxes e paginação real das
-regiões estão integrados; a etapa só será marcada como concluída após contratos
-Rust, testes multiplataforma e validação visual do fluxo imagem/PDF.
+regiões estão integrados. Fixtures Windows de imagem e PDF sintéticos exigem o
+motor real e falham explicitamente sem idioma OCR; a etapa só será marcada como
+concluída após sua execução, contratos Rust, testes multiplataforma e validação
+visual do fluxo imagem/PDF.
 
 Entregar OCR totalmente local para imagens e PDFs digitalizados, com página, região/bounding box, mecanismo, versão, confiança técnica, hash da origem, cache versionado e busca navegável. Ampliar formatos documentais somente quando houver parser seguro e origem conferível. O processamento deve ser cancelável e incremental, sem alterar a evidência.
 

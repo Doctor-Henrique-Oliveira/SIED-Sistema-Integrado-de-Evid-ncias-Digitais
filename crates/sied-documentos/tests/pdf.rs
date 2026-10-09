@@ -55,6 +55,21 @@ fn conteudo(bytes: &[u8]) -> Vec<u8> {
     .unwrap()
 }
 
+#[cfg(windows)]
+fn conteudo_ocr(bytes: &[u8]) -> Vec<u8> {
+    Content {
+        operations: vec![
+            Operation::new("BT", vec![]),
+            Operation::new("Tf", vec!["F1".into(), 48.into()]),
+            Operation::new("Td", vec![70.into(), 650.into()]),
+            Operation::new("Tj", vec![Object::string_literal(bytes)]),
+            Operation::new("ET", vec![]),
+        ],
+    }
+    .encode()
+    .unwrap()
+}
+
 struct PdfSintetico {
     documento: Document,
     paginas: Vec<ObjectId>,
@@ -136,6 +151,26 @@ fn duas_paginas() -> Vec<u8> {
         false,
     )
     .bytes()
+}
+
+#[test]
+#[cfg(windows)]
+fn ocr_windows_renderiza_pdf_sintetico_e_preserva_pagina() {
+    let fonte = FonteMemoria::nova(
+        "OCR-PDF-SINTETICO.pdf",
+        PdfSintetico::novo(vec![vec![conteudo_ocr(b"SIED 1234")]], false).bytes(),
+    );
+    let mut pedido = fonte.pedido();
+    pedido.modo = ModoDocumento::Ocr;
+    let resultado = analisar(&fonte, &pedido, &ControleDocumento::novo());
+    assert_eq!(resultado.estado, EstadoDocumento::Pronto, "{resultado:?}");
+    let texto = resultado.texto.unwrap();
+    assert!(texto.texto.to_uppercase().contains("SIED"), "{texto:?}");
+    assert_eq!((texto.pagina, texto.total_paginas), (Some(1), Some(1)));
+    assert!(texto.largura_px.is_some_and(|v| v > 0));
+    assert!(texto.altura_px.is_some_and(|v| v > 0));
+    assert!(!texto.regioes.is_empty(), "{texto:?}");
+    assert_eq!(fonte.aberturas.load(Ordering::SeqCst), 1);
 }
 
 fn conteudo_com_imagem_inline(corrompida: bool) -> Vec<u8> {

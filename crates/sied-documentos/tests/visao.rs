@@ -10,7 +10,8 @@ use sied_documentos::visao::{
     analisar, distancia_dhash, AssinaturaVisual, ResultadoVisual, MAX_LADO, MOTOR_ID, MOTOR_VERSAO,
 };
 use sied_documentos::{
-    ControleDocumento, EstadoDocumento, ModoDocumento, PedidoDocumento, TAMANHO_MAXIMO,
+    analisar as analisar_documento, ControleDocumento, EstadoDocumento, ModoDocumento,
+    PedidoDocumento, TAMANHO_MAXIMO,
 };
 use sied_dominio::{CasoId, ExtracaoId};
 use sied_ingestao::fonte::pasta::PastaSomenteLeitura;
@@ -121,6 +122,119 @@ fn gradiente(largura: u32, altura: u32) -> RgbImage {
         let valor = (255 * (largura - 1 - x) / (largura - 1)) as u8;
         Rgb([valor, valor, valor])
     })
+}
+
+#[cfg(windows)]
+fn texto_ocr_sintetico() -> RgbImage {
+    const GLIFOS: [(&str, [&str; 7]); 8] = [
+        (
+            "S",
+            [
+                "01110", "10000", "10000", "01110", "00001", "00001", "11110",
+            ],
+        ),
+        (
+            "I",
+            [
+                "11111", "00100", "00100", "00100", "00100", "00100", "11111",
+            ],
+        ),
+        (
+            "E",
+            [
+                "11111", "10000", "10000", "11110", "10000", "10000", "11111",
+            ],
+        ),
+        (
+            "D",
+            [
+                "11110", "10001", "10001", "10001", "10001", "10001", "11110",
+            ],
+        ),
+        (
+            "1",
+            [
+                "00100", "01100", "00100", "00100", "00100", "00100", "01110",
+            ],
+        ),
+        (
+            "2",
+            [
+                "01110", "10001", "00001", "00010", "00100", "01000", "11111",
+            ],
+        ),
+        (
+            "3",
+            [
+                "11110", "00001", "00001", "01110", "00001", "00001", "11110",
+            ],
+        ),
+        (
+            "4",
+            [
+                "00010", "00110", "01010", "10010", "11111", "00010", "00010",
+            ],
+        ),
+    ];
+    let escala = 16_u32;
+    let mut imagem = RgbImage::from_pixel(1000, 180, Rgb([255, 255, 255]));
+    let mut cursor_x = 40_u32;
+    for caractere in "SIED 1234".chars() {
+        if caractere == ' ' {
+            cursor_x += 4 * escala;
+            continue;
+        }
+        let linhas = GLIFOS
+            .iter()
+            .find(|(c, _)| c.starts_with(caractere))
+            .unwrap()
+            .1;
+        for (linha, pixels) in linhas.iter().enumerate() {
+            for (coluna, pixel) in pixels.bytes().enumerate() {
+                if pixel == b'1' {
+                    for y in 0..escala {
+                        for x in 0..escala {
+                            imagem.put_pixel(
+                                cursor_x + coluna as u32 * escala + x,
+                                30 + linha as u32 * escala + y,
+                                Rgb([0, 0, 0]),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        cursor_x += 6 * escala;
+    }
+    imagem
+}
+
+#[test]
+#[cfg(windows)]
+fn ocr_windows_reconhece_png_sintetico_com_regioes_rastreaveis() {
+    let fonte = FonteSintetica::nova(png(&texto_ocr_sintetico()));
+    let mut pedido = fonte.pedido("OCR-SINTETICO.png");
+    pedido.modo = ModoDocumento::Ocr;
+    let resultado = analisar_documento(&fonte, &pedido, &ControleDocumento::novo());
+    assert_eq!(resultado.estado, EstadoDocumento::Pronto, "{resultado:?}");
+    let texto = resultado.texto.unwrap();
+    assert!(texto.texto.to_uppercase().contains("SIED"), "{texto:?}");
+    assert_eq!((texto.largura_px, texto.altura_px), (Some(1000), Some(180)));
+    assert_eq!((texto.pagina, texto.total_paginas), (Some(1), Some(1)));
+    assert_eq!(texto.sha256, pedido.sha256.unwrap());
+    assert!(!texto.regioes.is_empty(), "{texto:?}");
+    for regiao in texto.regioes {
+        assert_eq!(regiao.confianca, None);
+        assert!(regiao.largura > 0 && regiao.altura > 0);
+        assert!(regiao.x + regiao.largura <= 1000);
+        assert!(regiao.y + regiao.altura <= 180);
+        assert_eq!(
+            texto
+                .texto
+                .get(regiao.inicio_utf8 as usize..regiao.fim_utf8 as usize),
+            Some(regiao.texto.as_str())
+        );
+    }
 }
 
 fn pronta(fonte: &FonteSintetica, nome: &str) -> AssinaturaVisual {
