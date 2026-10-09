@@ -98,6 +98,29 @@ impl LeituraTranscricao {
 }
 
 impl LeituraDocumento {
+    /// Caminho físico conferido pelo inventário para um provider local de visão.
+    /// Contêineres e caminhos ausentes nunca são entregues a processos externos.
+    pub(crate) fn caminho_absoluto(&self) -> Option<PathBuf> {
+        if self
+            .pedido
+            .caminho
+            .como_str()
+            .contains(sied_ingestao::fonte::SEPARADOR_CONTEINER)
+        {
+            return None;
+        }
+        let caminho = self.pasta_extracao.join(self.pedido.caminho.como_str());
+        caminho.is_file().then_some(caminho)
+    }
+
+    pub(crate) fn tamanho_origem(&self) -> u64 {
+        self.pedido.tamanho
+    }
+
+    pub(crate) fn tem_hash_origem(&self) -> bool {
+        self.pedido.sha256.is_some()
+    }
+
     pub fn com_modo(mut self, modo: ModoDocumento) -> Self {
         self.pedido.modo = modo;
         self

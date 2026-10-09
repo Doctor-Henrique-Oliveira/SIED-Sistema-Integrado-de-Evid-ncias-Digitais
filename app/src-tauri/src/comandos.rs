@@ -695,6 +695,54 @@ pub async fn indexar_visual(
     .await
 }
 
+/// Executa um provider de visão configurado localmente. O provider recebe
+/// somente a origem resolvida pelo inventário e devolve candidatos com regiões;
+/// nenhum resultado é tratado como conclusão pericial.
+#[tauri::command]
+pub async fn analisar_visual_local(
+    app_handle: AppHandle,
+    caso_id: CasoId,
+    arquivo_id: i64,
+) -> ResultadoApp<crate::visao_local::ResultadoVisaoLocal> {
+    let guarda = DOCUMENTOS.iniciar(caso_id)?;
+    em_segundo_plano(app_handle, move |estado| {
+        let leitura = estado.com(|s| s.pedido_documento(arquivo_id, caso_id))?;
+        let caminho = leitura.caminho_absoluto().ok_or_else(|| {
+            ErroApp::novo(
+                CodigoErro::NaoSuportado,
+                "o motor visual local só pode ler uma imagem regular fora de contêineres",
+            )
+        })?;
+        if !leitura.tem_hash_origem() {
+            return Err(ErroApp::novo(
+                CodigoErro::Integridade,
+                "o inventário não contém SHA-256 conferível para esta imagem",
+            ));
+        }
+        if leitura.tamanho_origem() > 16 * 1024 * 1024 {
+            return Err(ErroApp::novo(
+                CodigoErro::Validacao,
+                "a imagem excede o limite de 16 MiB do provider visual local",
+            ));
+        }
+        let extensao = caminho
+            .extension()
+            .and_then(|x| x.to_str())
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        if !matches!(extensao.as_str(), "png" | "jpg" | "jpeg") {
+            return Err(ErroApp::novo(
+                CodigoErro::NaoSuportado,
+                "o motor visual local admite somente PNG e JPEG neste estágio",
+            ));
+        }
+        let resultado = crate::visao_local::executar(&caminho, guarda.controle())?;
+        guarda.finalizar()?;
+        Ok(resultado)
+    })
+    .await
+}
+
 #[tauri::command]
 pub async fn semelhantes_visuais(
     app_handle: AppHandle,

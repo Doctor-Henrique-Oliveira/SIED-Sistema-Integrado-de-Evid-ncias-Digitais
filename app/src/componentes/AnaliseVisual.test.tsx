@@ -15,10 +15,11 @@ const semelhantes = { referencia: visual, descritores_examinados: 2, varredura_l
   { arquivo_id: 18, extracao_id: extracaoId, caminho: "imagens/COPIA-SINTETICA.png", sha256: arquivo.sha256, mecanismo: "sha256_exato", distancia_bits: null, score_tecnico: null },
   { arquivo_id: 19, extracao_id: extracaoId, caminho: "imagens/PROXIMA-SINTETICA.png", sha256: "ef".repeat(32), mecanismo: "dhash64_candidato", distancia_bits: 3, score_tecnico: 61 / 64 },
 ] } as ResultadoSimilarVisual;
+const visao = { motor_id: "modelo-sintetico-local", motor_versao: "1", observacao: "Candidato sintético para revisão.", regioes: [{ rotulo: "objeto candidato", confianca: 0.87, x: 0.1, y: 0.2, largura: 0.4, altura: 0.5, mecanismo: "modelo-sintetico-local", versao: "1" }] };
 
 beforeEach(() => {
   vi.mocked(invoke).mockReset();
-  vi.mocked(invoke).mockImplementation((comando) => comando === "indexar_visual" ? Promise.resolve(visual) : comando === "semelhantes_visuais" ? Promise.resolve(semelhantes) : Promise.reject(new Error("Comando não previsto no teste SINTÉTICO.")));
+  vi.mocked(invoke).mockImplementation((comando) => comando === "indexar_visual" ? Promise.resolve(visual) : comando === "semelhantes_visuais" ? Promise.resolve(semelhantes) : comando === "analisar_visual_local" ? Promise.resolve(visao) : Promise.reject(new Error("Comando não previsto no teste SINTÉTICO.")));
 });
 
 describe("análise visual local", () => {
@@ -44,6 +45,16 @@ describe("análise visual local", () => {
     await userEvent.click(screen.getByRole("button", { name: "Analisar imagem" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("não corresponde à imagem selecionada");
     expect(screen.queryByRole("button", { name: "Buscar semelhantes no caso" })).not.toBeInTheDocument();
+  });
+
+  it("mostra candidatos de regiões com confiança e mecanismo", async () => {
+    render(<MemoryRouter><AnaliseVisual caso={caso} extracaoId={extracaoId} arquivo={arquivo} /></MemoryRouter>);
+    await userEvent.click(screen.getByRole("button", { name: "Classificar/detectar local" }));
+    expect(invoke).toHaveBeenCalledWith("analisar_visual_local", { casoId: caso.id, arquivoId: arquivo.id });
+    const lista = await screen.findByRole("list", { name: "Regiões candidatas" });
+    expect(within(lista).getByText("objeto candidato")).toBeInTheDocument();
+    expect(within(lista).getByText("87.0%")).toBeInTheDocument();
+    expect(within(lista).getByText(/modelo-sintetico-local/)).toBeInTheDocument();
   });
 
   it("explica por que imagem sem hash ou acima de 2 MiB não pode ser indexada", () => {
