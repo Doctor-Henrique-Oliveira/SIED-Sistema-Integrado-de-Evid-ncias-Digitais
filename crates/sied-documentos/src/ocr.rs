@@ -11,6 +11,7 @@ use std::time::Instant;
 pub const MOTOR_ID: &str = "windows_media_ocr";
 pub const MOTOR_VERSAO: &str = "1.0.0";
 pub const TAMANHO_MAXIMO_ORIGEM: u64 = 64 * 1024 * 1024;
+pub const MAXIMO_REGIOES: usize = 50_000;
 
 pub(crate) const fn disponivel() -> bool {
     cfg!(windows)
@@ -169,6 +170,12 @@ mod windows_impl {
             .map_err(|_| falha("O motor OCR retornou uma coleção inválida."))?
         {
             if indice_linha > 0 {
+                if texto.len() >= crate::TAMANHO_MAXIMO as usize {
+                    return Err(Box::new(ResultadoDocumento::sem(
+                        EstadoDocumento::LimiteExcedido,
+                        "O texto derivado excede o limite de 2 MiB deste incremento.",
+                    )));
+                }
                 texto.push('\n');
             }
             let linha = linhas
@@ -177,13 +184,11 @@ mod windows_impl {
             let palavras = linha
                 .Words()
                 .map_err(|_| falha("Uma linha OCR contém palavras inválidas."))?;
+            let mut palavras_publicadas = 0_u32;
             for indice_palavra in 0..palavras
                 .Size()
                 .map_err(|_| falha("O motor OCR retornou palavras inválidas."))?
             {
-                if indice_palavra > 0 {
-                    texto.push(' ');
-                }
                 let palavra = palavras
                     .GetAt(indice_palavra)
                     .map_err(|_| falha("Uma palavra OCR não pôde ser lida."))?;
@@ -191,9 +196,28 @@ mod windows_impl {
                     .Text()
                     .map_err(|_| falha("Uma palavra OCR não contém texto válido."))?
                     .to_string_lossy();
+                if literal.is_empty() {
+                    continue;
+                }
+                if palavras_publicadas > 0 {
+                    if texto.len() >= crate::TAMANHO_MAXIMO as usize {
+                        return Err(Box::new(ResultadoDocumento::sem(
+                            EstadoDocumento::LimiteExcedido,
+                            "O texto derivado excede o limite de 2 MiB deste incremento.",
+                        )));
+                    }
+                    texto.push(' ');
+                }
+                if texto.len().saturating_add(literal.len()) > crate::TAMANHO_MAXIMO as usize {
+                    return Err(Box::new(ResultadoDocumento::sem(
+                        EstadoDocumento::LimiteExcedido,
+                        "O texto derivado excede o limite de 2 MiB deste incremento.",
+                    )));
+                }
                 let inicio_utf8 = u32::try_from(texto.len())
                     .map_err(|_| falha("O texto OCR excede o limite publicável."))?;
                 texto.push_str(&literal);
+                palavras_publicadas += 1;
                 let fim_utf8 = u32::try_from(texto.len())
                     .map_err(|_| falha("O texto OCR excede o limite publicável."))?;
                 let caixa = palavra
@@ -203,17 +227,27 @@ mod windows_impl {
                 let y = caixa.Y.max(0.0).floor().min(altura as f32) as u32;
                 let direita = (caixa.X + caixa.Width).max(0.0).ceil().min(largura as f32) as u32;
                 let base = (caixa.Y + caixa.Height).max(0.0).ceil().min(altura as f32) as u32;
-                regioes.push(RegiaoTexto {
-                    ordem: regioes.len() as u32,
-                    inicio_utf8,
-                    fim_utf8,
-                    texto: literal,
-                    x,
-                    y,
-                    largura: direita.saturating_sub(x),
-                    altura: base.saturating_sub(y),
-                    confianca: None,
-                });
+                // O motor pode devolver uma caixa degenerada junto de texto útil.
+                // Preservamos o texto, mas nunca publicamos uma geometria sem área.
+                if direita > x && base > y {
+                    if regioes.len() >= MAXIMO_REGIOES {
+                        return Err(Box::new(ResultadoDocumento::sem(
+                            EstadoDocumento::LimiteExcedido,
+                            "O OCR excede o limite de 50.000 regiões deste incremento.",
+                        )));
+                    }
+                    regioes.push(RegiaoTexto {
+                        ordem: regioes.len() as u32,
+                        inicio_utf8,
+                        fim_utf8,
+                        texto: literal,
+                        x,
+                        y,
+                        largura: direita - x,
+                        altura: base - y,
+                        confianca: None,
+                    });
+                }
             }
         }
         Ok(SaidaOcr {
