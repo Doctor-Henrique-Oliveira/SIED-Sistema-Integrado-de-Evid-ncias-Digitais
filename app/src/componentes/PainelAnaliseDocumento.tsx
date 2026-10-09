@@ -28,7 +28,7 @@ function metadadosOcr(documento: DocumentoIndexado) {
   return { largura, altura, total };
 }
 
-function paginaRegioesCompativel(valor: unknown, documento: DocumentoIndexado, largura: number, altura: number, total: number): PaginaRegioes | null {
+function paginaRegioesCompativel(valor: unknown, documento: DocumentoIndexado, largura: number, altura: number, total: number, deslocamento: number): PaginaRegioes | null {
   if (typeof valor !== "object" || valor === null) return null;
   const candidata = valor as { total?: unknown; itens?: unknown };
   if (candidata.total !== total || !Array.isArray(candidata.itens) || candidata.itens.length > 100) return null;
@@ -39,7 +39,7 @@ function paginaRegioesCompativel(valor: unknown, documento: DocumentoIndexado, l
     if (typeof desconhecida !== "object" || desconhecida === null) return null;
     const r = desconhecida as RegiaoOcr;
     if (!Number.isSafeInteger(r.id) || r.id <= 0 || ids.has(r.id) || r.documento_id !== documento.id ||
-      !Number.isSafeInteger(r.ordem) || r.ordem < 0 || !Number.isSafeInteger(r.inicio_utf8) ||
+      !Number.isSafeInteger(r.ordem) || r.ordem < deslocamento || r.ordem >= deslocamento + 100 || !Number.isSafeInteger(r.inicio_utf8) ||
       !Number.isSafeInteger(r.fim_utf8) || r.inicio_utf8 < 0 || r.fim_utf8 <= r.inicio_utf8 || r.fim_utf8 > bytes.length ||
       typeof r.texto !== "string" || ![r.x, r.y].every((n) => Number.isSafeInteger(n) && n >= 0) ||
       ![r.largura, r.altura].every((n) => Number.isSafeInteger(n) && n > 0) ||
@@ -109,11 +109,16 @@ function SessaoAnalise({ caso, documento, exibirTexto }: { caso: Caso; documento
   useEffect(() => {
     let atual = true;
     setPaginaRegioes(null); setErroRegioes(null); setRegiaoSelecionada(null);
-    if (ocr.total === 0 || ocr.largura === null || ocr.altura === null) { setCarregandoRegioes(false); return; }
+    if (ocr.total === 0) { setCarregandoRegioes(false); return; }
+    if (ocr.largura === null || ocr.altura === null) {
+      setCarregandoRegioes(false);
+      setErroRegioes("O snapshot OCR informa regiões sem dimensões válidas da página.");
+      return;
+    }
     setCarregandoRegioes(true);
     void api.regioesDocumento(caso.id, documento.id, deslocamentoRegioes, 100).then((retorno) => {
       if (!atual || !ativa.current) return;
-      const pagina = paginaRegioesCompativel(retorno, documento, ocr.largura!, ocr.altura!, ocr.total);
+      const pagina = paginaRegioesCompativel(retorno, documento, ocr.largura!, ocr.altura!, ocr.total, deslocamentoRegioes);
       if (pagina === null) {
         setErroRegioes("As regiões recebidas não correspondem ao documento ou à paginação solicitada.");
         return;
