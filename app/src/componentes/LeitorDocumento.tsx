@@ -50,12 +50,14 @@ function SessaoLeitura({ caso, extracaoId, arquivo }: Props) {
   useEffect(() => {
     ativa.current = true;
     return () => {
+      const cancelar = operacaoAtiva.current;
       ativa.current = false;
       pausaSolicitada.current = true;
       operacaoAtiva.current = false;
       tentativa.current += 1;
+      if (cancelar) void api.cancelarDocumento(caso.id).catch(() => undefined);
     };
-  }, []);
+  }, [caso.id]);
 
   const pdf = extensao(arquivo.caminho) === "pdf";
   const ocr = modo === "ocr";
@@ -63,6 +65,8 @@ function SessaoLeitura({ caso, extracaoId, arquivo }: Props) {
   const modoDisponivel = ocr ? (pdf || imagem) : (pdf || EXTENSOES_TEXTO.has(extensao(arquivo.caminho)));
   const limiteAtual = ocr ? LIMITE_BYTES_OCR : LIMITE_BYTES;
   const disponivel = suportado && modoDisponivel && !!arquivo.sha256 && arquivo.tamanho <= limiteAtual;
+  const lendo = leitura.estado === "carregando";
+  const operando = lendo || indexando;
 
   async function ler(pagina = paginaSelecionada) {
     if (!disponivel || leitura.estado === "carregando" || indexando) return;
@@ -71,6 +75,7 @@ function SessaoLeitura({ caso, extracaoId, arquivo }: Props) {
     setPaginaSelecionada(pagina);
     setIndexado(null); setErroIndexacao(null); setAvisoCancelamento(null);
     setFila(null);
+    operacaoAtiva.current = true;
     setLeitura({ estado: "carregando" });
     try {
       const resultado = pdf
@@ -105,17 +110,26 @@ function SessaoLeitura({ caso, extracaoId, arquivo }: Props) {
     } catch (erro) {
       if (!ativa.current || tentativa.current !== atual) return;
       setLeitura({ estado: "erro", mensagem: erro instanceof Error ? erro.message : "Não foi possível ler o documento. Tente novamente." });
+    } finally {
+      if (ativa.current && tentativa.current === atual) {
+        operacaoAtiva.current = false; setCancelando(false);
+      }
     }
   }
 
   function ocultar() {
-    // Apenas fecha a apresentação: não afirma cancelar uma operação do backend.
+    // Fecha a apresentação e pede encerramento cooperativo quando ainda há uma
+    // leitura/indexação em curso; a conclusão real continua sendo decidida pelo
+    // backend e não é afirmada pela UI.
+    const cancelar = operacaoAtiva.current;
     tentativa.current += 1;
+    operacaoAtiva.current = false;
     setPaginaSelecionada(1);
     setTotalPaginas(null);
     setIndexado(null); setErroIndexacao(null); setIndexando(false); setAvisoCancelamento(null);
     setFila(null);
     setLeitura({ estado: "inicial" });
+    if (cancelar) void api.cancelarDocumento(caso.id).catch(() => undefined);
   }
 
   const resultado = leitura.estado === "resultado" ? leitura.resultado : null;
@@ -198,8 +212,8 @@ function SessaoLeitura({ caso, extracaoId, arquivo }: Props) {
     setFila((atual) => atual && atual.estado === "ativa" ? { ...atual, estado: "pausando" } : atual);
   }
 
-  async function cancelarIndexacao() {
-    if (!indexando || cancelando) return;
+  async function cancelarOperacao() {
+    if (!operando || cancelando) return;
     const atual = tentativa.current;
     if (fila) pausarFila();
     setCancelando(true);
@@ -208,7 +222,7 @@ function SessaoLeitura({ caso, extracaoId, arquivo }: Props) {
       if (!ativa.current || tentativa.current !== atual || !operacaoAtiva.current) return;
       setAvisoCancelamento(solicitado
         ? "Cancelamento solicitado. Aguardando o encerramento cooperativo da operação."
-        : "Não há operação documental ativa para cancelar. Aguardando o retorno da indexação.");
+        : "Não há operação documental ativa para cancelar. Aguardando o retorno da operação.");
     } catch (erro) {
       if (ativa.current && tentativa.current === atual && operacaoAtiva.current) setAvisoCancelamento(erro instanceof Error ? erro.message : "Não foi possível solicitar o cancelamento.");
     } finally {
@@ -234,10 +248,10 @@ function SessaoLeitura({ caso, extracaoId, arquivo }: Props) {
         <>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             {pdf && <>
-              <Botao variante={modo === "automatico" ? "secundario" : "fantasma"} tamanho="p" onClick={() => { ocultar(); setModo("automatico"); }} disabled={indexando}>Texto nativo</Botao>
-              <Botao variante={modo === "ocr" ? "secundario" : "fantasma"} tamanho="p" onClick={() => { ocultar(); setModo("ocr"); }} disabled={indexando}>OCR local</Botao>
+              <Botao variante={modo === "automatico" ? "secundario" : "fantasma"} tamanho="p" onClick={() => { ocultar(); setModo("automatico"); }} disabled={operando}>Texto nativo</Botao>
+              <Botao variante={modo === "ocr" ? "secundario" : "fantasma"} tamanho="p" onClick={() => { ocultar(); setModo("ocr"); }} disabled={operando}>OCR local</Botao>
             </>}
-            <Botao icone="documento" tamanho="p" onClick={() => void ler()} disabled={!disponivel || indexando} carregando={leitura.estado === "carregando"}>
+            <Botao icone="documento" tamanho="p" onClick={() => void ler()} disabled={!disponivel || operando} carregando={lendo}>
               {texto ? (ocr ? "Conferir e reprocessar" : "Conferir e reler") : ocr ? "Executar OCR" : "Ler documento"}
             </Botao>
             {aberta && <Botao variante="fantasma" tamanho="p" onClick={ocultar} disabled={indexando}>Ocultar leitura</Botao>}
@@ -263,7 +277,11 @@ function SessaoLeitura({ caso, extracaoId, arquivo }: Props) {
         </nav>
       )}
 
-      {leitura.estado === "carregando" && <Carregando texto="Lendo e conferindo a origem do documento…" />}
+      {lendo && <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+        <Carregando texto={ocr ? "Executando OCR local e conferindo a origem…" : "Lendo e conferindo a origem do documento…"} />
+        <Botao tamanho="p" variante="fantasma" onClick={() => void cancelarOperacao()} carregando={cancelando}>Solicitar cancelamento</Botao>
+      </div>}
+      {avisoCancelamento && !texto && <p role="status" className="mt-2 text-xs text-texto-2">{avisoCancelamento}</p>}
       {leitura.estado === "erro" && <div className="mt-3"><Aviso>{leitura.mensagem}</Aviso></div>}
       {resultado && resultado.estado !== "pronto" && (
         <div className="mt-3">
@@ -312,7 +330,7 @@ function SessaoLeitura({ caso, extracaoId, arquivo }: Props) {
               {pdf && totalPaginas !== null && totalPaginas > 1 && <Botao tamanho="p" variante="secundario" disabled={indexando} onClick={() => void indexarTodas()}>Indexar todas as páginas</Botao>}
               {fila && (fila.estado === "pausada" || fila.estado === "erro") && <Botao tamanho="p" variante="secundario" disabled={indexando} onClick={() => void indexarTodas(fila.proxima, fila.concluidas)}>Continuar fila</Botao>}
               {fila?.estado === "ativa" && <Botao tamanho="p" variante="fantasma" onClick={pausarFila}>Pausar após esta página</Botao>}
-              {indexando && <Botao tamanho="p" variante="fantasma" onClick={() => void cancelarIndexacao()} carregando={cancelando}>Solicitar cancelamento</Botao>}
+              {indexando && <Botao tamanho="p" variante="fantasma" onClick={() => void cancelarOperacao()} carregando={cancelando}>Solicitar cancelamento</Botao>}
             </div>
             <p className="mt-1 text-xs leading-relaxed text-texto-3">Ação explícita: o backend relê e confere a origem antes de armazenar texto e candidatos para busca/revisão. Não cria evidência nem altera relatórios.</p>
             {avisoCancelamento && <p role="status" className="mt-2 text-xs text-texto-2">{avisoCancelamento}</p>}

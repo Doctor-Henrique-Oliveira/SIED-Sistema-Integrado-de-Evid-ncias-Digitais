@@ -280,7 +280,8 @@ describe("leitor documental local", () => {
   it("descarta resultado antigo ao trocar arquivo e preserva a leitura mais recente", async () => {
     const antiga = promessa();
     const nova = promessa();
-    vi.mocked(invoke).mockReturnValueOnce(antiga.resultado).mockReturnValueOnce(nova.resultado);
+    const leituras = [antiga.resultado, nova.resultado];
+    vi.mocked(invoke).mockImplementation((comando) => comando === "ler_documento" ? leituras.shift()! : Promise.resolve(true));
     const tela = montar();
     await userEvent.click(screen.getByRole("button", { name: "Ler documento" }));
     const novoArquivo = { ...arquivo, id: 28, caminho: "documentos/SEGUNDO-SINTETICO.txt" };
@@ -303,12 +304,13 @@ describe("leitor documental local", () => {
     expect(screen.getByRole("button", { name: "Ler documento" })).toBeEnabled();
   });
 
-  it("ocultar leitura descarta sucesso ou falha tardia sem afirmar cancelamento do backend", async () => {
+  it("ocultar leitura descarta sucesso ou falha tardia e pede cancelamento cooperativo", async () => {
     const antiga = promessa();
     vi.mocked(invoke).mockReturnValue(antiga.resultado);
     montar();
     await userEvent.click(screen.getByRole("button", { name: "Ler documento" }));
     await userEvent.click(screen.getByRole("button", { name: "Ocultar leitura" }));
+    expect(invoke).toHaveBeenCalledWith("cancelar_documento", { casoId: caso.id });
     await act(async () => antiga.recusar({ codigo: "sem_caso", mensagem: "FALHA ANTIGA", campos: [] }));
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
@@ -450,7 +452,8 @@ describe("leitura nativa de PDF por página", () => {
 
   it("ocultar reinicia a primeira página e descarta uma página tardia de uma sessão anterior", async () => {
     const antiga = promessa();
-    vi.mocked(invoke).mockResolvedValueOnce(paginaPronta(1)).mockReturnValueOnce(antiga.resultado).mockResolvedValueOnce(paginaPronta(1, "PRIMEIRA PÁGINA NOVA"));
+    const leituras = [Promise.resolve(paginaPronta(1)), antiga.resultado, Promise.resolve(paginaPronta(1, "PRIMEIRA PÁGINA NOVA"))];
+    vi.mocked(invoke).mockImplementation((comando) => comando === "ler_documento" ? leituras.shift()! : Promise.resolve(true));
     montar(pdfArquivo);
     await userEvent.click(screen.getByRole("button", { name: "Ler documento" }));
     await screen.findByRole("region", { name: "Texto documental" });
@@ -458,7 +461,8 @@ describe("leitura nativa de PDF por página", () => {
     await userEvent.click(screen.getByRole("button", { name: "Ocultar leitura" }));
     expect(screen.queryByRole("navigation", { name: "Páginas do documento" })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Ler documento" }));
-    expect(invoke).toHaveBeenNthCalledWith(3, "ler_documento", { arquivoId: 27, casoId: caso.id, pagina: 1 });
+    expect(vi.mocked(invoke).mock.calls.filter(([comando]) => comando === "ler_documento")).toHaveLength(3);
+    expect(vi.mocked(invoke).mock.calls.filter(([comando]) => comando === "ler_documento")[2]).toEqual(["ler_documento", { arquivoId: 27, casoId: caso.id, pagina: 1 }]);
     await screen.findByText("PRIMEIRA PÁGINA NOVA");
     await act(async () => antiga.resolver(paginaPronta(2, "PÁGINA TARDIA DESCARTADA")));
     expect(screen.queryByText("PÁGINA TARDIA DESCARTADA")).not.toBeInTheDocument();
@@ -468,7 +472,8 @@ describe("leitura nativa de PDF por página", () => {
   it("trocar de caso reinicia paginação e descarta uma página tardia do caso anterior", async () => {
     const antiga = promessa();
     const outroCaso = { ...caso, id: "outro-caso-pdf-sintetico" };
-    vi.mocked(invoke).mockResolvedValueOnce(paginaPronta(1)).mockReturnValueOnce(antiga.resultado).mockResolvedValueOnce(paginaPronta(1, "PDF DO CASO NOVO", { caso_id: outroCaso.id, total_paginas: 1 }));
+    const leituras = [Promise.resolve(paginaPronta(1)), antiga.resultado, Promise.resolve(paginaPronta(1, "PDF DO CASO NOVO", { caso_id: outroCaso.id, total_paginas: 1 }))];
+    vi.mocked(invoke).mockImplementation((comando) => comando === "ler_documento" ? leituras.shift()! : Promise.resolve(true));
     const tela = montar(pdfArquivo);
     await userEvent.click(screen.getByRole("button", { name: "Ler documento" }));
     await screen.findByRole("region", { name: "Texto documental" });
@@ -476,7 +481,8 @@ describe("leitura nativa de PDF por página", () => {
     tela.rerender(<LeitorDocumento caso={outroCaso} extracaoId="extracao-sintetica" arquivo={pdfArquivo} />);
     expect(screen.queryByRole("navigation", { name: "Páginas do documento" })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Ler documento" }));
-    expect(invoke).toHaveBeenNthCalledWith(3, "ler_documento", { arquivoId: 27, casoId: outroCaso.id, pagina: 1 });
+    expect(vi.mocked(invoke).mock.calls.filter(([comando]) => comando === "ler_documento")).toHaveLength(3);
+    expect(vi.mocked(invoke).mock.calls.filter(([comando]) => comando === "ler_documento")[2]).toEqual(["ler_documento", { arquivoId: 27, casoId: outroCaso.id, pagina: 1 }]);
     expect(await screen.findByRole("navigation", { name: "Páginas do documento" })).toHaveTextContent("1 de 1");
     await act(async () => antiga.resolver(paginaPronta(2, "PDF DE OUTRO CASO DESCARTADO")));
     expect(screen.queryByText("PDF DE OUTRO CASO DESCARTADO")).not.toBeInTheDocument();

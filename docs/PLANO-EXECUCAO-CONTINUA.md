@@ -40,7 +40,9 @@ Uma etapa só muda para `CONCLUÍDA` quando seus critérios forem atendidos no c
 
 Branch de trabalho: `feat/e01-ocr-local-documentos`. O motor local Windows,
 persistência append-only, pesquisa, salto da ocorrência encontrada para sua
-região, mapa de bounding boxes e paginação real das regiões estão integrados.
+região, mapa de bounding boxes, paginação real das regiões e cancelamento
+cooperativo visível durante leitura/indexação estão integrados. Ao sair da
+tela, a operação documental ativa também recebe pedido de cancelamento.
 Fixtures Windows de imagem e PDF sintéticos exigem o
 motor real e falham explicitamente sem idioma OCR; a etapa só será marcada como
 concluída após sua execução, contratos Rust, testes multiplataforma e validação

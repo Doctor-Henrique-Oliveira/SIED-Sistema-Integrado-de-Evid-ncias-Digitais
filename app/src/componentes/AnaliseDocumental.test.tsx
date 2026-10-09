@@ -75,6 +75,35 @@ describe("indexação explícita no leitor", () => {
     expect(screen.queryByRole("region", { name: "Texto documental armazenado" })).not.toBeInTheDocument();
     expect(vi.mocked(invoke).mock.calls.some(([comando]) => comando === "adicionar_evidencia" || comando === "gerar_relatorio")).toBe(false);
   });
+  it("permite solicitar cancelamento durante OCR e apresenta somente o estado confirmado pelo backend", async () => {
+    const trabalho = pendente<ResultadoDocumento>();
+    const imagem = { ...arquivo, caminho: "imagens/OCR-SINTETICO.png", mime: "image/png" };
+    vi.mocked(invoke).mockImplementation((comando) => {
+      if (comando === "ler_documento") return trabalho.promessa;
+      if (comando === "cancelar_documento") return Promise.resolve(true);
+      return Promise.reject(new Error(`Comando sintético inesperado: ${comando}`));
+    });
+    render(<LeitorDocumento caso={caso} extracaoId={documento.extracao_id} arquivo={imagem} />);
+    await userEvent.click(screen.getByRole("button", { name: "Executar OCR" }));
+    expect(screen.getByText("Executando OCR local e conferindo a origem…")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Solicitar cancelamento" }));
+    expect(invoke).toHaveBeenCalledWith("cancelar_documento", { casoId: caso.id });
+    expect(await screen.findByText(/Cancelamento solicitado\. Aguardando o encerramento cooperativo/)).toBeInTheDocument();
+    expect(screen.queryByText("Documento não exibido")).not.toBeInTheDocument();
+    await act(async () => trabalho.resolver({ estado: "cancelado", texto: null, motivo: "A análise do documento foi cancelada." }));
+    expect(await screen.findByText("Documento não exibido")).toBeInTheDocument();
+    expect(screen.getByText("Estado: cancelado")).toBeInTheDocument();
+  });
+  it("solicita cancelamento cooperativo ao sair durante uma operação documental", async () => {
+    const trabalho = pendente<ResultadoDocumento>();
+    vi.mocked(invoke).mockImplementation((comando) => comando === "ler_documento"
+      ? trabalho.promessa
+      : Promise.resolve(true));
+    const tela = render(<LeitorDocumento caso={caso} extracaoId={documento.extracao_id} arquivo={arquivo} />);
+    await userEvent.click(screen.getByRole("button", { name: "Ler documento" }));
+    tela.unmount();
+    expect(invoke).toHaveBeenCalledWith("cancelar_documento", { casoId: caso.id });
+  });
   it("não duplica indexação e descreve cancelamento solicitado sem alegar reversão concluída", async () => {
     const trabalho = pendente<DocumentoIndexado>(); respostas(trabalho.promessa);
     render(<LeitorDocumento caso={caso} extracaoId={documento.extracao_id} arquivo={arquivo} />);
