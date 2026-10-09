@@ -197,6 +197,9 @@ Branches não são apagadas.
   `.eml`. Todos exigem esquema/formato reconhecível e preservam os valores de origem; RCS, bancos
   de contatos do iOS, formatos proprietários de e-mail e extensões avançadas do WhatsApp continuam
   sem parser até haver contrato/amostra suficiente.
+- A análise da instalação Avilla Forensics e das telas de cadeia de custódia, criação de caso e
+  workspace foi registrada em `docs/INTEGRACAO-AVILLA-SIED.md`. O documento define o mapeamento
+  conceitual para o SIED e os limites de segurança para uma futura importação de aquisições.
 
 **Extração**
 - Tela da extração com resumo, inventário, registros e visão técnica da origem de cada registro.
