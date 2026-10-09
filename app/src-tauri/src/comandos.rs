@@ -31,6 +31,7 @@ use sied_armazenamento::pesquisa_local::{
 };
 use sied_armazenamento::relatorios::{ConferenciaPastaRelatorios, RelatorioRegistrado};
 use sied_armazenamento::resumo::{Identificador, ResumoCaso};
+use sied_armazenamento::transcricoes::{SegmentoTranscricao, TranscricaoLocal};
 use sied_armazenamento::CasoCatalogado;
 use sied_documentos::{ModoDocumento, ResultadoDocumento};
 use sied_dominio::{CasoId, Dispositivo, DispositivoId, ExtracaoId, NovoCaso, NovoDispositivo};
@@ -491,6 +492,56 @@ pub async fn indexar_documento(
 #[tauri::command]
 pub async fn cancelar_documento(caso_id: CasoId) -> ResultadoApp<bool> {
     DOCUMENTOS.cancelar(caso_id)
+}
+
+/// Executa o provedor local sobre uma mídia do inventário. O comando não recebe
+/// caminho, texto ou hash do frontend; tudo é resolvido no caso aberto.
+#[tauri::command]
+pub async fn transcrever_local(
+    app_handle: AppHandle,
+    arquivo_id: i64,
+    caso_id: CasoId,
+) -> ResultadoApp<TranscricaoLocal> {
+    let guarda = crate::transcricao::TRANSCRICOES.iniciar(caso_id)?;
+    em_segundo_plano(app_handle, move |estado| {
+        let leitura = estado.com(|s| s.pedido_transcricao(arquivo_id, caso_id))?;
+        let novo = crate::transcricao::executar(leitura, guarda.controle())?;
+        estado.com(|s| crate::transcricao::persistir(s, novo, &guarda))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn cancelar_transcricao(caso_id: CasoId) -> ResultadoApp<bool> {
+    crate::transcricao::TRANSCRICOES.cancelar(caso_id)
+}
+
+#[tauri::command]
+pub async fn listar_transcricoes(
+    app_handle: AppHandle,
+    caso_id: CasoId,
+    arquivo_id: i64,
+) -> ResultadoApp<Vec<TranscricaoLocal>> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.listar_transcricoes(caso_id, arquivo_id))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn segmentos_transcricao(
+    app_handle: AppHandle,
+    caso_id: CasoId,
+    transcricao_id: i64,
+    deslocamento: i64,
+    limite: i64,
+    termo: Option<String>,
+) -> ResultadoApp<Pagina<SegmentoTranscricao>> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado
+            .com(|s| s.segmentos_transcricao(caso_id, transcricao_id, deslocamento, limite, termo))
+    })
+    .await
 }
 
 #[tauri::command]

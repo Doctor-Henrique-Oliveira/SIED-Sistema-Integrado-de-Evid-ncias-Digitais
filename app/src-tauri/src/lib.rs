@@ -15,6 +15,7 @@ mod documentos;
 mod erro;
 mod log;
 mod servico;
+mod transcricao;
 
 use sied_armazenamento::Sessao;
 use std::path::PathBuf;
@@ -118,6 +119,10 @@ pub fn executar() {
             comandos::ler_documento,
             comandos::indexar_documento,
             comandos::cancelar_documento,
+            comandos::transcrever_local,
+            comandos::cancelar_transcricao,
+            comandos::listar_transcricoes,
+            comandos::segmentos_transcricao,
             comandos::buscar_documentos,
             comandos::pesquisar_universal,
             comandos::contexto_relacoes,

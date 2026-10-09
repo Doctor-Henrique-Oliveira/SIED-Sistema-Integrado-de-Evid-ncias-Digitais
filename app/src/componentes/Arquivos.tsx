@@ -17,6 +17,7 @@ import { Icone, type NomeIcone } from "./Icone";
 import { MiniaturaArquivo, SobreMiniatura } from "./Miniatura";
 import { LeitorDocumento } from "./LeitorDocumento";
 import { AnaliseVisual } from "./AnaliseVisual";
+import { TranscricaoLocal } from "./TranscricaoLocal";
 
 export const iconeCategoria: Record<string, NomeIcone> = {
   banco_sqlite: "banco",
@@ -123,6 +124,7 @@ function DetalheArquivo({ caso, extracaoId, f, parser, fechar, documental, pagin
       {documental && <LeitorDocumento caso={caso} extracaoId={extracaoId} arquivo={f}
         paginaInicial={paginaSolicitada !== undefined && Number.isSafeInteger(paginaSolicitada) && paginaSolicitada >= 1 && paginaSolicitada <= 512 ? paginaSolicitada : undefined} />}
       {f.categoria === "imagem" && <AnaliseVisual caso={caso} extracaoId={extracaoId} arquivo={f} />}
+      {(f.categoria === "audio" || f.categoria === "video") && <TranscricaoLocal caso={caso} arquivo={f} />}
     </Cartao>
   );
 }

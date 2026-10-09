@@ -54,11 +54,11 @@ Entregar OCR totalmente local para imagens e PDFs digitalizados, com página, re
 
 ### E02 — Transcrição local de áudio e vídeo
 
-**Status: PENDENTE**
+**Status: EM ANDAMENTO (núcleo persistente e pesquisa de segmentos implementados; provedor de fala ainda depende de engine local configurada)**
 
 Adicionar motor offline, extração segura de áudio, segmentos com timestamps, idioma/motor/versão, cancelamento, cache e pesquisa dentro da transcrição. Integrar resultado à origem, mídia, busca, timeline, evidências e relatório.
 
-**Concluída quando:** mídia sintética é transcrita localmente; clicar num trecho abre o instante correspondente; busca e relatório preservam timestamps e proveniência; nenhuma rede é usada.
+**Concluída quando:** mídia sintética é transcrita localmente; clicar num trecho abre o instante correspondente; busca e relatório preservam timestamps e proveniência; nenhuma rede é usada. O checkpoint atual já aceita sidecars SRT/VTT conferidos e deixa explícita a ausência de um motor de fala quando não configurado; ainda falta um provedor offline de áudio/vídeo e a navegação de playback/timestamps no relatório.
 
 ### E03 — Embeddings locais e busca híbrida real
 

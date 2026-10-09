@@ -94,6 +94,7 @@ import type { DatasetSupervisionado } from "./tipos/DatasetSupervisionado";
 import type { PedidoAmostraSupervisionada } from "./tipos/PedidoAmostraSupervisionada";
 import type { AmostraSupervisionada } from "./tipos/AmostraSupervisionada";
 import type { AvaliacaoSupervisionada } from "./tipos/AvaliacaoSupervisionada";
+import type { PaginaTranscricao, SegmentoTranscricao, TranscricaoLocal } from "./transcricao";
 
 export type {
   MecanismoUniversal,
@@ -111,6 +112,9 @@ export type {
   PedidoAmostraSupervisionada,
   AmostraSupervisionada,
   AvaliacaoSupervisionada,
+  TranscricaoLocal,
+  SegmentoTranscricao,
+  PaginaTranscricao,
   PedidoDescoberta,
   ResultadoDescoberta,
   AchadoDescoberta,
@@ -313,6 +317,13 @@ export const api = {
     chamar<Pagina<RevisaoEntidade>>("revisoes_entidade", { casoId, entidadeId, deslocamento, limite }),
   /** Sinal cooperativo; true não significa que a operação já terminou ou foi revertida. */
   cancelarDocumento: (casoId: CasoId) => chamar<boolean>("cancelar_documento", { casoId }),
+  transcreverLocal: (casoId: CasoId, arquivoId: number) =>
+    chamar<TranscricaoLocal>("transcrever_local", { casoId, arquivoId }),
+  cancelarTranscricao: (casoId: CasoId) => chamar<boolean>("cancelar_transcricao", { casoId }),
+  listarTranscricoes: (casoId: CasoId, arquivoId: number) =>
+    chamar<TranscricaoLocal[]>("listar_transcricoes", { casoId, arquivoId }),
+  segmentosTranscricao: (casoId: CasoId, transcricaoId: number, deslocamento: number, limite: number, termo?: string) =>
+    chamar<PaginaTranscricao>("segmentos_transcricao", { casoId, transcricaoId, deslocamento, limite, termo: termo?.trim() || null }),
   /** Descritor estrutural local com origem conferida; não detecção/classificação de objetos. */
   indexarVisual: (casoId: CasoId, arquivoId: number) =>
     chamar<VisualIndexado>("indexar_visual", { casoId, arquivoId }),
