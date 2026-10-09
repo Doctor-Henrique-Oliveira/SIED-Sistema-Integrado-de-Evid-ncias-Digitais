@@ -345,6 +345,14 @@ describe("leitura nativa de PDF por página", () => {
     expect(await screen.findByRole("region", { name: "Texto documental" })).toHaveTextContent("PÁGINA 2 EXCLUSIVAMENTE SINTÉTICA");
   });
 
+  it("respeita a página inicial proveniente da navegação do resultado indexado", async () => {
+    vi.mocked(invoke).mockResolvedValue(paginaPronta(2));
+    render(<LeitorDocumento caso={caso} extracaoId="extracao-sintetica" arquivo={pdfArquivo} paginaInicial={2} />);
+    await userEvent.click(screen.getByRole("button", { name: "Ler documento" }));
+    expect(invoke).toHaveBeenCalledWith("ler_documento", { arquivoId: 27, casoId: caso.id, pagina: 2 });
+    expect(await screen.findByRole("navigation", { name: "Páginas do documento" })).toHaveTextContent("2 de 3");
+  });
+
   it("limpa a página anterior durante a leitura e não duplica navegação pendente", async () => {
     const pendente = promessa();
     vi.mocked(invoke).mockResolvedValueOnce(paginaPronta(1)).mockReturnValueOnce(pendente.resultado);

@@ -178,6 +178,10 @@ function SessaoAnalise({ caso, documento, exibirTexto, destaqueUtf8 }: { caso: C
         <dl className="mt-3 space-y-2 text-texto-2" aria-label="Proveniência da indexação">
           <div><dt className="sobrelinha">Origem registrada</dt><dd className="mt-1 break-all font-mono">{documento.caminho}</dd></div>
           <div><dt className="sobrelinha">Caso / extração / arquivo / derivado</dt><dd className="mt-1 break-all font-mono">{documento.caso_id} / {documento.extracao_id} / {documento.arquivo_id} / {documento.id}</dd></div>
+          <div><dt className="sobrelinha">Navegação</dt><dd className="mt-1"><a
+            className="text-info-claro hover:text-texto hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ouro"
+            href={`/casos/${encodeURIComponent(caso.id)}/arquivos?extracao=${encodeURIComponent(documento.extracao_id)}&arquivo=${documento.arquivo_id}${documento.pagina === null ? "" : `&pagina=${documento.pagina}`}`}
+          >Abrir arquivo original{documento.pagina === null ? "" : ` · página ${documento.pagina}`}</a></dd></div>
           <div><dt className="sobrelinha">SHA-256 da origem na indexação</dt><dd className="mt-1"><Hash valor={documento.sha256_origem} /></dd></div>
           <div><dt className="sobrelinha">SHA-256 do texto armazenado</dt><dd className="mt-1"><Hash valor={documento.sha256_texto} /></dd></div>
           <div><dt className="sobrelinha">Motor documental</dt><dd className="mt-1 font-mono">{documento.motor_id} v{documento.motor_versao}</dd></div>

@@ -16,7 +16,7 @@ const LIMITE_BYTES = 2 * 1024 * 1024;
 const LIMITE_BYTES_OCR = 64 * 1024 * 1024;
 const LIMITE_PAGINAS = 512;
 
-type Props = { caso: Caso; extracaoId: string; arquivo: ArquivoExtracao };
+type Props = { caso: Caso; extracaoId: string; arquivo: ArquivoExtracao; paginaInicial?: number };
 type Leitura =
   | { estado: "inicial" }
   | { estado: "carregando" }
@@ -27,15 +27,15 @@ type FilaPdf = { estado: "ativa" | "pausando" | "pausada" | "concluida" | "erro"
 /** A chave também desmonta a sessão em mudanças de caso/extração/hash/seleção. */
 export function LeitorDocumento(props: Props) {
   const { caso, extracaoId, arquivo } = props;
-  const chave = JSON.stringify([caso.id, extracaoId, arquivo.id, arquivo.caminho, arquivo.sha256, arquivo.tamanho]);
+  const chave = JSON.stringify([caso.id, extracaoId, arquivo.id, arquivo.caminho, arquivo.sha256, arquivo.tamanho, props.paginaInicial]);
   return <SessaoLeitura key={chave} {...props} />;
 }
 
-function SessaoLeitura({ caso, extracaoId, arquivo }: Props) {
+function SessaoLeitura({ caso, extracaoId, arquivo, paginaInicial }: Props) {
   const [leitura, setLeitura] = useState<Leitura>({ estado: "inicial" });
   const imagem = EXTENSOES_IMAGEM_OCR.has(extensao(arquivo.caminho));
   const [modo, setModo] = useState<"automatico" | "ocr">(imagem ? "ocr" : "automatico");
-  const [paginaSelecionada, setPaginaSelecionada] = useState(1);
+  const [paginaSelecionada, setPaginaSelecionada] = useState(paginaInicial ?? 1);
   const [totalPaginas, setTotalPaginas] = useState<number | null>(null);
   const [indexando, setIndexando] = useState(false);
   const [indexado, setIndexado] = useState<DocumentoIndexado | null>(null);
@@ -124,7 +124,7 @@ function SessaoLeitura({ caso, extracaoId, arquivo }: Props) {
     const cancelar = operacaoAtiva.current;
     tentativa.current += 1;
     operacaoAtiva.current = false;
-    setPaginaSelecionada(1);
+    setPaginaSelecionada(paginaInicial ?? 1);
     setTotalPaginas(null);
     setIndexado(null); setErroIndexacao(null); setIndexando(false); setAvisoCancelamento(null);
     setFila(null);

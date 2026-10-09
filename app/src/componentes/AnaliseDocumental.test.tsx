@@ -237,6 +237,7 @@ describe("derivados e candidatos separados da evidência", () => {
     expect(regiao.textContent).toBe(conteudo); expect(regiao.querySelector("script,img,a")).toBeNull();
     expect(screen.getByText("DERIVADO ARMAZENADO")).toBeInTheDocument();
     expect(screen.queryByText("ORIGEM CONFERIDA")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Abrir arquivo original" })).toHaveAttribute("href", "/casos/caso-sintetico/arquivos?extracao=extracao-sintetica&arquivo=27");
     expect(screen.getByText(/não relê a origem atual/)).toBeInTheDocument();
     expect(await screen.findByText("Nenhum candidato literal detectado")).toBeInTheDocument();
   });
