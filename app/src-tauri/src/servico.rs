@@ -1150,6 +1150,44 @@ mod testes {
     }
 
     #[test]
+    fn descoberta_enfileirada_nao_pesquisa_outro_caso_ativo() {
+        let raiz = tempfile::tempdir().unwrap();
+        let mut s = servico(raiz.path());
+        let anterior = s.criar_caso(caso(), None).unwrap().caso.id;
+        s.fechar_caso().unwrap();
+        let mut novo = caso();
+        novo.numero_procedimento = Some("SINTETICO 2/2026".into());
+        let atual = s.criar_caso(novo, None).unwrap().caso.id;
+        let pedido = PedidoDescoberta {
+            filtro: FiltroBusca {
+                texto: "SINTÉTICO".into(),
+                ..Default::default()
+            },
+            modo: sied_armazenamento::descoberta::ModoDescoberta::Literal,
+            termos: vec![],
+            indicador: None,
+        };
+        let antes = s.verificar_auditoria().unwrap().registros;
+        let erro = s
+            .executar_descoberta(anterior, pedido.clone(), None, &ControleDescoberta::novo())
+            .unwrap_err();
+        assert!(matches!(erro.codigo, CodigoErro::Conflito));
+        let erro = s
+            .paginar_descoberta(anterior, 1, 0, 50, &ControleDescoberta::novo())
+            .unwrap_err();
+        assert!(matches!(erro.codigo, CodigoErro::Conflito));
+        assert!(s.listar_consultas_descoberta().unwrap().is_empty());
+        assert_eq!(s.verificar_auditoria().unwrap().registros, antes);
+        let controle = ControleDescoberta::novo();
+        assert!(controle.cancelar());
+        let erro = s
+            .executar_descoberta(atual, pedido, None, &controle)
+            .unwrap_err();
+        assert!(matches!(erro.codigo, CodigoErro::DescobertaCancelada));
+        assert!(s.listar_consultas_descoberta().unwrap().is_empty());
+    }
+
+    #[test]
     fn fluxo_completo_com_reinicio() {
         let raiz = tempfile::tempdir().unwrap();
         let id = {

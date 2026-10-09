@@ -183,6 +183,7 @@ pub fn executar() {
 /// Fecha o caso aberto, se houver. Pode ser chamado mais de uma vez.
 fn encerrar(app: &AppHandle) {
     if let Some(estado) = app.try_state::<Estado>() {
+        estado.descobertas.cancelar_ativa();
         if let Ok(mut s) = estado.servico.lock() {
             if let Some(s) = s.as_mut() {
                 s.encerrar();

@@ -634,10 +634,19 @@ da importação, para que o console de uma importação passada possa ser reaber
 
 ### 14.2 Motor de Descoberta Forense Multimodal Local (MDFML)
 
-**FUTURO — não implementado.** Registrado pelo responsável pelo produto em 02/10/2026 como
+**ROADMAP FUTURO; AI-0 em implementação, ainda não validada.** Registrado pelo responsável pelo produto em 02/10/2026 como
 capacidade estratégica de diferenciação do SIED. Nome e sigla provisórios. Este registro é
 contexto de produto e planejamento; não autoriza implementação, instalação de modelos ou
 alteração da arquitetura vigente. Especificação: [ROADMAP-MDFML.md](ROADMAP-MDFML.md).
+
+Autorizações posteriores no chat iniciaram um recorte AI-0 local em branch dedicada e
+solicitaram continuar as pendências sem aguardar CI, sem merge e sem motores de IA
+implementados. A missão atual restringe-se à validação da AI-0; AI-1 não deve começar.
+Os 81 testes unitários do armazenamento passaram na CI de `21f43f1`, mas a cota de
+artifacts bloqueou as etapas seguintes. Contratos completos versionados, bateria Rust,
+build completo e validação operacional continuam pendentes; não tratar a fase como
+concluída. Ver [checkpoint AI-0](checkpoints/2026-10-02-ai0-busca-local.md) e
+[checkpoint de validação](checkpoints/2026-10-02-ai0-validacao.md).
 
 **Objetivo:** reduzir o tempo para encontrar, revisar, correlacionar e documentar artefatos
 relevantes em grandes extrações, com pesquisa local sobre mensagens, imagens, prints, OCR,
@@ -652,7 +661,7 @@ se futuramente aprovada, será opcional, institucionalmente autorizada, identifi
 explicitamente solicitada e auditável; não integra o núcleo local nem modifica as permissões
 atuais do frontend.
 
-**Faseamento proposto, ainda sem autorização de execução:** AI-0 (pesquisa tradicional,
+**Faseamento proposto; AI-0 iniciada e demais fases ainda não implementadas:** AI-0 (pesquisa tradicional,
 vocabulários, árvore de pesquisa, emojis e indicadores); AI-1 (OCR, PDFs/documentos e entidades);
 AI-2 (embeddings locais, semântica e ranking híbrido); AI-3 (visão, regiões e near-duplicates);
 AI-4 (multimodal); AI-5 (correlação, timeline assistida e grafo **experimental**); AI-6
