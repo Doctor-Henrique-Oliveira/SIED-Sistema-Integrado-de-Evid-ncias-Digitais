@@ -99,7 +99,16 @@ import type { ResumoIndexacaoEmbeddings, ResultadoBuscaHibrida } from "./embeddi
 import type { ResultadoVisaoLocal } from "./visual";
 import type { ItemMultimodal, MecanismoMultimodal, PedidoMultimodal, ResultadoMultimodal } from "./multimodal";
 import type { CandidatoRevisao, FiltroFilaRevisao } from "./revisao";
-import type { NovoProvedorEstacao, ProvedorEstacao } from "./provedores";
+import type {
+  NovaPermissaoEstacao,
+  NovoProvedorEstacao,
+  PermissaoEstacao,
+  ProvedorEstacao,
+  ResultadoBackupEstacao,
+  ResultadoExecucaoProvedor,
+  ResultadoImeiLocal,
+  ResultadoRestauracaoEstacao,
+} from "./provedores";
 
 export type {
   MecanismoUniversal,
@@ -131,6 +140,12 @@ export type {
   FiltroFilaRevisao,
   ProvedorEstacao,
   NovoProvedorEstacao,
+  PermissaoEstacao,
+  NovaPermissaoEstacao,
+  ResultadoExecucaoProvedor,
+  ResultadoImeiLocal,
+  ResultadoBackupEstacao,
+  ResultadoRestauracaoEstacao,
   PedidoDescoberta,
   ResultadoDescoberta,
   AchadoDescoberta,
@@ -251,6 +266,20 @@ export const api = {
   listarProvedoresEstacao: () => chamar<ProvedorEstacao[]>("listar_provedores_estacao"),
   salvarProvedorEstacao: (dados: NovoProvedorEstacao) =>
     chamar<ProvedorEstacao>("salvar_provedor_estacao", { dados }),
+  listarPermissoesEstacao: () => chamar<PermissaoEstacao[]>("listar_permissoes_estacao"),
+  salvarPermissaoEstacao: (dados: NovaPermissaoEstacao) =>
+    chamar<PermissaoEstacao>("salvar_permissao_estacao", { dados }),
+  executarProvedorEstacao: (provedorId: string) =>
+    chamar<ResultadoExecucaoProvedor>("executar_provedor_estacao", { provedorId }),
+  enriquecerImeiLocal: (imei: string) =>
+    chamar<ResultadoImeiLocal>("enriquecer_imei_local", { imei }),
+  criarBackupEstacao: (destino: string) =>
+    chamar<ResultadoBackupEstacao>("criar_backup_estacao", { destino }),
+  restaurarBackupEstacao: (origem: string) =>
+    chamar<ResultadoRestauracaoEstacao>("restaurar_backup_estacao", { origem }),
+  listarAuditoriaEstacao: (limite: number) =>
+    chamar<RegistroAuditoria[]>("listar_auditoria_estacao", { limite }),
+  verificarAuditoriaEstacao: () => chamar<VerificacaoAuditoria>("verificar_auditoria_estacao"),
   removerCasoCatalogo: (casoId: CasoId) => chamar<boolean>("remover_caso_catalogo", { casoId }),
   criarCaso: (dados: NovoCaso, pastaBase: string | null) =>
     chamar<CasoAberto>("criar_caso", { dados, pastaBase }),

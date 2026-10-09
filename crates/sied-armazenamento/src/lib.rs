@@ -10,6 +10,7 @@
 
 pub mod agenda;
 pub mod auditoria;
+pub mod auditoria_estacao;
 pub mod busca;
 pub mod caso;
 mod conexao;
@@ -41,5 +42,9 @@ pub mod visuais;
 pub use caso::BancoCaso;
 pub use controle_descoberta::ControleDescoberta;
 pub use erro::{ErroArmazenamento, Resultado};
-pub use global::{CasoCatalogado, CatalogoGlobal, NovoProvedorEstacao, ProvedorEstacao};
+pub use global::{
+    CasoCatalogado, CatalogoGlobal, NovaPermissaoEstacao, NovoProvedorEstacao, PermissaoEstacao,
+    ProvedorEstacao, ResultadoBackupEstacao, ResultadoExecucaoProvedor, ResultadoImeiLocal,
+    ResultadoRestauracaoEstacao,
+};
 pub use sessao::Sessao;

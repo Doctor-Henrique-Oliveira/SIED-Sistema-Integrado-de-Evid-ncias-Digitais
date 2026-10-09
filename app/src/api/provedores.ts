@@ -20,3 +20,53 @@ export type ProvedorEstacao = {
 };
 
 export type NovoProvedorEstacao = Omit<ProvedorEstacao, "criado_em" | "atualizado_em">;
+
+export const ACOES_ESTACAO = [
+  ["executar_provedor", "Executar provider local"],
+  ["enriquecer_imei", "Consultar IMEI local"],
+  ["criar_backup", "Criar backup do catálogo"],
+  ["restaurar_backup", "Restaurar configurações"],
+] as const;
+
+export type PermissaoEstacao = {
+  usuario: string;
+  acao: (typeof ACOES_ESTACAO)[number][0];
+  permitido: boolean;
+  criado_em: string;
+  atualizado_em: string;
+};
+
+export type NovaPermissaoEstacao = Pick<PermissaoEstacao, "usuario" | "acao" | "permitido">;
+
+export type ResultadoExecucaoProvedor = {
+  provedor_id: string;
+  acao: string;
+  sucesso: boolean;
+  codigo_saida: number | null;
+  saida: string;
+  erro: string | null;
+  duracao_ms: number;
+};
+
+export type ResultadoImeiLocal = {
+  imei: string;
+  provedor_id: string;
+  provedor_versao: string | null;
+  encontrado: boolean;
+  fabricante: string | null;
+  modelo: string | null;
+  fonte: string;
+  observacao: string;
+};
+
+export type ResultadoBackupEstacao = {
+  caminho: string;
+  sha256: string;
+  componentes: string[];
+};
+
+export type ResultadoRestauracaoEstacao = {
+  origem: string;
+  provedores_restaurados: number;
+  permissoes_restauradas: number;
+};

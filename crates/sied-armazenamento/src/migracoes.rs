@@ -48,6 +48,11 @@ pub const BANCO_GLOBAL: TipoBanco = TipoBanco {
             nome: "provedores_estacao",
             sql: include_str!("../migracoes/global/0002_provedores_estacao.sql"),
         },
+        Migracao {
+            versao: 3,
+            nome: "controle_estacao",
+            sql: include_str!("../migracoes/global/0003_controle_estacao.sql"),
+        },
     ],
 };
 

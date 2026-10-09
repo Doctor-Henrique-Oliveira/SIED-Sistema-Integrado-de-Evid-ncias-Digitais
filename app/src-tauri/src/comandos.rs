@@ -33,7 +33,11 @@ use sied_armazenamento::pesquisa_local::{
 use sied_armazenamento::relatorios::{ConferenciaPastaRelatorios, RelatorioRegistrado};
 use sied_armazenamento::resumo::{Identificador, ResumoCaso};
 use sied_armazenamento::transcricoes::{SegmentoTranscricao, TranscricaoLocal};
-use sied_armazenamento::{CasoCatalogado, NovoProvedorEstacao, ProvedorEstacao};
+use sied_armazenamento::{
+    CasoCatalogado, NovaPermissaoEstacao, NovoProvedorEstacao, PermissaoEstacao, ProvedorEstacao,
+    ResultadoBackupEstacao, ResultadoExecucaoProvedor, ResultadoImeiLocal,
+    ResultadoRestauracaoEstacao,
+};
 use sied_documentos::{ModoDocumento, ResultadoDocumento};
 use sied_dominio::{CasoId, Dispositivo, DispositivoId, ExtracaoId, NovoCaso, NovoDispositivo};
 use sied_ingestao::eventos::EventoImportacao;
@@ -132,6 +136,92 @@ pub async fn salvar_provedor_estacao(
 ) -> ResultadoApp<ProvedorEstacao> {
     em_segundo_plano(app_handle, move |estado| {
         estado.com(|s| s.salvar_provedor_estacao(dados))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn listar_permissoes_estacao(
+    app_handle: AppHandle,
+) -> ResultadoApp<Vec<PermissaoEstacao>> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.listar_permissoes_estacao())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn salvar_permissao_estacao(
+    app_handle: AppHandle,
+    dados: NovaPermissaoEstacao,
+) -> ResultadoApp<PermissaoEstacao> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.salvar_permissao_estacao(dados))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn executar_provedor_estacao(
+    app_handle: AppHandle,
+    provedor_id: String,
+) -> ResultadoApp<ResultadoExecucaoProvedor> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.executar_provedor_estacao(&provedor_id))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn enriquecer_imei_local(
+    app_handle: AppHandle,
+    imei: String,
+) -> ResultadoApp<ResultadoImeiLocal> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.enriquecer_imei_local(&imei))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn criar_backup_estacao(
+    app_handle: AppHandle,
+    destino: String,
+) -> ResultadoApp<ResultadoBackupEstacao> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.criar_backup_estacao(std::path::Path::new(&destino)))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn restaurar_backup_estacao(
+    app_handle: AppHandle,
+    origem: String,
+) -> ResultadoApp<ResultadoRestauracaoEstacao> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.restaurar_backup_estacao(std::path::Path::new(&origem)))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn listar_auditoria_estacao(
+    app_handle: AppHandle,
+    limite: i64,
+) -> ResultadoApp<Vec<RegistroAuditoria>> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.listar_auditoria_estacao(limite))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn verificar_auditoria_estacao(
+    app_handle: AppHandle,
+) -> ResultadoApp<VerificacaoAuditoria> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.verificar_auditoria_estacao())
     })
     .await
 }

@@ -26,6 +26,8 @@ import {
 export const chaves = {
   info: ["info"] as const,
   provedoresEstacao: ["provedores-estacao"] as const,
+  permissoesEstacao: ["permissoes-estacao"] as const,
+  auditoriaEstacao: ["auditoria-estacao"] as const,
   casos: ["casos"] as const,
   casoAtual: ["caso-atual"] as const,
   dispositivos: (casoId: CasoId) => ["dispositivos", casoId] as const,
@@ -467,6 +469,18 @@ export function useSalvarProvedorEstacao() {
   return useMutation({
     mutationFn: api.salvarProvedorEstacao,
     onSuccess: () => void qc.invalidateQueries({ queryKey: chaves.provedoresEstacao }),
+  });
+}
+
+export function usePermissoesEstacao() {
+  return useQuery({ queryKey: chaves.permissoesEstacao, queryFn: api.listarPermissoesEstacao });
+}
+
+export function useSalvarPermissaoEstacao() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.salvarPermissaoEstacao,
+    onSuccess: () => void qc.invalidateQueries({ queryKey: chaves.permissoesEstacao }),
   });
 }
 

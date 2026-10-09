@@ -143,11 +143,18 @@ chaves fora da lista permitida e conteúdo do índice Lucene continuam sem leitu
 
 ### E11 — Administração, providers e segurança operacional
 
-**Status: EM PROGRESSO — CATÁLOGO LOCAL DE PROVEDORES IMPLEMENTADO**
+**Status: IMPLEMENTADA LOCALMENTE — CONTROLE DA ESTAÇÃO**
 
-O banco global agora mantém um manifesto de provedores da estação (tipo, modo, caminho, versão e observação), com migração própria, tela de Configurações e comandos Tauri para cadastro/listagem. Provedores externos são recusados quando habilitados; nenhum segredo é aceito e nenhum executável/rede é acionado pelo cadastro. Usuários/perfis/permissões locais, backup/restauração controlados, enriquecimento de IMEI e auditoria de execução continuam pendentes.
+O banco global mantém o manifesto de providers e agora também permissões explícitas por usuário/ação,
+trilha encadeada própria da estação e comandos Tauri para execução controlada. Um provider local habilitado
+só pode ser verificado com ação autorizada e recebe exclusivamente `--version`, sem shell, rede ou conteúdo
+de caso, com limite de dois segundos. O enriquecimento de IMEI usa somente arquivo JSON/CSV local configurado,
+com limite de 4 MiB e resultado marcado como derivado. Backup usa `VACUUM INTO` e SHA-256; restauração lê um
+backup global compatível e faz merge validado de providers/permissões sem apagar casos. A tela de Configurações
+expõe concessão/revogação por ação, verificação, IMEI, backup e conferência da trilha. Provedores externos
+continuam recusados e segredos não são aceitos.
 
-**Concluída quando:** permissões são aplicadas no backend; providers ficam desativados por padrão; toda saída externa exige configuração e ação explícita; segredos não entram no banco do caso nem no Git.
+**Concluída quando:** permissões são aplicadas no backend; providers ficam desativados por padrão; toda saída externa exige configuração e ação explícita; segredos não entram no banco do caso nem no Git. Os quatro critérios agora têm cobertura local; autenticação institucional e provider externo continuam fora desta etapa.
 
 ### E12 — Desempenho, retomada e preparação de release
 

@@ -26,7 +26,9 @@ use sied_armazenamento::relatorios::{ConferenciaPastaRelatorios, RelatorioRegist
 use sied_armazenamento::resumo::{Identificador, ResumoCaso};
 use sied_armazenamento::transcricoes::{NovaTranscricao, SegmentoTranscricao, TranscricaoLocal};
 use sied_armazenamento::{
-    BancoCaso, CasoCatalogado, CatalogoGlobal, NovoProvedorEstacao, ProvedorEstacao, Sessao,
+    BancoCaso, CasoCatalogado, CatalogoGlobal, NovaPermissaoEstacao, NovoProvedorEstacao,
+    PermissaoEstacao, ProvedorEstacao, ResultadoBackupEstacao, ResultadoExecucaoProvedor,
+    ResultadoImeiLocal, ResultadoRestauracaoEstacao, Sessao,
 };
 use sied_documentos::{ControleDocumento, ModoDocumento, PedidoDocumento, ResultadoDocumento};
 use sied_dominio::{
@@ -390,6 +392,47 @@ impl Servico {
             "configuração de provedor da estação atualizada"
         );
         Ok(provedor)
+    }
+
+    pub fn listar_permissoes_estacao(&self) -> ResultadoApp<Vec<PermissaoEstacao>> {
+        Ok(self.catalogo.listar_permissoes()?)
+    }
+
+    pub fn salvar_permissao_estacao(
+        &self,
+        dados: NovaPermissaoEstacao,
+    ) -> ResultadoApp<PermissaoEstacao> {
+        Ok(self.catalogo.salvar_permissao(dados, &self.sessao)?)
+    }
+
+    pub fn executar_provedor_estacao(
+        &self,
+        provedor_id: &str,
+    ) -> ResultadoApp<ResultadoExecucaoProvedor> {
+        Ok(self.catalogo.executar_provedor(provedor_id, &self.sessao)?)
+    }
+
+    pub fn enriquecer_imei_local(&self, imei: &str) -> ResultadoApp<ResultadoImeiLocal> {
+        Ok(self.catalogo.enriquecer_imei_local(imei, &self.sessao)?)
+    }
+
+    pub fn criar_backup_estacao(&self, destino: &Path) -> ResultadoApp<ResultadoBackupEstacao> {
+        Ok(self.catalogo.criar_backup(destino, &self.sessao)?)
+    }
+
+    pub fn restaurar_backup_estacao(
+        &self,
+        origem: &Path,
+    ) -> ResultadoApp<ResultadoRestauracaoEstacao> {
+        Ok(self.catalogo.restaurar_backup(origem, &self.sessao)?)
+    }
+
+    pub fn listar_auditoria_estacao(&self, limite: i64) -> ResultadoApp<Vec<RegistroAuditoria>> {
+        Ok(self.catalogo.listar_auditoria_estacao(limite)?)
+    }
+
+    pub fn verificar_auditoria_estacao(&self) -> ResultadoApp<VerificacaoAuditoria> {
+        Ok(self.catalogo.verificar_auditoria_estacao()?)
     }
 
     /// Retira o caso apenas do catálogo global. Não abre, altera ou remove a
