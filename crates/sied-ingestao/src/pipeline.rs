@@ -115,7 +115,12 @@ pub fn ler_checkpoint(caminho: &Path) -> Resultado<Option<CheckpointRetomada>> {
     if checkpoint.schema != 1
         || !matches!(
             checkpoint.estado.as_str(),
-            "iniciada" | "inventariando" | "inventario_concluido" | "cancelada" | "interrompida"
+            "iniciada"
+                | "inventariando"
+                | "inventario_concluido"
+                | "concluida"
+                | "cancelada"
+                | "interrompida"
         )
         || checkpoint.workers_hash == 0
         || checkpoint.workers_hash > 8
@@ -620,6 +625,25 @@ pub fn executar(
     let r = executar_etapas(
         fonte, importador, registro, destino, controle, ctx, &mut log,
     );
+    if r.is_ok() {
+        let progresso = controle.progresso();
+        if let Err(e) = gravar_checkpoint(
+            ctx,
+            &fonte_descricao,
+            "concluida",
+            progresso.arquivos_feitos,
+            progresso.bytes_feitos,
+            limites,
+        ) {
+            log.anunciar(
+                controle,
+                NivelEvento::Aviso,
+                "checkpoint_final",
+                format!("Importação concluída, mas não foi possível atualizar o checkpoint: {e}"),
+                json!({ "erro": e.to_string() }),
+            );
+        }
+    }
     match &r {
         Ok(resumo) => log.anunciar(
             controle,
