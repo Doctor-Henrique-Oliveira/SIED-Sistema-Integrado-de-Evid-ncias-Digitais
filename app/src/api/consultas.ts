@@ -25,6 +25,7 @@ import {
 
 export const chaves = {
   info: ["info"] as const,
+  provedoresEstacao: ["provedores-estacao"] as const,
   casos: ["casos"] as const,
   casoAtual: ["caso-atual"] as const,
   dispositivos: (casoId: CasoId) => ["dispositivos", casoId] as const,
@@ -454,6 +455,18 @@ export function useLinhaDoTempo(casoId: CasoId, filtro: FiltroLinhaTempo, desloc
     queryFn: () => api.linhaDoTempo(filtro, deslocamento, limite),
     placeholderData: keepPreviousData,
     enabled: ativo,
+  });
+}
+
+export function useProvedoresEstacao() {
+  return useQuery({ queryKey: chaves.provedoresEstacao, queryFn: api.listarProvedoresEstacao });
+}
+
+export function useSalvarProvedorEstacao() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.salvarProvedorEstacao,
+    onSuccess: () => void qc.invalidateQueries({ queryKey: chaves.provedoresEstacao }),
   });
 }
 

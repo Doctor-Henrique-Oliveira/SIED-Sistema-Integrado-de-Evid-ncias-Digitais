@@ -86,6 +86,8 @@ pub fn executar() {
         .invoke_handler(tauri::generate_handler![
             comandos::info_app,
             comandos::listar_casos,
+            comandos::listar_provedores_estacao,
+            comandos::salvar_provedor_estacao,
             comandos::remover_caso_catalogo,
             comandos::criar_caso,
             comandos::abrir_caso,

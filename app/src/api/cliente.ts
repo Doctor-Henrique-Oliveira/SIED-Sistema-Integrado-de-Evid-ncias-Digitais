@@ -99,6 +99,7 @@ import type { ResumoIndexacaoEmbeddings, ResultadoBuscaHibrida } from "./embeddi
 import type { ResultadoVisaoLocal } from "./visual";
 import type { ItemMultimodal, MecanismoMultimodal, PedidoMultimodal, ResultadoMultimodal } from "./multimodal";
 import type { CandidatoRevisao, FiltroFilaRevisao } from "./revisao";
+import type { NovoProvedorEstacao, ProvedorEstacao } from "./provedores";
 
 export type {
   MecanismoUniversal,
@@ -128,6 +129,8 @@ export type {
   MecanismoMultimodal,
   CandidatoRevisao,
   FiltroFilaRevisao,
+  ProvedorEstacao,
+  NovoProvedorEstacao,
   PedidoDescoberta,
   ResultadoDescoberta,
   AchadoDescoberta,
@@ -245,6 +248,9 @@ async function chamar<T>(comando: string, args?: Record<string, unknown>): Promi
 export const api = {
   infoApp: () => chamar<InfoApp>("info_app"),
   listarCasos: () => chamar<CasoCatalogado[]>("listar_casos"),
+  listarProvedoresEstacao: () => chamar<ProvedorEstacao[]>("listar_provedores_estacao"),
+  salvarProvedorEstacao: (dados: NovoProvedorEstacao) =>
+    chamar<ProvedorEstacao>("salvar_provedor_estacao", { dados }),
   removerCasoCatalogo: (casoId: CasoId) => chamar<boolean>("remover_caso_catalogo", { casoId }),
   criarCaso: (dados: NovoCaso, pastaBase: string | null) =>
     chamar<CasoAberto>("criar_caso", { dados, pastaBase }),

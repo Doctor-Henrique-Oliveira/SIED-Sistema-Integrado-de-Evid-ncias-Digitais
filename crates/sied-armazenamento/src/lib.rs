@@ -41,5 +41,5 @@ pub mod visuais;
 pub use caso::BancoCaso;
 pub use controle_descoberta::ControleDescoberta;
 pub use erro::{ErroArmazenamento, Resultado};
-pub use global::{CasoCatalogado, CatalogoGlobal};
+pub use global::{CasoCatalogado, CatalogoGlobal, NovoProvedorEstacao, ProvedorEstacao};
 pub use sessao::Sessao;

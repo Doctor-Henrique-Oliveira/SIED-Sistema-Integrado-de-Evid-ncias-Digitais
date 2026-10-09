@@ -25,7 +25,9 @@ use sied_armazenamento::pesquisa_local::{
 use sied_armazenamento::relatorios::{ConferenciaPastaRelatorios, RelatorioRegistrado};
 use sied_armazenamento::resumo::{Identificador, ResumoCaso};
 use sied_armazenamento::transcricoes::{NovaTranscricao, SegmentoTranscricao, TranscricaoLocal};
-use sied_armazenamento::{BancoCaso, CasoCatalogado, CatalogoGlobal, Sessao};
+use sied_armazenamento::{
+    BancoCaso, CasoCatalogado, CatalogoGlobal, NovoProvedorEstacao, ProvedorEstacao, Sessao,
+};
 use sied_documentos::{ControleDocumento, ModoDocumento, PedidoDocumento, ResultadoDocumento};
 use sied_dominio::{
     Caso, CasoId, Dispositivo, DispositivoId, ExtracaoId, NovoCaso, NovoDispositivo,
@@ -369,6 +371,25 @@ impl Servico {
 
     pub fn listar_casos(&self) -> ResultadoApp<Vec<CasoCatalogado>> {
         Ok(self.catalogo.listar_casos()?)
+    }
+
+    pub fn listar_provedores_estacao(&self) -> ResultadoApp<Vec<ProvedorEstacao>> {
+        Ok(self.catalogo.listar_provedores()?)
+    }
+
+    pub fn salvar_provedor_estacao(
+        &self,
+        dados: NovoProvedorEstacao,
+    ) -> ResultadoApp<ProvedorEstacao> {
+        let provedor = self.catalogo.salvar_provedor(dados)?;
+        tracing::info!(
+            provedor = %provedor.id,
+            tipo = %provedor.tipo,
+            modo = %provedor.modo,
+            habilitado = provedor.habilitado,
+            "configuração de provedor da estação atualizada"
+        );
+        Ok(provedor)
     }
 
     /// Retira o caso apenas do catálogo global. Não abre, altera ou remove a

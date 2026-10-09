@@ -140,9 +140,9 @@ WhatsApp continuam pendentes; não implementar parser por suposição.
 
 ### E11 — Administração, providers e segurança operacional
 
-**Status: PENDENTE**
+**Status: EM PROGRESSO — CATÁLOGO LOCAL DE PROVEDORES IMPLEMENTADO**
 
-Adicionar configurações editáveis, usuários/perfis/permissões locais, política de acesso ao caso, backup/restauração controlados e gerenciamento de motores. Criar infraestrutura opt-in para providers, incluindo enriquecimento de IMEI, sem envio automático e com auditoria da ação.
+O banco global agora mantém um manifesto de provedores da estação (tipo, modo, caminho, versão e observação), com migração própria, tela de Configurações e comandos Tauri para cadastro/listagem. Provedores externos são recusados quando habilitados; nenhum segredo é aceito e nenhum executável/rede é acionado pelo cadastro. Usuários/perfis/permissões locais, backup/restauração controlados, enriquecimento de IMEI e auditoria de execução continuam pendentes.
 
 **Concluída quando:** permissões são aplicadas no backend; providers ficam desativados por padrão; toda saída externa exige configuração e ação explícita; segredos não entram no banco do caso nem no Git.
 

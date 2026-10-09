@@ -33,7 +33,7 @@ use sied_armazenamento::pesquisa_local::{
 use sied_armazenamento::relatorios::{ConferenciaPastaRelatorios, RelatorioRegistrado};
 use sied_armazenamento::resumo::{Identificador, ResumoCaso};
 use sied_armazenamento::transcricoes::{SegmentoTranscricao, TranscricaoLocal};
-use sied_armazenamento::CasoCatalogado;
+use sied_armazenamento::{CasoCatalogado, NovoProvedorEstacao, ProvedorEstacao};
 use sied_documentos::{ModoDocumento, ResultadoDocumento};
 use sied_dominio::{CasoId, Dispositivo, DispositivoId, ExtracaoId, NovoCaso, NovoDispositivo};
 use sied_ingestao::eventos::EventoImportacao;
@@ -111,6 +111,29 @@ pub async fn pasta_em_rede(caminho: String) -> bool {
 #[tauri::command]
 pub async fn listar_casos(app_handle: AppHandle) -> ResultadoApp<Vec<CasoCatalogado>> {
     em_segundo_plano(app_handle, move |estado| estado.com(|s| s.listar_casos())).await
+}
+
+/// Lista somente o manifesto local de provedores. Não testa executáveis,
+/// não abre rede e não lê conteúdo de casos.
+#[tauri::command]
+pub async fn listar_provedores_estacao(
+    app_handle: AppHandle,
+) -> ResultadoApp<Vec<ProvedorEstacao>> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.listar_provedores_estacao())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn salvar_provedor_estacao(
+    app_handle: AppHandle,
+    dados: NovoProvedorEstacao,
+) -> ResultadoApp<ProvedorEstacao> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.salvar_provedor_estacao(dados))
+    })
+    .await
 }
 
 #[tauri::command]

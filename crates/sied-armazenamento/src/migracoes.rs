@@ -37,11 +37,18 @@ impl TipoBanco {
 pub const BANCO_GLOBAL: TipoBanco = TipoBanco {
     nome: "global",
     application_id: 0x5345_4447, // "SEDG"
-    migracoes: &[Migracao {
-        versao: 1,
-        nome: "inicial",
-        sql: include_str!("../migracoes/global/0001_inicial.sql"),
-    }],
+    migracoes: &[
+        Migracao {
+            versao: 1,
+            nome: "inicial",
+            sql: include_str!("../migracoes/global/0001_inicial.sql"),
+        },
+        Migracao {
+            versao: 2,
+            nome: "provedores_estacao",
+            sql: include_str!("../migracoes/global/0002_provedores_estacao.sql"),
+        },
+    ],
 };
 
 pub const BANCO_CASO: TipoBanco = TipoBanco {

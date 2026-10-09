@@ -2,7 +2,7 @@
 
 use chrono::Utc;
 use rusqlite::{params, Connection, OptionalExtension};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sied_dominio::{Caso, CasoId};
 use std::path::{Path, PathBuf};
 use ts_rs::TS;
@@ -28,6 +28,34 @@ pub struct CasoCatalogado {
     pub ultimo_acesso_em: Option<String>,
     /// Falso quando a pasta não está acessível (disco removido, caso movido).
     pub disponivel: bool,
+}
+
+/// Provedor registrado na estação. Este é somente um manifesto de configuração:
+/// o SIED não armazena segredos nem executa chamadas externas a partir dele.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProvedorEstacao {
+    pub id: String,
+    pub nome: String,
+    pub tipo: String,
+    pub modo: String,
+    pub habilitado: bool,
+    pub caminho: Option<String>,
+    pub versao: Option<String>,
+    pub observacao: Option<String>,
+    pub criado_em: String,
+    pub atualizado_em: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NovoProvedorEstacao {
+    pub id: String,
+    pub nome: String,
+    pub tipo: String,
+    pub modo: String,
+    pub habilitado: bool,
+    pub caminho: Option<String>,
+    pub versao: Option<String>,
+    pub observacao: Option<String>,
 }
 
 pub struct CatalogoGlobal {
@@ -190,5 +218,152 @@ impl CatalogoGlobal {
             params![chave, valor, Utc::now().to_rfc3339()],
         )?;
         Ok(())
+    }
+
+    /// Lista o manifesto de provedores sem tocar nos caminhos configurados.
+    pub fn listar_provedores(&self) -> Resultado<Vec<ProvedorEstacao>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, nome, tipo, modo, habilitado, caminho, versao, observacao,
+                    criado_em, atualizado_em
+             FROM provedor_estacao ORDER BY nome COLLATE NOCASE, id",
+        )?;
+        let linhas = stmt.query_map([], |r| {
+            Ok(ProvedorEstacao {
+                id: r.get(0)?,
+                nome: r.get(1)?,
+                tipo: r.get(2)?,
+                modo: r.get(3)?,
+                habilitado: r.get::<_, i64>(4)? != 0,
+                caminho: r.get(5)?,
+                versao: r.get(6)?,
+                observacao: r.get(7)?,
+                criado_em: r.get(8)?,
+                atualizado_em: r.get(9)?,
+            })
+        })?;
+        linhas
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(Into::into)
+    }
+
+    /// Registra ou atualiza a configuração de um provedor.
+    ///
+    /// A regra de segurança é deliberadamente simples: somente provedores
+    /// `local` podem ser habilitados. Provedores `externo` ficam desabilitados
+    /// até que exista uma ação explícita de integração e política de saída.
+    pub fn salvar_provedor(&self, entrada: NovoProvedorEstacao) -> Resultado<ProvedorEstacao> {
+        let id = entrada.id.trim();
+        let nome = entrada.nome.trim();
+        let tipo = entrada.tipo.trim();
+        let modo = entrada.modo.trim();
+        if id.is_empty()
+            || id.len() > 80
+            || nome.is_empty()
+            || nome.len() > 160
+            || tipo.is_empty()
+            || tipo.len() > 80
+        {
+            return Err(crate::ErroArmazenamento::Recusado(
+                "id, nome e tipo do provedor são obrigatórios e devem ser curtos".into(),
+            ));
+        }
+        if modo != "local" && modo != "externo" {
+            return Err(crate::ErroArmazenamento::Recusado(
+                "modo do provedor deve ser local ou externo".into(),
+            ));
+        }
+        if modo == "externo" && entrada.habilitado {
+            return Err(crate::ErroArmazenamento::Recusado(
+                "provedores externos permanecem desabilitados nesta versão".into(),
+            ));
+        }
+        let agora = Utc::now().to_rfc3339();
+        self.conn.execute(
+            "INSERT INTO provedor_estacao
+                (id, nome, tipo, modo, habilitado, caminho, versao, observacao, criado_em, atualizado_em)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9)
+             ON CONFLICT(id) DO UPDATE SET
+                nome = excluded.nome, tipo = excluded.tipo, modo = excluded.modo,
+                habilitado = excluded.habilitado, caminho = excluded.caminho,
+                versao = excluded.versao, observacao = excluded.observacao,
+                atualizado_em = excluded.atualizado_em",
+            params![
+                id,
+                nome,
+                tipo,
+                modo,
+                i64::from(entrada.habilitado),
+                entrada.caminho.as_deref().map(str::trim).filter(|v| !v.is_empty()),
+                entrada.versao.as_deref().map(str::trim).filter(|v| !v.is_empty()),
+                entrada.observacao.as_deref().map(str::trim).filter(|v| !v.is_empty()),
+                agora,
+            ],
+        )?;
+        self.conn
+            .query_row(
+                "SELECT id, nome, tipo, modo, habilitado, caminho, versao, observacao,
+                        criado_em, atualizado_em
+                 FROM provedor_estacao WHERE id = ?1",
+                [id],
+                |r| {
+                    Ok(ProvedorEstacao {
+                        id: r.get(0)?,
+                        nome: r.get(1)?,
+                        tipo: r.get(2)?,
+                        modo: r.get(3)?,
+                        habilitado: r.get::<_, i64>(4)? != 0,
+                        caminho: r.get(5)?,
+                        versao: r.get(6)?,
+                        observacao: r.get(7)?,
+                        criado_em: r.get(8)?,
+                        atualizado_em: r.get(9)?,
+                    })
+                },
+            )
+            .map_err(Into::into)
+    }
+}
+
+#[cfg(test)]
+mod testes {
+    use super::*;
+
+    #[test]
+    fn provedor_externo_nunca_e_habilitado_automaticamente() {
+        let pasta = tempfile::tempdir().unwrap();
+        let catalogo = CatalogoGlobal::abrir(pasta.path()).unwrap();
+        let erro = catalogo
+            .salvar_provedor(NovoProvedorEstacao {
+                id: "imei-provider".into(),
+                nome: "Consulta IMEI externa".into(),
+                tipo: "imei_enrichment".into(),
+                modo: "externo".into(),
+                habilitado: true,
+                caminho: None,
+                versao: None,
+                observacao: None,
+            })
+            .unwrap_err();
+        assert!(erro.to_string().contains("desabilitados"));
+    }
+
+    #[test]
+    fn provedor_local_e_persistido_sem_segredo() {
+        let pasta = tempfile::tempdir().unwrap();
+        let catalogo = CatalogoGlobal::abrir(pasta.path()).unwrap();
+        let salvo = catalogo
+            .salvar_provedor(NovoProvedorEstacao {
+                id: "ocr-local".into(),
+                nome: "OCR local".into(),
+                tipo: "ocr".into(),
+                modo: "local".into(),
+                habilitado: true,
+                caminho: Some("C:\\Ferramentas\\ocr.exe".into()),
+                versao: Some("1.2".into()),
+                observacao: Some("instalação da estação".into()),
+            })
+            .unwrap();
+        assert!(salvo.habilitado);
+        assert_eq!(catalogo.listar_provedores().unwrap(), vec![salvo]);
     }
 }
