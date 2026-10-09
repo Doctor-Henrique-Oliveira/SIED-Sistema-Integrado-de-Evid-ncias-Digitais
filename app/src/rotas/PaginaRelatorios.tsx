@@ -271,7 +271,7 @@ const SECOES: [keyof SecoesRelatorio, string][] = [
   ["procedimento", "Identificação do procedimento"],
   ["dispositivos", "Dispositivos"],
   ["aquisicao", "Extrações e hashes"],
-  ["metodologia", "Metodologia"],
+  ["metodologia", "Metodologia + derivados locais"],
   ["evidencias", "Evidências selecionadas"],
   ["observacoes", "Observações"],
   ["conclusao", "Conclusão do analista"],

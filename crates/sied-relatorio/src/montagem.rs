@@ -11,11 +11,14 @@ use chrono::{DateTime, TimeZone, Utc};
 use chrono_tz::Tz;
 use serde_json::Value;
 use sied_armazenamento::auditoria::VerificacaoAuditoria;
+use sied_armazenamento::controle_descoberta::ControleDescoberta;
 use sied_armazenamento::conversas::Conversa;
 use sied_armazenamento::evidencias::{hash_do_trecho, Evidencia, TipoEvidencia};
 use sied_armazenamento::extracoes::{
     ArtefatoDetalhe, ArtefatoResumo, ConferenciaRegistro, Extracao,
 };
+use sied_armazenamento::linha_tempo::FiltroLinhaTempo;
+use sied_armazenamento::relacoes::ClasseRelacao;
 use sied_armazenamento::transcricoes::EstadoTranscricao;
 use sied_armazenamento::{BancoCaso, Resultado};
 use sied_dominio::{Dispositivo, SistemaOperacional};
@@ -186,6 +189,125 @@ fn estado_transcricao(estado: EstadoTranscricao) -> &'static str {
         EstadoTranscricao::SemSuporte => "sem_suporte",
         EstadoTranscricao::Cancelada => "cancelada",
         EstadoTranscricao::Erro => "erro",
+    }
+}
+
+fn campos_totais(totais: &[sied_armazenamento::resumo::TotalTipo]) -> Vec<Campo> {
+    totais
+        .iter()
+        .map(|t| Campo::novo(&t.tipo, milhar(t.total)))
+        .collect()
+}
+
+fn derivados(banco: &BancoCaso, ctx: &Contexto<'_>, evidencias: &[Evidencia]) -> DerivadosDoc {
+    let mut limites = vec![
+        "Este bloco reúne apenas derivados já persistidos no caso; não cria evidência nem conclusão pericial.".into(),
+        "Proximidade temporal e relações sugeridas são contexto investigativo, nunca causalidade, identidade ou autoria.".into(),
+        "Resultados multimodais/visuais não persistidos não são inventados: entram no PDF somente quando o analista os seleciona como evidência.".into(),
+    ];
+    let documentos = match banco.resumos_documentos_relatorio() {
+        Ok(pagina) => {
+            if pagina.total > pagina.itens.len() as i64 {
+                limites.push(format!(
+                    "O catálogo documental contém {} snapshots; o relatório inclui os primeiros {} metadados para manter o PDF legível.",
+                    milhar(pagina.total),
+                    milhar(pagina.itens.len() as i64)
+                ));
+            }
+            pagina
+                .itens
+                .into_iter()
+                .map(|d| DocumentoDerivadoDoc {
+                    id: d.id,
+                    caminho: d.caminho,
+                    pagina: d.pagina,
+                    total_paginas: d.total_paginas,
+                    motor: format!("{} v{}", d.motor_id, d.motor_versao),
+                    entidades_motor: d.entidades_motor_versao,
+                    regioes: d.total_regioes,
+                    entidades: d.total_entidades,
+                    sha256_origem: d.sha256_origem,
+                    sha256_texto: d.sha256_texto,
+                })
+                .collect()
+        }
+        Err(erro) => {
+            limites.push(format!(
+                "Metadados documentais não puderam ser lidos para este relatório: {erro}"
+            ));
+            Vec::new()
+        }
+    };
+    let linha_tempo = match banco.resumo_linha_do_tempo(&FiltroLinhaTempo::default()) {
+        Ok(resumo) => LinhaTempoDoc {
+            total: resumo.por_tipo.iter().map(|t| t.total).sum(),
+            primeira: resumo.primeira_ms.map(|ms| ctx.quando_ms(Some(ms))),
+            ultima: resumo.ultima_ms.map(|ms| ctx.quando_ms(Some(ms))),
+            por_tipo: campos_totais(&resumo.por_tipo),
+            apps: campos_totais(&resumo.apps),
+            sem_data: resumo.sem_data,
+        },
+        Err(erro) => {
+            limites.push(format!(
+                "Resumo da linha do tempo não pôde ser calculado: {erro}"
+            ));
+            LinhaTempoDoc {
+                total: 0,
+                primeira: None,
+                ultima: None,
+                por_tipo: Vec::new(),
+                apps: Vec::new(),
+                sem_data: 0,
+            }
+        }
+    };
+    let ids: Vec<i64> = evidencias
+        .iter()
+        .filter_map(|e| e.registro.as_ref().map(|r| r.id))
+        .take(3)
+        .collect();
+    if ids.len() == 3 && evidencias.iter().filter(|e| e.registro.is_some()).count() > 3 {
+        limites.push("As relações foram calculadas somente para as três primeiras evidências de registro selecionadas.".into());
+    }
+    let mut relacoes = Vec::new();
+    for id in ids {
+        let controle = ControleDescoberta::novo();
+        match banco.contexto_relacoes(id, 30, 12, &controle) {
+            Ok(contexto) => {
+                for aresta in contexto.arestas {
+                    relacoes.push(RelacaoDoc {
+                        de: aresta.de,
+                        para: aresta.para,
+                        classe: match aresta.classe {
+                            ClasseRelacao::Direta => "direta",
+                            ClasseRelacao::Sugerida => "sugerida",
+                        }
+                        .into(),
+                        motivo: aresta.motivo,
+                        mecanismo: aresta.mecanismo,
+                        score: aresta.score_contexto.map(|v| format!("{v:.4}")),
+                    });
+                    if relacoes.len() >= 60 {
+                        break;
+                    }
+                }
+            }
+            Err(erro) => limites.push(format!(
+                "Relações do registro {id} não puderam ser calculadas: {erro}"
+            )),
+        }
+        if relacoes.len() >= 60 {
+            break;
+        }
+    }
+    if relacoes.len() >= 60 {
+        limites.push("Relações limitadas a 60 arestas no relatório; o grafo completo continua navegável no aplicativo.".into());
+    }
+    DerivadosDoc {
+        documentos,
+        linha_tempo,
+        relacoes,
+        limites,
     }
 }
 
@@ -1000,6 +1122,7 @@ pub fn montar(
         evidencias.push(doc);
         conferencias.push(conf);
     }
+    let derivados = derivados(banco, &ctx, &lista);
 
     let divergentes = conferencias
         .iter()
@@ -1095,6 +1218,7 @@ pub fn montar(
         extracoes: docs_extracoes,
         metodologia: metodologia(),
         transcricoes,
+        derivados,
         evidencias,
         observacoes: limpo(pedido.observacoes.clone()),
         conclusao: limpo(pedido.conclusao.clone()),

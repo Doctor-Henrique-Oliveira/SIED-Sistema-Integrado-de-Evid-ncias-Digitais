@@ -154,6 +154,67 @@
       ]
     ]
   ]
+
+  #if d.derivados.documentos.len() > 0 or d.derivados.linha_tempo.total > 0 or d.derivados.relacoes.len() > 0 [
+    = Derivados investigativos
+    Os itens desta seção são resultados derivados dos índices locais do caso. Eles mantêm origem, motor e hashes para conferência, mas não substituem a evidência original nem constituem conclusão automática.
+
+    #if d.derivados.documentos.len() > 0 [
+      == Snapshots documentais e OCR
+      #table(
+        columns: (auto, 1fr, auto, auto, auto),
+        stroke: (x, y) => (bottom: 0.3pt + linha),
+        inset: 3pt,
+        rotulo[ID], rotulo[Arquivo], rotulo[Motor / entidades], rotulo[Regiões], rotulo[Hashes],
+        ..d.derivados.documentos.map(doc => (
+          mono(str(doc.id)),
+          [#text(8pt, doc.caminho) #if doc.pagina != none [ · pág. #doc.pagina]],
+          text(8pt, doc.motor + " / " + doc.entidades_motor),
+          text(8pt, str(doc.regioes) + " / " + str(doc.entidades)),
+          [#mono(doc.sha256_origem, size: 6.5pt) #linebreak() #mono(doc.sha256_texto, size: 6.5pt)],
+        )).flatten(),
+      )
+    ]
+
+    == Linha do tempo do caso
+    #campos((
+      (rotulo: "Registros com data", valor: str(d.derivados.linha_tempo.total)),
+      (rotulo: "Primeiro registro", valor: d.derivados.linha_tempo.primeira ?? "sem data utilizável"),
+      (rotulo: "Último registro", valor: d.derivados.linha_tempo.ultima ?? "sem data utilizável"),
+      (rotulo: "Registros sem data", valor: str(d.derivados.linha_tempo.sem_data)),
+    ))
+    #if d.derivados.linha_tempo.por_tipo.len() > 0 [
+      #text(8.5pt, fill: suave)[Distribuição por tipo]
+      #campos(d.derivados.linha_tempo.por_tipo)
+    ]
+    #if d.derivados.linha_tempo.apps.len() > 0 [
+      #text(8.5pt, fill: suave)[Distribuição por aplicativo]
+      #campos(d.derivados.linha_tempo.apps)
+    ]
+
+    #if d.derivados.relacoes.len() > 0 [
+      == Relações experimentais conferíveis
+      #for r in d.derivados.relacoes [
+        #block(breakable: true, inset: 6pt, above: 0.3em, below: 0.3em, fill: fundo, stroke: 0.3pt + linha)[
+          #text(8.5pt, weight: "bold")[#r.classe · #r.de → #r.para]
+          #linebreak()
+          #text(8.5pt, fill: suave)[Mecanismo: #r.mecanismo#if r.score != none [ · score técnico #r.score]]
+          #linebreak()
+          #r.motivo
+        ]
+      ]
+    ]
+
+    #if d.derivados.limites.len() > 0 [
+      #caixa(ouro)[
+        *Limitações e escopo:*
+        #for l in d.derivados.limites [
+          #linebreak()
+          #text(8.5pt, l)
+        ]
+      ]
+    ]
+  ]
 ]
 
 // ------------------------------------------------------------------ evidências

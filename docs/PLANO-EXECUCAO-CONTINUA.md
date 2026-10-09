@@ -116,11 +116,11 @@ AI-7 recebeu uma fila paginada de revisão humana para candidatos de entidades d
 
 ### E09 — Relatórios investigativos avançados
 
-**Status: PENDENTE**
+**Status: IMPLEMENTADA LOCALMENTE (E09)**
 
-Integrar OCR, transcrições, timeline, mapas, relações e explicações multimodais ao relatório. Adicionar modelos institucionais versionados, abertura do PDF pelo aplicativo e geração assíncrona. Estudar assinatura digital sem inventar autoridade certificadora.
+O PDF agora inclui, dentro da metodologia, um bloco de derivados investigativos com metadados dos snapshots documentais/OCR (motor, versão, regiões, entidades e hashes), resumo real da linha do tempo e relações experimentais derivadas das primeiras evidências de registro. Cada relação preserva classe direta/sugerida, mecanismo, motivo e score técnico quando existente. Transcrições locais e imagens já selecionadas continuam com origem, timestamps, motor e hash. O bloco é limitado e explicita o que não foi persistido, sem inventar resultados multimodais/visuais.
 
-**Concluída quando:** relatório sintético inclui essas fontes de forma legível e rastreável, sem bloquear o restante do caso e com SHA-256/auditoria preservados.
+**Concluída quando:** relatório sintético inclui essas fontes de forma legível e rastreável, sem bloquear o restante do caso e com SHA-256/auditoria preservados. Modelos institucionais versionados, abertura automática do PDF pelo aplicativo, geração assíncrona e assinatura digital continuam extensões da fase.
 
 ### E10 — Expansão de parsers e contêineres, exceto Avilla
 

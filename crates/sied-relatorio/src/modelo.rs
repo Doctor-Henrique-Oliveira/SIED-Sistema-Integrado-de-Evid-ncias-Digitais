@@ -87,10 +87,55 @@ pub struct Documento {
     pub extracoes: Vec<ExtracaoDoc>,
     pub metodologia: Vec<String>,
     pub transcricoes: Vec<TranscricaoDoc>,
+    pub derivados: DerivadosDoc,
     pub evidencias: Vec<EvidenciaDoc>,
     pub observacoes: Option<String>,
     pub conclusao: Option<String>,
     pub integridade: IntegridadeDoc,
+}
+
+/// Índices e correlações já produzidos pelo caso, apresentados como material
+/// derivado. Nada aqui substitui a evidência original ou afirma causalidade.
+#[derive(Debug, Clone, Serialize)]
+pub struct DerivadosDoc {
+    pub documentos: Vec<DocumentoDerivadoDoc>,
+    pub linha_tempo: LinhaTempoDoc,
+    pub relacoes: Vec<RelacaoDoc>,
+    pub limites: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DocumentoDerivadoDoc {
+    pub id: i64,
+    pub caminho: String,
+    pub pagina: Option<u32>,
+    pub total_paginas: Option<u32>,
+    pub motor: String,
+    pub entidades_motor: String,
+    pub regioes: i64,
+    pub entidades: i64,
+    pub sha256_origem: String,
+    pub sha256_texto: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct LinhaTempoDoc {
+    pub total: i64,
+    pub primeira: Option<String>,
+    pub ultima: Option<String>,
+    pub por_tipo: Vec<Campo>,
+    pub apps: Vec<Campo>,
+    pub sem_data: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct RelacaoDoc {
+    pub de: String,
+    pub para: String,
+    pub classe: String,
+    pub motivo: String,
+    pub mecanismo: String,
+    pub score: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]

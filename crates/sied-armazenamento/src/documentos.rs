@@ -134,6 +134,27 @@ pub struct AchadoDocumento {
     pub trecho: String,
 }
 
+/// Metadados de um snapshot documental para consumo de relatórios. O texto
+/// integral nunca é carregado nesta listagem; o PDF aponta para o snapshot e
+/// preserva hashes, motor, página e quantidade de candidatos/regiões.
+#[derive(Debug, Clone, Serialize)]
+pub struct ResumoDocumento {
+    pub id: i64,
+    pub caso_id: CasoId,
+    pub extracao_id: ExtracaoId,
+    pub arquivo_id: i64,
+    pub caminho: String,
+    pub sha256_origem: String,
+    pub sha256_texto: String,
+    pub pagina: Option<u32>,
+    pub total_paginas: Option<u32>,
+    pub motor_id: String,
+    pub motor_versao: String,
+    pub entidades_motor_versao: String,
+    pub total_regioes: i64,
+    pub total_entidades: i64,
+}
+
 /// Confirmação significa exclusivamente que a ocorrência literal foi conferida
 /// pelo analista. Não confirma identidade, autoria, validade material ou crime.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, TS)]
@@ -413,6 +434,56 @@ pub fn obter(conn: &Connection, id: i64) -> Resultado<DocumentoIndexado> {
         &documento.sha256_origem,
     )?;
     Ok(documento)
+}
+
+fn ler_resumo_documento(r: &Row<'_>) -> rusqlite::Result<ResumoDocumento> {
+    let pagina: u32 = r.get(7)?;
+    Ok(ResumoDocumento {
+        id: r.get(0)?,
+        caso_id: uuid(r.get(1)?)?,
+        extracao_id: uuid(r.get(2)?)?,
+        arquivo_id: r.get(3)?,
+        caminho: r.get(4)?,
+        sha256_origem: r.get(5)?,
+        sha256_texto: r.get(6)?,
+        pagina: (pagina != 0).then_some(pagina),
+        total_paginas: r.get(8)?,
+        motor_id: r.get(9)?,
+        motor_versao: r.get(10)?,
+        entidades_motor_versao: r.get(11)?,
+        total_regioes: r.get(12)?,
+        total_entidades: r.get(13)?,
+    })
+}
+
+/// Lista apenas metadados documentais, com limite explícito para relatórios.
+/// O snapshot e suas regiões continuam acessíveis por `obter`/`regioes`, sem
+/// duplicar texto derivado no PDF.
+pub fn listar_resumos(
+    conn: &Connection,
+    caso_id: CasoId,
+    deslocamento: i64,
+    limite: i64,
+) -> Resultado<Pagina<ResumoDocumento>> {
+    if deslocamento < 0 || !(1..=200).contains(&limite) {
+        return Err(recusar("paginação de documentos para relatório inválida"));
+    }
+    let caso = caso_id.to_string();
+    let total: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM documento_derivado WHERE caso_id=?1",
+        [&caso],
+        |r| r.get(0),
+    )?;
+    let mut stmt = conn.prepare(
+        "SELECT d.id,d.caso_id,d.extracao_id,d.arquivo_id,d.caminho,d.sha256_origem,d.sha256_texto,
+                d.pagina,d.total_paginas,d.motor_id,d.motor_versao,d.entidades_motor_versao,
+                d.total_regioes,(SELECT COUNT(*) FROM entidade_documental e WHERE e.documento_id=d.id)
+         FROM documento_derivado d WHERE d.caso_id=?1 ORDER BY d.id LIMIT ?2 OFFSET ?3",
+    )?;
+    let itens = stmt
+        .query_map(params![caso, limite, deslocamento], ler_resumo_documento)?
+        .collect::<std::result::Result<_, _>>()?;
+    Ok(Pagina { total, itens })
 }
 
 fn candidatos_originais(
