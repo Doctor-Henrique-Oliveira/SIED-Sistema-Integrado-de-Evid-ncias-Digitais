@@ -27,10 +27,11 @@ do caso e sua auditoria continuam sendo a fonte de verdade.
 
 ## Validação
 
-`cargo fmt --all` passou. `cargo metadata --no-deps` e a validação TypeScript/build da
-interface permanecem independentes deste crate. A compilação/testes Rust locais continuam
-bloqueados por `link.exe`/MSVC ausente no ambiente Windows atual; não foi instalado nenhum
-toolchain nem alterado código para contornar o bloqueio.
+`cargo fmt --all` passou. A interface passou no gate local com `npm.cmd run typecheck`,
+29 arquivos/214 testes (`npm.cmd test -- --run`) e `npm.cmd run build`; o build mantém
+apenas o aviso conhecido de chunk grande. `cargo metadata --no-deps` também passou. A
+compilação/testes Rust locais continuam bloqueados por `link.exe`/MSVC ausente no ambiente
+Windows atual; não foi instalado nenhum toolchain nem alterado código para contornar o bloqueio.
 
 ## Próximos blocos da E12
 
