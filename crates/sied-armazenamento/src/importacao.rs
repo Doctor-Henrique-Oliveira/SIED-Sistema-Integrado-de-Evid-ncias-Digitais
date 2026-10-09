@@ -94,12 +94,16 @@ impl Importacao {
         if !existe {
             return Err(ErroArmazenamento::NaoEncontrado("dispositivo".into()));
         }
+        // A verificação e o registro precisam compartilhar a mesma transação
+        // IMMEDIATE; sem isso, duas janelas poderiam passar no SELECT ao mesmo
+        // tempo e criar execuções concorrentes.
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
         // Uma execução que ficou aberta após queda/cancelamento do processo não pode
         // ser duplicada silenciosamente. A retomada automática continua desativada;
         // o operador deve recuperar a execução existente ou iniciar uma nova depois
         // que ela tenha um estado final explícito.
         let origem_texto = origem.display().to_string();
-        let em_andamento: bool = conn.query_row(
+        let em_andamento: bool = tx.query_row(
             "SELECT EXISTS(
                 SELECT 1 FROM extracao
                 WHERE dispositivo_id = ?1 AND origem_caminho = ?2 AND importador = ?3
@@ -115,7 +119,6 @@ impl Importacao {
         }
         let id = ExtracaoId::novo();
         let agora = Utc::now().to_rfc3339();
-        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
         tx.execute(
             "INSERT INTO extracao(id, dispositivo_id, importador, importador_nome, importador_versao,
                                   origem_caminho, sied_versao, usuario, maquina, iniciada_em, status)
