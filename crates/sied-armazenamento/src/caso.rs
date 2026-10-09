@@ -37,7 +37,7 @@ use crate::derivados::{self, ConferenciaDerivados, ReconstrucaoDerivados};
 use crate::descoberta::{PedidoDescoberta, ResultadoDescoberta};
 use crate::documentos::{
     self, AchadoDocumento, DocumentoIndexado, EntidadeDocumento, EstadoRevisaoEntidade,
-    NovoDocumento, RevisaoEntidade,
+    NovoDocumento, RegiaoDocumento, RevisaoEntidade,
 };
 use crate::evidencias::{self, Evidencia, Marcacoes, NovaEvidencia, TextosEvidencia};
 use crate::extracoes::{
@@ -58,6 +58,7 @@ use crate::supervisao::{
     self, AmostraSupervisionada, AvaliacaoSupervisionada, DatasetSupervisionado,
     PedidoAmostraSupervisionada,
 };
+use crate::transcricoes::{self, NovaTranscricao, SegmentoTranscricao, TranscricaoLocal};
 use crate::universal::{self, PedidoUniversal, ResultadoUniversal};
 use crate::visuais::{self, ResultadoSimilarVisual, VisualIndexado};
 use crate::{ErroArmazenamento, Resultado, Sessao};
@@ -367,8 +368,54 @@ impl BancoCaso {
         documentos::obter(&self.conn, id)
     }
 
+    pub fn regioes_documento(
+        &self,
+        id: i64,
+        deslocamento: i64,
+        limite: i64,
+    ) -> Resultado<Pagina<RegiaoDocumento>> {
+        documentos::regioes(&self.conn, id, deslocamento, limite)
+    }
+
+    pub fn localizar_regiao_documento(
+        &self,
+        id: i64,
+        inicio_utf8: u32,
+        fim_utf8: u32,
+    ) -> Resultado<Option<u32>> {
+        documentos::localizar_regiao(&self.conn, id, inicio_utf8, fim_utf8)
+    }
+
     pub fn entidades_documento(&self, id: i64) -> Resultado<Vec<EntidadeDocumento>> {
         documentos::entidades(&self.conn, id)
+    }
+
+    pub fn guardar_transcricao(&mut self, novo: &NovaTranscricao) -> Resultado<TranscricaoLocal> {
+        if novo.caso_id != self.caso.id {
+            return Err(ErroArmazenamento::Recusado(
+                "transcrição pertence a outro caso".into(),
+            ));
+        }
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let t = transcricoes::guardar(&tx, &self.sessao, novo)?;
+        tx.commit()?;
+        Ok(t)
+    }
+
+    pub fn listar_transcricoes(&self, arquivo_id: i64) -> Resultado<Vec<TranscricaoLocal>> {
+        transcricoes::listar(&self.conn, arquivo_id)
+    }
+
+    pub fn segmentos_transcricao(
+        &self,
+        id: i64,
+        deslocamento: i64,
+        limite: i64,
+        termo: Option<&str>,
+    ) -> Resultado<Pagina<SegmentoTranscricao>> {
+        transcricoes::segmentos(&self.conn, id, deslocamento, limite, termo)
     }
 
     pub fn revisar_entidade(

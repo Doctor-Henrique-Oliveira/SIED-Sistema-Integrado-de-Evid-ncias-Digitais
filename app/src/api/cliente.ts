@@ -94,6 +94,7 @@ import type { DatasetSupervisionado } from "./tipos/DatasetSupervisionado";
 import type { PedidoAmostraSupervisionada } from "./tipos/PedidoAmostraSupervisionada";
 import type { AmostraSupervisionada } from "./tipos/AmostraSupervisionada";
 import type { AvaliacaoSupervisionada } from "./tipos/AvaliacaoSupervisionada";
+import type { PaginaTranscricao, SegmentoTranscricao, TranscricaoLocal } from "./transcricao";
 
 export type {
   MecanismoUniversal,
@@ -111,6 +112,9 @@ export type {
   PedidoAmostraSupervisionada,
   AmostraSupervisionada,
   AvaliacaoSupervisionada,
+  TranscricaoLocal,
+  SegmentoTranscricao,
+  PaginaTranscricao,
   PedidoDescoberta,
   ResultadoDescoberta,
   AchadoDescoberta,
@@ -289,16 +293,21 @@ export const api = {
   /** Miniatura de uma imagem do inventário (lida da extração e conferida pelo SHA-256). */
   miniatura: async (arquivoId: number) => (await chamar<Miniatura | undefined>("miniatura", { arquivoId })) ?? null,
   /** Texto conferido contra o inventário; PDF admite página real. Não recebe caminho ou hash do frontend. */
-  lerDocumento: (arquivoId: number, casoId: CasoId, pagina?: number) =>
-    chamar<ResultadoDocumento>("ler_documento", { arquivoId, casoId, ...(pagina === undefined ? {} : { pagina }) }),
+    lerDocumento: (arquivoId: number, casoId: CasoId, pagina?: number, modo?: "automatico" | "ocr") =>
+      chamar<ResultadoDocumento>("ler_documento", { arquivoId, casoId, ...(pagina === undefined ? {} : { pagina }), ...(modo === undefined ? {} : { modo }) }),
   /** Relê/confronta a origem no backend antes de armazenar o derivado. Nunca recebe texto/hash do frontend. */
-  indexarDocumento: (arquivoId: number, casoId: CasoId, pagina?: number) =>
-    chamar<DocumentoIndexado>("indexar_documento", { arquivoId, casoId, ...(pagina === undefined ? {} : { pagina }) }),
+    indexarDocumento: (arquivoId: number, casoId: CasoId, pagina?: number, modo?: "automatico" | "ocr") =>
+      chamar<DocumentoIndexado>("indexar_documento", { arquivoId, casoId, ...(pagina === undefined ? {} : { pagina }), ...(modo === undefined ? {} : { modo }) }),
   /** Busca somente em textos derivados armazenados; não relê nem confere a origem atual. */
   buscarDocumentos: (casoId: CasoId, termo: string, deslocamento: number, limite: number) =>
     chamar<Pagina<AchadoDocumento>>("buscar_documentos", { casoId, termo, deslocamento, limite }),
   obterDocumento: (casoId: CasoId, documentoId: number) =>
     chamar<DocumentoIndexado>("obter_documento", { casoId, documentoId }),
+  /** Resposta validada na tela até os contratos ts-rs poderem ser regenerados pelo Rust. */
+  regioesDocumento: (casoId: CasoId, documentoId: number, deslocamento: number, limite: number) =>
+    chamar<unknown>("regioes_documento", { casoId, documentoId, deslocamento, limite }),
+  localizarRegiaoDocumento: (casoId: CasoId, documentoId: number, inicioUtf8: number, fimUtf8: number) =>
+    chamar<number | null>("localizar_regiao_documento", { casoId, documentoId, inicioUtf8, fimUtf8 }),
   entidadesDocumento: (casoId: CasoId, documentoId: number) =>
     chamar<EntidadeDocumento[]>("entidades_documento", { casoId, documentoId }),
   /** Confirmação é da ocorrência literal, não da identidade ou veracidade do conteúdo. */
@@ -308,6 +317,13 @@ export const api = {
     chamar<Pagina<RevisaoEntidade>>("revisoes_entidade", { casoId, entidadeId, deslocamento, limite }),
   /** Sinal cooperativo; true não significa que a operação já terminou ou foi revertida. */
   cancelarDocumento: (casoId: CasoId) => chamar<boolean>("cancelar_documento", { casoId }),
+  transcreverLocal: (casoId: CasoId, arquivoId: number) =>
+    chamar<TranscricaoLocal>("transcrever_local", { casoId, arquivoId }),
+  cancelarTranscricao: (casoId: CasoId) => chamar<boolean>("cancelar_transcricao", { casoId }),
+  listarTranscricoes: (casoId: CasoId, arquivoId: number) =>
+    chamar<TranscricaoLocal[]>("listar_transcricoes", { casoId, arquivoId }),
+  segmentosTranscricao: (casoId: CasoId, transcricaoId: number, deslocamento: number, limite: number, termo?: string) =>
+    chamar<PaginaTranscricao>("segmentos_transcricao", { casoId, transcricaoId, deslocamento, limite, termo: termo?.trim() || null }),
   /** Descritor estrutural local com origem conferida; não detecção/classificação de objetos. */
   indexarVisual: (casoId: CasoId, arquivoId: number) =>
     chamar<VisualIndexado>("indexar_visual", { casoId, arquivoId }),

@@ -33,12 +33,46 @@ pub struct NovoDocumento {
     pub texto: String,
     pub pagina: Option<u32>,
     pub total_paginas: Option<u32>,
+    pub largura_px: Option<u32>,
+    pub altura_px: Option<u32>,
+    pub regioes: Vec<NovaRegiaoDocumento>,
     pub motor_id: String,
     pub motor_versao: String,
     pub executado_em: String,
     pub entidades_limitadas: bool,
     pub entidades_motor_versao: String,
     pub entidades: Vec<NovaEntidadeDocumento>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NovaRegiaoDocumento {
+    pub ordem: u32,
+    pub inicio_utf8: u32,
+    pub fim_utf8: u32,
+    pub texto: String,
+    pub x: u32,
+    pub y: u32,
+    pub largura: u32,
+    pub altura: u32,
+    pub confianca: Option<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct RegiaoDocumento {
+    #[ts(type = "number")]
+    pub id: i64,
+    #[ts(type = "number")]
+    pub documento_id: i64,
+    pub ordem: u32,
+    pub inicio_utf8: u32,
+    pub fim_utf8: u32,
+    pub texto: String,
+    pub x: u32,
+    pub y: u32,
+    pub largura: u32,
+    pub altura: u32,
+    pub confianca: Option<u8>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -65,6 +99,10 @@ pub struct DocumentoIndexado {
     pub texto: String,
     pub pagina: Option<u32>,
     pub total_paginas: Option<u32>,
+    pub largura_px: Option<u32>,
+    pub altura_px: Option<u32>,
+    #[ts(type = "number")]
+    pub total_regioes: i64,
     pub motor_id: String,
     pub motor_versao: String,
     pub executado_em: String,
@@ -143,7 +181,8 @@ pub struct RevisaoEntidade {
 const COLUNAS: &str = "d.id, d.caso_id, d.extracao_id, d.arquivo_id, d.caminho,
     d.sha256_origem, d.sha256_texto, d.texto, d.pagina, d.total_paginas,
     d.motor_id, d.motor_versao, d.executado_em, d.entidades_limitadas,
-    d.entidades_motor_versao";
+    d.entidades_motor_versao, d.largura_px, d.altura_px,
+    (SELECT COUNT(*) FROM regiao_documental r WHERE r.documento_id = d.id)";
 
 fn recusar(motivo: &str) -> ErroArmazenamento {
     ErroArmazenamento::Recusado(motivo.into())
@@ -205,6 +244,29 @@ fn validar_novo(novo: &NovoDocumento) -> Resultado<()> {
         (None, None) => {}
         (Some(p), Some(total)) if p > 0 && p <= total && total <= 512 => {}
         _ => return Err(recusar("página e total de páginas não conferem")),
+    }
+    match (novo.largura_px, novo.altura_px, novo.regioes.is_empty()) {
+        (None, None, true) => {}
+        (Some(l), Some(a), _) if l > 0 && a > 0 => {}
+        _ => return Err(recusar("dimensões e regiões OCR não conferem")),
+    }
+    if novo.regioes.len() > 50_000 {
+        return Err(recusar("snapshot OCR excede o limite de regiões"));
+    }
+    for (ordem, regiao) in novo.regioes.iter().enumerate() {
+        let inicio = regiao.inicio_utf8 as usize;
+        let fim = regiao.fim_utf8 as usize;
+        if regiao.ordem as usize != ordem
+            || inicio >= fim
+            || novo.texto.get(inicio..fim) != Some(regiao.texto.as_str())
+            || regiao.confianca.is_some_and(|c| c > 100)
+            || regiao.largura == 0
+            || regiao.altura == 0
+            || regiao.x.saturating_add(regiao.largura) > novo.largura_px.unwrap_or(0)
+            || regiao.y.saturating_add(regiao.altura) > novo.altura_px.unwrap_or(0)
+        {
+            return Err(recusar("região OCR não corresponde ao texto ou à imagem"));
+        }
     }
     let mut vistos = std::collections::BTreeSet::new();
     for entidade in &novo.entidades {
@@ -271,7 +333,55 @@ fn ler_documento(r: &Row<'_>) -> rusqlite::Result<DocumentoIndexado> {
         executado_em: r.get(12)?,
         entidades_limitadas: r.get(13)?,
         entidades_motor_versao: r.get(14)?,
+        largura_px: r.get(15)?,
+        altura_px: r.get(16)?,
+        total_regioes: r.get(17)?,
     })
+}
+
+fn ler_regiao(r: &Row<'_>) -> rusqlite::Result<RegiaoDocumento> {
+    Ok(RegiaoDocumento {
+        id: r.get(0)?,
+        documento_id: r.get(1)?,
+        ordem: r.get(2)?,
+        inicio_utf8: r.get(3)?,
+        fim_utf8: r.get(4)?,
+        texto: r.get(5)?,
+        x: r.get(6)?,
+        y: r.get(7)?,
+        largura: r.get(8)?,
+        altura: r.get(9)?,
+        confianca: r.get(10)?,
+    })
+}
+
+fn regioes_originais(conn: &Connection, documento_id: i64) -> Resultado<Vec<NovaRegiaoDocumento>> {
+    let mut stmt = conn.prepare(
+        "SELECT ordem, inicio_utf8, fim_utf8, texto,
+                x, y, largura, altura, confianca
+         FROM regiao_documental WHERE documento_id = ?1 ORDER BY ordem LIMIT 50001",
+    )?;
+    let itens = stmt
+        .query_map([documento_id], |r| {
+            Ok(NovaRegiaoDocumento {
+                ordem: r.get(0)?,
+                inicio_utf8: r.get(1)?,
+                fim_utf8: r.get(2)?,
+                texto: r.get(3)?,
+                x: r.get(4)?,
+                y: r.get(5)?,
+                largura: r.get(6)?,
+                altura: r.get(7)?,
+                confianca: r.get(8)?,
+            })
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    if itens.len() > 50_000 {
+        return Err(ErroArmazenamento::Inconsistente(
+            "snapshot OCR excede o limite de regiões".into(),
+        ));
+    }
+    Ok(itens)
 }
 
 pub fn obter(conn: &Connection, id: i64) -> Resultado<DocumentoIndexado> {
@@ -380,6 +490,9 @@ pub fn guardar(
         });
         if guardado.texto != novo.texto
             || guardado.total_paginas != novo.total_paginas
+            || guardado.largura_px != novo.largura_px
+            || guardado.altura_px != novo.altura_px
+            || regioes_originais(tx, id)?.as_slice() != novo.regioes.as_slice()
             || guardado.entidades_limitadas != novo.entidades_limitadas
             || candidatos_originais(tx, id)? != esperados
         {
@@ -392,8 +505,9 @@ pub fn guardar(
         tx.execute(
             "INSERT INTO documento_derivado(caso_id, extracao_id, arquivo_id, caminho,
              sha256_origem, sha256_texto, texto, pagina, total_paginas, motor_id,
-             motor_versao, executado_em, entidades_limitadas, entidades_motor_versao)
-             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
+             motor_versao, executado_em, entidades_limitadas, entidades_motor_versao,
+             largura_px, altura_px)
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16)",
             params![
                 novo.caso_id.to_string(),
                 novo.extracao_id.to_string(),
@@ -408,10 +522,31 @@ pub fn guardar(
                 novo.motor_versao,
                 novo.executado_em,
                 novo.entidades_limitadas,
-                novo.entidades_motor_versao
+                novo.entidades_motor_versao,
+                novo.largura_px,
+                novo.altura_px
             ],
         )?;
         let id = tx.last_insert_rowid();
+        for r in &novo.regioes {
+            tx.execute(
+                "INSERT INTO regiao_documental(documento_id, ordem, inicio_utf8, fim_utf8,
+                 texto, x, y, largura, altura, confianca)
+                 VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+                params![
+                    id,
+                    r.ordem,
+                    r.inicio_utf8,
+                    r.fim_utf8,
+                    r.texto,
+                    r.x,
+                    r.y,
+                    r.largura,
+                    r.altura,
+                    r.confianca
+                ],
+            )?;
+        }
         for e in &novo.entidades {
             tx.execute(
                 "INSERT INTO entidade_documental(documento_id, tipo, inicio_utf8, fim_utf8, literal, regra_versao)
@@ -433,6 +568,8 @@ pub fn guardar(
                "sha256_origem": novo.sha256_origem, "sha256_texto": novo.sha256_texto,
                "pagina": novo.pagina, "motor_id": novo.motor_id, "motor_versao": novo.motor_versao,
                "entidades_motor_versao": novo.entidades_motor_versao,
+               "regioes_ocr": novo.regioes.len(), "largura_px": novo.largura_px,
+               "altura_px": novo.altura_px,
                "ocorrencias_candidatas": novo.entidades.len(), "entidades_limitadas": novo.entidades_limitadas}),
     )?;
     obter(tx, id)
@@ -445,6 +582,67 @@ fn paginacao(deslocamento: i64, limite: i64) -> Resultado<(i64, i64)> {
         ));
     }
     Ok((deslocamento, limite))
+}
+
+/// Regiões OCR são carregadas sob demanda. Abrir o documento valida primeiro o
+/// hash do derivado e sua origem registrada; nenhuma página transporta mais de
+/// 100 caixas, mesmo quando o snapshot atingiu o limite técnico de 50.000.
+pub fn regioes(
+    conn: &Connection,
+    documento_id: i64,
+    deslocamento: i64,
+    limite: i64,
+) -> Resultado<Pagina<RegiaoDocumento>> {
+    let (deslocamento, limite) = paginacao(deslocamento, limite)?;
+    let documento = obter(conn, documento_id)?;
+    if documento.total_regioes > 50_000 {
+        return Err(ErroArmazenamento::Inconsistente(
+            "snapshot OCR excede o limite de regiões".into(),
+        ));
+    }
+    let mut stmt = conn.prepare(
+        "SELECT id, documento_id, ordem, inicio_utf8, fim_utf8, texto,
+                x, y, largura, altura, confianca
+         FROM regiao_documental WHERE documento_id = ?1
+         ORDER BY ordem LIMIT ?2 OFFSET ?3",
+    )?;
+    let itens = stmt
+        .query_map(params![documento_id, limite, deslocamento], ler_regiao)?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    Ok(Pagina {
+        total: documento.total_regioes,
+        itens,
+    })
+}
+
+/// Resolve uma faixa do texto persistido para a primeira região OCR que a
+/// intersecta. A faixa é conferida contra fronteiras UTF-8 do snapshot antes da
+/// consulta; o frontend não escolhe diretamente uma caixa nem sua ordem.
+pub fn localizar_regiao(
+    conn: &Connection,
+    documento_id: i64,
+    inicio_utf8: u32,
+    fim_utf8: u32,
+) -> Resultado<Option<u32>> {
+    let documento = obter(conn, documento_id)?;
+    let inicio = inicio_utf8 as usize;
+    let fim = fim_utf8 as usize;
+    if inicio >= fim
+        || fim > documento.texto.len()
+        || !documento.texto.is_char_boundary(inicio)
+        || !documento.texto.is_char_boundary(fim)
+    {
+        return Err(recusar("faixa textual para localização OCR é inválida"));
+    }
+    Ok(conn
+        .query_row(
+            "SELECT ordem FROM regiao_documental
+             WHERE documento_id = ?1 AND inicio_utf8 < ?3 AND fim_utf8 > ?2
+             ORDER BY ordem LIMIT 1",
+            params![documento_id, inicio_utf8, fim_utf8],
+            |r| r.get(0),
+        )
+        .optional()?)
 }
 
 /// Pesquisa somente os derivados já analisados. Não processa arquivos nem faz
@@ -730,6 +928,7 @@ mod contratos {
             };
         }
         contrato!(DocumentoIndexado);
+        contrato!(RegiaoDocumento);
         contrato!(AchadoDocumento);
         contrato!(EstadoRevisaoEntidade);
         contrato!(EntidadeDocumento);

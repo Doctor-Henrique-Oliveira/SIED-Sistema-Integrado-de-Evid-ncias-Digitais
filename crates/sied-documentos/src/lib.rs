@@ -3,7 +3,8 @@
 //! A origem só é acessada por [`FonteSomenteLeitura`]. O confinamento da origem é
 //! responsabilidade dessa implementação; esta biblioteca não resolve caminhos,
 //! percorre pastas nem acessa arquivos por outros meios. Não há escrita, cache,
-//! banco, processo externo, rede, OCR ou modelo de IA neste incremento.
+//! banco, processo externo, rede ou modelo generativo. Quando solicitado no
+//! Windows, OCR e renderização de PDF operam em memória por APIs locais nativas.
 //!
 //! Os bytes e o tamanho são conferidos contra o inventário antes de interpretar
 //! o conteúdo. Um resultado UTF-8 pronto preserva integralmente os bytes,
@@ -28,23 +29,26 @@ use std::time::{Duration, Instant};
 use ts_rs::TS;
 
 pub mod entidades;
+mod ocr;
 mod pdf;
 pub mod visao;
 
 /// Máximo de bytes da origem e do texto publicado: 2 MiB.
 pub const TAMANHO_MAXIMO: u64 = 2 * 1024 * 1024;
 /// Prazo cooperativo máximo por chamada, contado desde o início de [`analisar`].
-pub const PRAZO_PADRAO: Duration = Duration::from_secs(5);
+pub const PRAZO_PADRAO: Duration = Duration::from_secs(60);
 /// Identificador estável do motor de texto UTF-8.
 pub const MOTOR_ID: &str = "texto_utf8_nativo";
 /// Versão semântica da interpretação, independente da origem do documento.
 pub const MOTOR_VERSAO: &str = "0.1.0";
 pub const MOTOR_PDF_ID: &str = pdf::MOTOR_ID;
 pub const MOTOR_PDF_VERSAO: &str = pdf::MOTOR_VERSAO;
+pub const MOTOR_OCR_ID: &str = ocr::MOTOR_ID;
+pub const MOTOR_OCR_VERSAO: &str = ocr::MOTOR_VERSAO;
 
 const TAMANHO_CHUNK: usize = 16 * 1024;
 
-/// Seleção do motor. OCR é uma solicitação explícita sem motor instalado aqui.
+/// Seleção explícita do motor documental.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ModoDocumento {
@@ -92,8 +96,9 @@ pub enum EstadoDocumento {
 /// demais metadados não participam desse hash. No motor UTF-8 os bytes são
 /// idênticos à origem. No PDF, este é o hash do texto DERIVADO da página, não
 /// o hash do PDF nem uma garantia de ordem visual ou reprodução do layout.
-/// Somente PDF informa página e contagem observadas; texto plano usa `None`.
-/// Não há região nem confiança de OCR neste contrato.
+/// PDF e OCR informam página e contagem observadas; texto plano usa `None`.
+/// OCR também publica dimensões e palavras delimitadas; confiança permanece
+/// ausente quando o provedor não a fornece.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct TextoDocumento {
@@ -110,6 +115,26 @@ pub struct TextoDocumento {
     pub texto: String,
     pub pagina: Option<u32>,
     pub total_paginas: Option<u32>,
+    pub largura_px: Option<u32>,
+    pub altura_px: Option<u32>,
+    pub regioes: Vec<RegiaoTexto>,
+}
+
+/// Palavra reconhecida e sua região na imagem renderizada. A confiança é
+/// opcional porque o motor nativo do Windows não publica esse valor; `None`
+/// significa indisponível, nunca confiança zero.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct RegiaoTexto {
+    pub ordem: u32,
+    pub inicio_utf8: u32,
+    pub fim_utf8: u32,
+    pub texto: String,
+    pub x: u32,
+    pub y: u32,
+    pub largura: u32,
+    pub altura: u32,
+    pub confianca: Option<u8>,
 }
 
 /// Só `Pronto` traz texto. Toda outra saída informa motivo fixo, sem caminhos,
@@ -144,12 +169,12 @@ impl ControleDocumento {
         Self::com_prazo(PRAZO_PADRAO)
     }
 
-    /// Escolhe um prazo menor ou igual a cinco segundos. O relógio começa em
+    /// Escolhe um prazo limitado. O relógio começa em
     /// [`analisar`]; um prazo zero impede que a fonte seja aberta.
     pub fn com_prazo(prazo: Duration) -> Self {
         Self {
             cancelado: AtomicBool::new(false),
-            prazo: prazo.min(PRAZO_PADRAO),
+            prazo: prazo.min(Duration::from_secs(120)),
         }
     }
 
@@ -189,10 +214,10 @@ impl Default for ControleDocumento {
 
 /// Analisa integralmente um arquivo inventariado sem modificar a origem.
 ///
-/// São aceitas as extensões `txt`, `csv`, `tsv`, `json`, `xml`, `md`, `log` e
-/// um subconjunto conservador de PDF nativo. PDF usa a primeira página por padrão.
-/// Contêineres, Office, imagens e OCR são explicitamente
-/// sem suporte, sem abertura da fonte e sem alegação de integridade verificada.
+/// No modo automático são aceitas as extensões `txt`, `csv`, `tsv`, `json`,
+/// `xml`, `md`, `log` e um subconjunto conservador de PDF nativo. No modo OCR,
+/// PNG/JPEG e páginas PDF usam o motor local do Windows. Contêineres e Office
+/// continuam sem suporte, sem abertura da fonte.
 /// Para formatos admitidos, hash e tamanho do inventário são obrigatórios e são
 /// conferidos antes da interpretação. No motor UTF-8, assinaturas PDF/ZIP e
 /// controles binários impedem publicar um binário renomeado como texto.
@@ -230,30 +255,37 @@ pub fn analisar_pagina(
             "O identificador do arquivo no inventário é inválido.",
         );
     }
-    if p.modo == ModoDocumento::Ocr {
-        return ResultadoDocumento::sem(
-            SemSuporte,
-            "Não há motor de OCR disponível neste incremento.",
-        );
-    }
     if p.caminho.como_str().contains(SEPARADOR_CONTEINER) {
         return ResultadoDocumento::sem(
             SemSuporte,
             "Documentos dentro de contêineres não são analisados neste incremento.",
         );
     }
-    let eh_pdf = p.caminho.extensao().as_deref() == Some("pdf");
-    if !matches!(
-        p.caminho.extensao().as_deref(),
-        Some("txt" | "csv" | "tsv" | "json" | "xml" | "md" | "log" | "pdf")
-    ) {
+    if p.modo == ModoDocumento::Ocr && !ocr::disponivel() {
+        return ResultadoDocumento::sem(
+            SemSuporte,
+            "O OCR local desta versão usa o motor nativo do Windows e não está disponível neste sistema.",
+        );
+    }
+    let extensao = p.caminho.extensao();
+    let eh_pdf = extensao.as_deref() == Some("pdf");
+    let eh_imagem = matches!(extensao.as_deref(), Some("png" | "jpg" | "jpeg"));
+    let formato_admitido = if p.modo == ModoDocumento::Ocr {
+        eh_pdf || eh_imagem
+    } else {
+        matches!(
+            extensao.as_deref(),
+            Some("txt" | "csv" | "tsv" | "json" | "xml" | "md" | "log" | "pdf")
+        )
+    };
+    if !formato_admitido {
         return ResultadoDocumento::sem(
             SemSuporte,
             "A extensão do documento não tem motor disponível neste incremento.",
         );
     }
     if (eh_pdf && !(1..=pdf::MAXIMO_PAGINAS).contains(&pagina.unwrap_or(1)))
-        || (!eh_pdf && pagina.is_some())
+        || (!eh_pdf && pagina.is_some() && p.modo != ModoDocumento::Ocr)
     {
         return ResultadoDocumento::sem(
             Falhou,
@@ -269,8 +301,13 @@ pub fn analisar_pagina(
     if !hash_valido(sha256_esperado) {
         return ResultadoDocumento::sem(Falhou, "O SHA-256 registrado no inventário é inválido.");
     }
-    if p.tamanho > TAMANHO_MAXIMO {
-        return limite_de_bytes();
+    let limite_origem = if p.modo == ModoDocumento::Ocr {
+        ocr::TAMANHO_MAXIMO_ORIGEM
+    } else {
+        TAMANHO_MAXIMO
+    };
+    if p.tamanho > limite_origem {
+        return limite_de_origem(p.modo);
     }
     if let Some(resultado) = controle.interrupcao(inicio) {
         return resultado;
@@ -299,7 +336,7 @@ pub fn analisar_pagina(
         }
         // Quando o buffer atingir o limite, só um byte é solicitado para distinguir
         // EOF de excesso. Um leitor nunca pode nos fazer consumir o restante da origem.
-        let permitido = (TAMANHO_MAXIMO as usize - bytes.len() + 1).min(chunk.len());
+        let permitido = (limite_origem as usize - bytes.len() + 1).min(chunk.len());
         let leitura = leitor.read(&mut chunk[..permitido]);
         if let Some(resultado) = controle.interrupcao(inicio) {
             return resultado;
@@ -323,8 +360,8 @@ pub fn analisar_pagina(
         if lido == 0 {
             break;
         }
-        if bytes.len() + lido > TAMANHO_MAXIMO as usize {
-            return limite_de_bytes();
+        if bytes.len() + lido > limite_origem as usize {
+            return limite_de_origem(p.modo);
         }
         hasher.update(&chunk[..lido]);
         bytes.extend_from_slice(&chunk[..lido]);
@@ -342,6 +379,37 @@ pub fn analisar_pagina(
             OrigemDivergente,
             "O SHA-256 ou o tamanho da origem difere do inventário. Nenhum texto foi gerado.",
         );
+    }
+    if p.modo == ModoDocumento::Ocr {
+        let saida = match ocr::reconhecer(&bytes, eh_pdf, pagina.unwrap_or(1), controle, inicio) {
+            Ok(saida) => saida,
+            Err(resultado) => return *resultado,
+        };
+        if saida.texto.len() > TAMANHO_MAXIMO as usize {
+            return limite_de_texto();
+        }
+        let sha256_texto = hex::encode(Sha256::digest(saida.texto.as_bytes()));
+        return ResultadoDocumento {
+            estado: Pronto,
+            texto: Some(TextoDocumento {
+                caso_id: p.caso_id,
+                extracao_id: p.extracao_id,
+                arquivo_id: p.arquivo_id,
+                caminho: p.caminho.clone(),
+                sha256: sha256_esperado.to_owned(),
+                motor_id: MOTOR_OCR_ID.to_owned(),
+                motor_versao: format!("{}+{}", MOTOR_OCR_VERSAO, saida.idioma),
+                executado_em: Utc::now(),
+                sha256_texto,
+                texto: saida.texto,
+                pagina: Some(saida.pagina),
+                total_paginas: Some(saida.total_paginas),
+                largura_px: Some(saida.largura_px),
+                altura_px: Some(saida.altura_px),
+                regioes: saida.regioes,
+            }),
+            motivo: None,
+        };
     }
     if eh_pdf {
         // Pânico do parser vira falha sem texto. Isto não isola o processo nem
@@ -381,6 +449,9 @@ pub fn analisar_pagina(
                 texto,
                 pagina: Some(pagina.unwrap_or(1)),
                 total_paginas: Some(total_paginas),
+                largura_px: None,
+                altura_px: None,
+                regioes: Vec::new(),
             }),
             motivo: None,
         };
@@ -429,6 +500,9 @@ pub fn analisar_pagina(
             texto,
             pagina: None,
             total_paginas: None,
+            largura_px: None,
+            altura_px: None,
+            regioes: Vec::new(),
         }),
         motivo: None,
     };
@@ -445,10 +519,19 @@ fn hash_valido(hash: &str) -> bool {
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
-fn limite_de_bytes() -> ResultadoDocumento {
+fn limite_de_origem(modo: ModoDocumento) -> ResultadoDocumento {
+    let motivo = if modo == ModoDocumento::Ocr {
+        "A origem excede o limite de 64 MiB do OCR local neste incremento."
+    } else {
+        "O documento excede o limite de 2 MiB para leitura nativa neste incremento."
+    };
+    ResultadoDocumento::sem(EstadoDocumento::LimiteExcedido, motivo)
+}
+
+fn limite_de_texto() -> ResultadoDocumento {
     ResultadoDocumento::sem(
         EstadoDocumento::LimiteExcedido,
-        "O documento excede o limite de 2 MiB para leitura e texto neste incremento.",
+        "O texto derivado excede o limite de 2 MiB deste incremento.",
     )
 }
 
@@ -482,6 +565,7 @@ mod contratos {
                 "EstadoDocumento.ts",
                 EstadoDocumento::export_to_string().unwrap(),
             ),
+            ("RegiaoTexto.ts", RegiaoTexto::export_to_string().unwrap()),
             (
                 "TextoDocumento.ts",
                 TextoDocumento::export_to_string().unwrap(),

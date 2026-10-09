@@ -23,6 +23,7 @@ use sied_armazenamento::pesquisa_local::{
 };
 use sied_armazenamento::relatorios::{ConferenciaPastaRelatorios, RelatorioRegistrado};
 use sied_armazenamento::resumo::{Identificador, ResumoCaso};
+use sied_armazenamento::transcricoes::{NovaTranscricao, SegmentoTranscricao, TranscricaoLocal};
 use sied_armazenamento::{BancoCaso, CasoCatalogado, CatalogoGlobal, Sessao};
 use sied_documentos::{ControleDocumento, ModoDocumento, PedidoDocumento, ResultadoDocumento};
 use sied_dominio::{
@@ -52,7 +53,40 @@ pub struct LeituraDocumento {
     pedido: PedidoDocumento,
 }
 
+/// Endereço resolvido do inventário para a transcrição local. O frontend só
+/// fornece o ID; caminho, hash e extração vêm do banco do caso.
+pub(crate) struct LeituraTranscricao {
+    pub(crate) pasta_extracao: PathBuf,
+    pub(crate) caminho: CaminhoFonte,
+    pub(crate) caso_id: CasoId,
+    pub(crate) extracao_id: ExtracaoId,
+    pub(crate) arquivo_id: i64,
+    pub(crate) sha256: String,
+}
+
+impl LeituraTranscricao {
+    pub(crate) fn abrir(&self) -> ResultadoApp<Box<dyn LeitorFonte>> {
+        self.abrir_caminho(&self.caminho)
+    }
+
+    pub(crate) fn abrir_caminho(
+        &self,
+        caminho: &CaminhoFonte,
+    ) -> ResultadoApp<Box<dyn LeitorFonte>> {
+        let fonte = FonteDocumento {
+            pasta: self.pasta_extracao.clone(),
+            caminho: caminho.clone(),
+        };
+        Ok(fonte.abrir(caminho)?)
+    }
+}
+
 impl LeituraDocumento {
+    pub fn com_modo(mut self, modo: ModoDocumento) -> Self {
+        self.pedido.modo = modo;
+        self
+    }
+
     #[cfg(test)]
     pub fn executar(self) -> ResultadoDocumento {
         self.executar_pagina(None)
@@ -746,6 +780,84 @@ impl Servico {
                 modo: ModoDocumento::Automatico,
             },
         })
+    }
+
+    pub fn pedido_transcricao(
+        &mut self,
+        arquivo_id: i64,
+        caso_id: CasoId,
+    ) -> ResultadoApp<LeituraTranscricao> {
+        let banco = self.banco()?;
+        if banco.caso().id != caso_id {
+            return Err(ErroApp::novo(
+                CodigoErro::Conflito,
+                "o caso ativo mudou; selecione novamente o arquivo",
+            ));
+        }
+        let a = banco.arquivo_com_origem(arquivo_id)?;
+        if !matches!(a.arquivo.categoria.as_str(), "audio" | "video") {
+            return Err(ErroApp::novo(
+                CodigoErro::NaoSuportado,
+                "somente áudio e vídeo podem receber transcrição",
+            ));
+        }
+        let sha256 = a.arquivo.sha256.clone().ok_or_else(|| {
+            ErroApp::novo(
+                CodigoErro::Integridade,
+                "o arquivo de mídia não possui SHA-256 no inventário",
+            )
+        })?;
+        let caminho = CaminhoFonte::novo(&a.arquivo.caminho).map_err(|_| {
+            ErroApp::novo(
+                CodigoErro::Integridade,
+                "o caminho da mídia no inventário é inválido",
+            )
+        })?;
+        Ok(LeituraTranscricao {
+            pasta_extracao: PathBuf::from(a.origem_caminho),
+            caminho,
+            caso_id: banco.caso().id,
+            extracao_id: a.extracao_id,
+            arquivo_id: a.arquivo.id,
+            sha256,
+        })
+    }
+
+    pub fn guardar_transcricao(
+        &mut self,
+        novo: &NovaTranscricao,
+        controle: &ControleDocumento,
+    ) -> ResultadoApp<TranscricaoLocal> {
+        crate::documentos::conferir_cancelamento(controle)?;
+        Ok(self
+            .banco_documental(novo.caso_id)?
+            .guardar_transcricao(novo)?)
+    }
+
+    pub fn listar_transcricoes(
+        &mut self,
+        caso_id: CasoId,
+        arquivo_id: i64,
+    ) -> ResultadoApp<Vec<TranscricaoLocal>> {
+        Ok(self
+            .banco_documental(caso_id)?
+            .listar_transcricoes(arquivo_id)?)
+    }
+
+    pub fn segmentos_transcricao(
+        &mut self,
+        caso_id: CasoId,
+        transcricao_id: i64,
+        deslocamento: i64,
+        limite: i64,
+        termo: Option<String>,
+    ) -> ResultadoApp<sied_armazenamento::extracoes::Pagina<SegmentoTranscricao>> {
+        Ok(self.banco_documental(caso_id)?.segmentos_transcricao(
+            transcricao_id,
+            deslocamento.max(0),
+            limite.clamp(1, 200),
+            termo.as_deref(),
+        )?)
     }
 
     pub fn obter_conversa(&mut self, conversa_id: i64) -> ResultadoApp<Conversa> {

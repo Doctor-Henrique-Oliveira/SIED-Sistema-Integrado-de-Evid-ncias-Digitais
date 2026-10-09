@@ -36,7 +36,17 @@ Uma etapa só muda para `CONCLUÍDA` quando seus critérios forem atendidos no c
 
 ### E01 — OCR local e documentos pesquisáveis
 
-**Status: PENDENTE**
+**Status: EM ANDAMENTO**
+
+Branch de trabalho: `feat/e01-ocr-local-documentos`. O motor local Windows,
+persistência append-only, pesquisa, salto da ocorrência encontrada para sua
+região, mapa de bounding boxes, paginação real das regiões e cancelamento
+cooperativo visível durante leitura/indexação estão integrados. Ao sair da
+tela, a operação documental ativa também recebe pedido de cancelamento.
+Fixtures Windows de imagem e PDF sintéticos exigem o
+motor real e falham explicitamente sem idioma OCR; a etapa só será marcada como
+concluída após sua execução, contratos Rust, testes multiplataforma e validação
+visual do fluxo imagem/PDF.
 
 Entregar OCR totalmente local para imagens e PDFs digitalizados, com página, região/bounding box, mecanismo, versão, confiança técnica, hash da origem, cache versionado e busca navegável. Ampliar formatos documentais somente quando houver parser seguro e origem conferível. O processamento deve ser cancelável e incremental, sem alterar a evidência.
 
@@ -44,11 +54,11 @@ Entregar OCR totalmente local para imagens e PDFs digitalizados, com página, re
 
 ### E02 — Transcrição local de áudio e vídeo
 
-**Status: PENDENTE**
+**Status: EM ANDAMENTO (núcleo persistente e pesquisa de segmentos implementados; provedor de fala ainda depende de engine local configurada)**
 
 Adicionar motor offline, extração segura de áudio, segmentos com timestamps, idioma/motor/versão, cancelamento, cache e pesquisa dentro da transcrição. Integrar resultado à origem, mídia, busca, timeline, evidências e relatório.
 
-**Concluída quando:** mídia sintética é transcrita localmente; clicar num trecho abre o instante correspondente; busca e relatório preservam timestamps e proveniência; nenhuma rede é usada.
+**Concluída quando:** mídia sintética é transcrita localmente; clicar num trecho abre o instante correspondente; busca e relatório preservam timestamps e proveniência; nenhuma rede é usada. O checkpoint atual já aceita sidecars SRT/VTT conferidos e deixa explícita a ausência de um motor de fala quando não configurado; ainda falta um provedor offline de áudio/vídeo e a navegação de playback/timestamps no relatório.
 
 ### E03 — Embeddings locais e busca híbrida real
 

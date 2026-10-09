@@ -15,9 +15,11 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 chrono.workspace = true
+hex.workspace = true
 rusqlite.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 sied-armazenamento.workspace = true
 sied-dominio.workspace = true
 sied-documentos.workspace = true

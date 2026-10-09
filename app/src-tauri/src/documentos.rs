@@ -3,7 +3,7 @@
 
 use sied_armazenamento::documentos::{
     AchadoDocumento, DocumentoIndexado, EntidadeDocumento, EstadoRevisaoEntidade,
-    NovaEntidadeDocumento, NovoDocumento, RevisaoEntidade,
+    NovaEntidadeDocumento, NovaRegiaoDocumento, NovoDocumento, RegiaoDocumento, RevisaoEntidade,
 };
 use sied_armazenamento::extracoes::Pagina;
 use sied_documentos::{ControleDocumento, EstadoDocumento, ResultadoDocumento};
@@ -54,6 +54,23 @@ pub(crate) fn preparar_derivado(
         texto: texto.texto,
         pagina: texto.pagina,
         total_paginas: texto.total_paginas,
+        largura_px: texto.largura_px,
+        altura_px: texto.altura_px,
+        regioes: texto
+            .regioes
+            .into_iter()
+            .map(|r| NovaRegiaoDocumento {
+                ordem: r.ordem,
+                inicio_utf8: r.inicio_utf8,
+                fim_utf8: r.fim_utf8,
+                texto: r.texto,
+                x: r.x,
+                y: r.y,
+                largura: r.largura,
+                altura: r.altura,
+                confianca: r.confianca,
+            })
+            .collect(),
         motor_id: texto.motor_id,
         motor_versao: texto.motor_versao,
         executado_em: texto.executado_em.to_rfc3339(),
@@ -118,6 +135,34 @@ impl Servico {
         Ok(self
             .banco_documental(caso_id)?
             .obter_documento(documento_id)?)
+    }
+
+    pub fn regioes_documento(
+        &mut self,
+        caso_id: CasoId,
+        documento_id: i64,
+        deslocamento: i64,
+        limite: i64,
+    ) -> ResultadoApp<Pagina<RegiaoDocumento>> {
+        Ok(self.banco_documental(caso_id)?.regioes_documento(
+            documento_id,
+            deslocamento.max(0),
+            limite.clamp(1, 100),
+        )?)
+    }
+
+    pub fn localizar_regiao_documento(
+        &mut self,
+        caso_id: CasoId,
+        documento_id: i64,
+        inicio_utf8: u32,
+        fim_utf8: u32,
+    ) -> ResultadoApp<Option<u32>> {
+        Ok(self.banco_documental(caso_id)?.localizar_regiao_documento(
+            documento_id,
+            inicio_utf8,
+            fim_utf8,
+        )?)
     }
 
     pub fn entidades_documento(

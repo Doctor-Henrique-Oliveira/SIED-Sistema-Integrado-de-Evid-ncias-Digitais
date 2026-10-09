@@ -425,7 +425,8 @@ fn caso_v3_ganha_vinculo_de_anexo_sem_perder_registros() {
     // Volta o banco para a versão 3 (sem a coluna e os índices da migração 4).
     let conn = Connection::open(pasta.join("caso.sied.db")).unwrap();
     conn.execute_batch(
-        "DROP TABLE visual_derivado; DELETE FROM schema_migracao WHERE versao=10;
+        "DROP TABLE regiao_documental; DELETE FROM schema_migracao WHERE versao=11;
+         DROP TABLE visual_derivado; DELETE FROM schema_migracao WHERE versao=10;
          DROP TABLE amostra_supervisionada; DROP TABLE dataset_supervisionado;
          DELETE FROM schema_migracao WHERE versao=9;
          DROP TABLE revisao_entidade_documental; DROP TABLE entidade_documental;

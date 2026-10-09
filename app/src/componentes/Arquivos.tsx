@@ -17,6 +17,7 @@ import { Icone, type NomeIcone } from "./Icone";
 import { MiniaturaArquivo, SobreMiniatura } from "./Miniatura";
 import { LeitorDocumento } from "./LeitorDocumento";
 import { AnaliseVisual } from "./AnaliseVisual";
+import { TranscricaoLocal } from "./TranscricaoLocal";
 
 export const iconeCategoria: Record<string, NomeIcone> = {
   banco_sqlite: "banco",
@@ -64,13 +65,14 @@ export function useExtracaoEscolhida(caso: Caso) {
   return { extracoes, id, setEscolhida };
 }
 
-function DetalheArquivo({ caso, extracaoId, f, parser, fechar, documental }: {
+function DetalheArquivo({ caso, extracaoId, f, parser, fechar, documental, paginaSolicitada }: {
   caso: Caso;
   extracaoId: string;
   f: ArquivoExtracao;
   parser: string | undefined;
   fechar: () => void;
   documental: boolean;
+  paginaSolicitada?: number;
 }) {
   const fuso = caso.fuso_horario;
   const linha = (rotulo: string, valor: ReactNode, mono = false) => (
@@ -119,8 +121,10 @@ function DetalheArquivo({ caso, extracaoId, f, parser, fechar, documental }: {
         {f.erro && linha("Erro de leitura", <span className="text-erro">{f.erro}</span>)}
       </dl>
       <EvidenciaArquivo caso={caso} arquivoId={f.id} sha256={f.sha256} />
-      {documental && <LeitorDocumento caso={caso} extracaoId={extracaoId} arquivo={f} />}
+      {documental && <LeitorDocumento caso={caso} extracaoId={extracaoId} arquivo={f}
+        paginaInicial={paginaSolicitada !== undefined && Number.isSafeInteger(paginaSolicitada) && paginaSolicitada >= 1 && paginaSolicitada <= 512 ? paginaSolicitada : undefined} />}
       {f.categoria === "imagem" && <AnaliseVisual caso={caso} extracaoId={extracaoId} arquivo={f} />}
+      {(f.categoria === "audio" || f.categoria === "video") && <TranscricaoLocal caso={caso} arquivo={f} />}
     </Cartao>
   );
 }
@@ -134,6 +138,7 @@ const LIMITE = 100;
 export function InventarioArquivos({ caso, extracaoId, midias }: { caso: Caso; extracaoId: string; midias?: boolean }) {
   const [params]=useSearchParams();
   const arquivoSolicitado=Number(params.get("arquivo"));
+  const paginaSolicitada=Number(params.get("pagina"));
   const [erroOrigem,setErroOrigem]=useState<string|null>(null);
   const [categoria, setCategoria] = useState<string | null>(midias ? "midia" : null);
   const [texto, setTexto] = useState("");
@@ -288,7 +293,7 @@ export function InventarioArquivos({ caso, extracaoId, midias }: { caso: Caso; e
         )}
       </Cartao>
       {selecionado && (
-        <DetalheArquivo caso={caso} extracaoId={extracaoId} f={selecionado} parser={parserDe(selecionado.caminho)} fechar={() => setSelecionado(null)} documental={!midias} />
+        <DetalheArquivo caso={caso} extracaoId={extracaoId} f={selecionado} parser={parserDe(selecionado.caminho)} fechar={() => setSelecionado(null)} documental={!midias} paginaSolicitada={paginaSolicitada} />
       )}
     </div>
   );

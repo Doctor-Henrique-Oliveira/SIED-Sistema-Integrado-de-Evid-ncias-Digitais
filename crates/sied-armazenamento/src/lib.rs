@@ -32,6 +32,7 @@ pub mod relatorios;
 pub mod resumo;
 pub mod sessao;
 pub mod supervisao;
+pub mod transcricoes;
 pub mod universal;
 pub mod visuais;
 

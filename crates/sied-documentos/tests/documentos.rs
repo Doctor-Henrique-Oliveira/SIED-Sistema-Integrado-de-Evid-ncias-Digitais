@@ -516,7 +516,7 @@ fn cancelamento_durante_leitura_descarta_o_primeiro_bloco() {
 #[test]
 fn prazo_zero_e_deterministico_e_nao_abre_a_fonte() {
     assert_eq!(TAMANHO_MAXIMO, 2 * 1024 * 1024);
-    assert_eq!(PRAZO_PADRAO, Duration::from_secs(5));
+    assert_eq!(PRAZO_PADRAO, Duration::from_secs(60));
     let fonte = FonteSimulada::nova("documento.txt", b"abc".to_vec());
     let resultado = analisar(
         &fonte,
