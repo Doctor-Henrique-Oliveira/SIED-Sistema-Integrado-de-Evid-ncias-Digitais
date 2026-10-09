@@ -83,16 +83,45 @@ pub fn limites_recursos() -> LimitesRecursos {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct CheckpointRetomada {
-    schema: u8,
-    estado: String,
-    fonte: String,
-    atualizado_em: String,
-    arquivos_inventariados: u64,
-    bytes_lidos: u64,
-    workers_hash: usize,
-    limite_arquivos: u64,
-    limite_bytes: u64,
+pub struct CheckpointRetomada {
+    pub schema: u8,
+    pub estado: String,
+    pub fonte: String,
+    pub atualizado_em: String,
+    pub arquivos_inventariados: u64,
+    pub bytes_lidos: u64,
+    pub workers_hash: usize,
+    pub limite_arquivos: u64,
+    pub limite_bytes: u64,
+}
+
+/// Lê um checkpoint derivado sem tratá-lo como autorização para concluir a importação.
+/// Ausência é normal para casos antigos; formato inválido é reportado para recuperação
+/// manual, nunca convertido em sucesso silencioso.
+pub fn ler_checkpoint(caminho: &Path) -> Resultado<Option<CheckpointRetomada>> {
+    if !caminho.is_file() {
+        return Ok(None);
+    }
+    let dados = fs::read(caminho)?;
+    let checkpoint: CheckpointRetomada = serde_json::from_slice(&dados)
+        .map_err(|e| ErroIngestao::Interno(format!("checkpoint inválido: {e}")))?;
+    if checkpoint.schema != 1
+        || !matches!(
+            checkpoint.estado.as_str(),
+            "iniciada" | "inventariando" | "inventario_concluido" | "cancelada" | "interrompida"
+        )
+        || checkpoint.workers_hash == 0
+        || checkpoint.workers_hash > 8
+        || checkpoint.limite_arquivos == 0
+        || checkpoint.limite_bytes == 0
+        || checkpoint.arquivos_inventariados > checkpoint.limite_arquivos
+        || checkpoint.bytes_lidos > checkpoint.limite_bytes
+    {
+        return Err(ErroIngestao::Interno(
+            "checkpoint fora do contrato de recuperação".into(),
+        ));
+    }
+    Ok(Some(checkpoint))
 }
 
 fn gravar_checkpoint(
@@ -1553,6 +1582,48 @@ impl SaidaParser for Coletor<'_> {
 #[cfg(test)]
 mod testes {
     use super::*;
+
+    #[test]
+    fn checkpoint_e_lido_sem_autorizar_sucesso() {
+        let dir = tempfile::tempdir().unwrap();
+        let ctx = ContextoImportacao {
+            pasta_importacao: dir.path().join("importacao"),
+            pasta_copias: dir.path().join("copias"),
+            fuso_horario: "America/Sao_Paulo".into(),
+        };
+        std::fs::create_dir_all(&ctx.pasta_importacao).unwrap();
+        let limites = LimitesRecursos {
+            max_arquivos: 100,
+            max_bytes: 10_000,
+            workers_hash: 2,
+        };
+        gravar_checkpoint(&ctx, "FIXTURE E12", "interrompida", 3, 120, limites).unwrap();
+        let checkpoint = ler_checkpoint(&ctx.pasta_importacao.join(NOME_CHECKPOINT))
+            .unwrap()
+            .unwrap();
+        assert_eq!(checkpoint.estado, "interrompida");
+        assert_eq!(checkpoint.arquivos_inventariados, 3);
+        assert_ne!(checkpoint.estado, "concluida");
+        assert!(!ctx
+            .pasta_importacao
+            .join(format!("{NOME_CHECKPOINT}.tmp"))
+            .exists());
+    }
+
+    #[test]
+    fn checkpoint_invalido_nao_e_aceito() {
+        let dir = tempfile::tempdir().unwrap();
+        let caminho = dir.path().join(NOME_CHECKPOINT);
+        std::fs::write(
+            &caminho,
+            r#"{"schema":1,"estado":"concluida","fonte":"fixture","atualizado_em":"agora","arquivos_inventariados":0,"bytes_lidos":0,"workers_hash":1,"limite_arquivos":1,"limite_bytes":1}"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            ler_checkpoint(&caminho),
+            Err(ErroIngestao::Interno(m)) if m.contains("fora do contrato")
+        ));
+    }
 
     fn cand(id: i64, caminho: &str, tamanho: u64) -> CandidatoAnexo {
         CandidatoAnexo {

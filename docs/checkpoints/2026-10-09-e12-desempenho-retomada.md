@@ -6,6 +6,7 @@
 - hashing paralelo controlado em janelas pequenas, com no máximo oito workers;
 - cancelamento cooperativo em todos os workers, sem escrever na origem;
 - `checkpoint-retomada.json` derivado, atualizado de forma segura por arquivo temporário;
+- leitor validado de checkpoint (`ler_checkpoint`) que recusa schema/estado/contadores fora do contrato;
 - estados `iniciada`, `inventariando`, `inventario_concluido`, `cancelada` e `interrompida`;
 - limites e progresso preservados no log da importação;
 - testes sintéticos para lote paralelo, cancelamento e volume de hash.
@@ -16,6 +17,10 @@ O checkpoint é somente um marcador derivado e nunca autoriza declarar sucesso. 
 interrupção registra o estado parcial, mas a continuação automática da mesma transação
 continua desabilitada até existir uma operação explícita que reabra o contexto e confira
 hashes antes de evitar qualquer gravação duplicada.
+
+O leitor público permite que uma camada de recuperação mostre o estado ao operador sem
+precisar interpretar JSON diretamente. Estados parciais permanecem diagnósticos; o banco
+do caso e sua auditoria continuam sendo a fonte de verdade.
 
 ## Validação
 
