@@ -158,6 +158,21 @@ describe("indexação explícita no leitor", () => {
 });
 
 describe("derivados e candidatos separados da evidência", () => {
+  it("exibe regiões OCR paginadas com coordenadas e ausência honesta de confiança", async () => {
+    vi.mocked(invoke).mockResolvedValue([]);
+    const ocr = {
+      ...documento, pagina: 1, total_paginas: 1, motor_id: "windows_media_ocr",
+      motor_versao: "1.0.0+pt-BR", largura_px: 1200, altura_px: 800,
+      regioes: [{ id: 91, documento_id: documento.id, ordem: 0, inicio_utf8: 0,
+        fim_utf8: 10, texto: "SINTÉTICO", x: 100, y: 80, largura: 240, altura: 52, confianca: null }],
+    } as DocumentoIndexado;
+    render(<PainelAnaliseDocumento caso={caso} documento={ocr} />);
+    const regioes = screen.getByRole("region", { name: "Regiões OCR" });
+    expect(within(regioes).getByText("SINTÉTICO")).toBeInTheDocument();
+    expect(within(regioes).getByText(/x 100 · y 80 · 240 × 52px/)).toBeInTheDocument();
+    expect(within(regioes).getByText(/Confiança: não fornecida pelo motor/)).toBeInTheDocument();
+    expect(screen.getByText(/1200 × 800 px · 1 região/)).toBeInTheDocument();
+  });
   it("exibe texto inerte, proveniência persistida e nunca selo de conferência da origem atual", async () => {
     const conteudo = '<script>window.__siedCacheExecutou=true</script><img src="https://nao-acessar.invalid/">';
     vi.mocked(invoke).mockResolvedValue([]);

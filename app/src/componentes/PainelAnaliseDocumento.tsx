@@ -16,6 +16,23 @@ const ROTULOS: Record<EstadoRevisaoEntidade, string> = {
 };
 const TIPOS: Record<string, string> = { email: "E-mail", telefone: "Telefone", url: "URL", dominio: "Domínio", ip: "IP" };
 
+type RegiaoOcr = { id: number; documento_id: number; ordem: number; inicio_utf8: number; fim_utf8: number; texto: string; x: number; y: number; largura: number; altura: number; confianca: number | null };
+type DocumentoComOcr = DocumentoIndexado & { largura_px?: number | null; altura_px?: number | null; regioes?: RegiaoOcr[] };
+
+function metadadosOcr(documento: DocumentoIndexado) {
+  const candidato = documento as DocumentoComOcr;
+  const regioes = Array.isArray(candidato.regioes) ? candidato.regioes.filter((r) =>
+    Number.isSafeInteger(r.id) && r.id > 0 && r.documento_id === documento.id &&
+    Number.isSafeInteger(r.ordem) && r.ordem >= 0 && Number.isSafeInteger(r.inicio_utf8) &&
+    Number.isSafeInteger(r.fim_utf8) && r.inicio_utf8 >= 0 && r.fim_utf8 > r.inicio_utf8 &&
+    typeof r.texto === "string" && [r.x, r.y, r.largura, r.altura].every((n) => Number.isSafeInteger(n) && n >= 0) &&
+    (r.confianca === null || (Number.isInteger(r.confianca) && r.confianca >= 0 && r.confianca <= 100)),
+  ) : [];
+  const largura = Number.isSafeInteger(candidato.largura_px) && candidato.largura_px! > 0 ? candidato.largura_px! : null;
+  const altura = Number.isSafeInteger(candidato.altura_px) && candidato.altura_px! > 0 ? candidato.altura_px! : null;
+  return { regioes, largura, altura };
+}
+
 function mensagem(erro: unknown) {
   return erro instanceof Error ? erro.message : "Não foi possível concluir a operação documental.";
 }
@@ -44,6 +61,8 @@ function SessaoAnalise({ caso, documento, exibirTexto }: { caso: Caso; documento
   const [candidatos, setCandidatos] = useState<EntidadeDocumento[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [deslocamentoCandidatos, setDeslocamentoCandidatos] = useState(0);
+  const [deslocamentoRegioes, setDeslocamentoRegioes] = useState(0);
+  const ocr = metadadosOcr(documento);
   const ativa = useRef(true);
   useEffect(() => {
     ativa.current = true;
@@ -82,6 +101,7 @@ function SessaoAnalise({ caso, documento, exibirTexto }: { caso: Caso; documento
           <div><dt className="sobrelinha">Motor documental</dt><dd className="mt-1 font-mono">{documento.motor_id} v{documento.motor_versao}</dd></div>
           <div><dt className="sobrelinha">Indexação realizada em</dt><dd className="mt-1">{dataHora(documento.executado_em, caso.fuso_horario)}</dd></div>
           <div><dt className="sobrelinha">Página</dt><dd className="mt-1">{documento.pagina === null ? "Não se aplica ao texto nativo" : `${documento.pagina} de ${documento.total_paginas}`}</dd></div>
+          {ocr.largura !== null && ocr.altura !== null && <div><dt className="sobrelinha">Imagem processada</dt><dd className="mt-1 font-mono">{ocr.largura} × {ocr.altura} px · {ocr.regioes.length.toLocaleString("pt-BR")} região(ões)</dd></div>}
           <div><dt className="sobrelinha">Motor de candidatos</dt><dd className="mt-1 font-mono">{documento.entidades_motor_versao}</dd></div>
         </dl>
       </details>
@@ -90,6 +110,23 @@ function SessaoAnalise({ caso, documento, exibirTexto }: { caso: Caso; documento
           <pre role="region" aria-label="Texto documental armazenado" tabIndex={0} className="max-h-[28rem] overflow-auto p-3 font-mono text-sm leading-relaxed text-texto">{documento.texto}</pre>
         )}
       </div>}
+      {ocr.regioes.length > 0 && <section aria-label="Regiões OCR" className="border-t border-borda pt-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h4 className="text-sm font-semibold text-texto">Mapa de regiões OCR</h4>
+            <p className="mt-1 text-xs text-texto-2">Coordenadas na página/imagem renderizada; cada palavra permanece vinculada ao texto e à origem acima.</p>
+          </div>
+          <Selo tom="neutro">{ocr.regioes.length.toLocaleString("pt-BR")} REGIÕES</Selo>
+        </div>
+        <ol className="mt-3 grid gap-2 md:grid-cols-2" aria-label="Palavras e coordenadas OCR">
+          {ocr.regioes.slice(deslocamentoRegioes, deslocamentoRegioes + 100).map((regiao) => <li key={regiao.id} className="rounded-sm border border-borda bg-sup-2/40 px-3 py-2">
+            <div className="flex items-start justify-between gap-2"><span className="break-words text-sm text-texto">{regiao.texto}</span><span className="font-mono text-2xs text-texto-3">#{regiao.ordem + 1}</span></div>
+            <p className="mt-1 font-mono text-2xs text-texto-3">x {regiao.x} · y {regiao.y} · {regiao.largura} × {regiao.altura}px · bytes [{regiao.inicio_utf8}, {regiao.fim_utf8})</p>
+            <p className="mt-1 text-2xs text-texto-3">Confiança: {regiao.confianca === null ? "não fornecida pelo motor" : `${regiao.confianca}%`}</p>
+          </li>)}
+        </ol>
+        <Paginacao total={ocr.regioes.length} deslocamento={deslocamentoRegioes} limite={100} mudar={setDeslocamentoRegioes} />
+      </section>}
       <div className="border-t border-borda pt-3">
         <h4 className="text-sm font-semibold text-texto">Candidatos literais para revisão</h4>
         <p className="mt-1 text-xs leading-relaxed text-texto-2">
