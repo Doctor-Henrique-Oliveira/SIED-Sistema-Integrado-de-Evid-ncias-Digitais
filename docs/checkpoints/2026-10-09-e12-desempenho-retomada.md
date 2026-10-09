@@ -19,6 +19,8 @@
   candidatos à recuperação manual;
 - a tela da extração diferencia checkpoint final, parcial e divergente do status persistido,
   sem oferecer retomada automática;
+- falha ao persistir o checkpoint final agora entra como aviso e observação da própria
+  importação, permanecendo visível no caso e no log;
 - limites e progresso preservados no log da importação;
 - testes sintéticos para lote paralelo, cancelamento e volume de hash.
 

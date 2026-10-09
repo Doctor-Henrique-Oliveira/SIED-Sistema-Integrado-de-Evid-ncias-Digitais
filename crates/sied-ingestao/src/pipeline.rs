@@ -630,7 +630,7 @@ pub fn executar(
         ),
         json!({ "fonte": fonte_descricao.clone(), "importador": info, "limites": limites }),
     );
-    let r = executar_etapas(
+    let mut r = executar_etapas(
         fonte, importador, registro, destino, controle, ctx, &mut log,
     );
     if r.is_ok() {
@@ -643,6 +643,13 @@ pub fn executar(
             progresso.bytes_feitos,
             limites,
         ) {
+            if let Ok(resumo) = &mut r {
+                resumo.avisos = resumo.avisos.saturating_add(1);
+                observar(
+                    resumo,
+                    format!("checkpoint final não persistido; a importação exige conferência: {e}"),
+                );
+            }
             log.anunciar(
                 controle,
                 NivelEvento::Aviso,

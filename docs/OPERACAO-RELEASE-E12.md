@@ -39,6 +39,8 @@ contém somente estado/contadores/fonte e não é evidência. `iniciada`, `inven
 checkpoint `concluida` não é candidato a retomada. Somente o
 estado final persistido no banco pode encerrar uma importação; um checkpoint parcial nunca
 deve ser editado para forçar sucesso.
+Se a gravação do checkpoint final falhar, a importação continua sem alterar a evidência,
+mas o SIED registra um aviso e uma observação para exigir conferência operacional.
 
 ## Recuperação de falha
 
