@@ -16,6 +16,7 @@ mod erro;
 mod log;
 mod servico;
 mod transcricao;
+mod visao_local;
 
 use sied_armazenamento::Sessao;
 use std::path::PathBuf;
@@ -128,6 +129,7 @@ pub fn executar() {
             comandos::pesquisar_universal,
             comandos::contexto_relacoes,
             comandos::indexar_visual,
+            comandos::analisar_visual_local,
             comandos::semelhantes_visuais,
             comandos::obter_documento,
             comandos::regioes_documento,

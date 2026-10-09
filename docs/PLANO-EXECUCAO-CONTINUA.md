@@ -70,11 +70,11 @@ Foi adicionado o índice reconstruível `embedding_derivado` e a aba de pesquisa
 
 ### E04 — Visão computacional e regiões
 
-**Status: PENDENTE**
+**Status: EM ANDAMENTO (dHash/near-duplicates funcionais e adaptador local de candidatos com regiões implementados; modelo visual continua opt-in)**
 
-Evoluir o dHash existente com classificação/detecção local, regiões e bounding boxes, mecanismo e versão. Manter duplicata exata, near-duplicate e candidato de objeto como conceitos separados. Todo resultado permanece candidato para revisão humana.
+Evoluir o dHash existente com classificação/detecção local, regiões e bounding boxes, mecanismo e versão. O adaptador `SIED_VISAO_LOCAL` recebe uma imagem regular e devolve JSON limitado com rótulo, confiança técnica e caixa normalizada; a interface mostra cada item como candidato e preserva o mecanismo/versão. Duplicata exata, near-duplicate e candidato de objeto continuam conceitos separados. Todo resultado permanece candidato para revisão humana.
 
-**Concluída quando:** imagens sintéticas produzem candidatos e regiões navegáveis, pesquisa por semelhantes funciona e a interface nunca apresenta classificação como conclusão pericial.
+**Concluída quando:** imagens sintéticas produzem candidatos e regiões navegáveis, pesquisa por semelhantes funciona e a interface nunca apresenta classificação como conclusão pericial. A instalação/configuração de um modelo offline concreto permanece externa e não há rede ou provider automático.
 
 ### E05 — Motor multimodal unificado
 

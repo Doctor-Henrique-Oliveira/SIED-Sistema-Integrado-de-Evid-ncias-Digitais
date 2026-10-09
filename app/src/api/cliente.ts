@@ -96,6 +96,7 @@ import type { AmostraSupervisionada } from "./tipos/AmostraSupervisionada";
 import type { AvaliacaoSupervisionada } from "./tipos/AvaliacaoSupervisionada";
 import type { PaginaTranscricao, SegmentoTranscricao, TranscricaoLocal } from "./transcricao";
 import type { ResumoIndexacaoEmbeddings, ResultadoBuscaHibrida } from "./embeddings";
+import type { ResultadoVisaoLocal } from "./visual";
 
 export type {
   MecanismoUniversal,
@@ -118,6 +119,7 @@ export type {
   PaginaTranscricao,
   ResumoIndexacaoEmbeddings,
   ResultadoBuscaHibrida,
+  ResultadoVisaoLocal,
   PedidoDescoberta,
   ResultadoDescoberta,
   AchadoDescoberta,
@@ -332,6 +334,8 @@ export const api = {
   /** Descritor estrutural local com origem conferida; não detecção/classificação de objetos. */
   indexarVisual: (casoId: CasoId, arquivoId: number) =>
     chamar<VisualIndexado>("indexar_visual", { casoId, arquivoId }),
+  analisarVisualLocal: (casoId: CasoId, arquivoId: number) =>
+    chamar<ResultadoVisaoLocal>("analisar_visual_local", { casoId, arquivoId }),
   semelhantesVisuais: (casoId: CasoId, operacaoId: string, visualId: number, maxBits: number, limite: number) =>
     chamar<ResultadoSimilarVisual>("semelhantes_visuais", { casoId, operacaoId, visualId, maxBits, limite }),
   obterArquivo: (casoId: CasoId, extracaoId: ExtracaoId, arquivoId: number) =>
