@@ -167,8 +167,10 @@ operação. O inventário pode usar uma janela limitada de workers (1–8) para 
 SHA-256 em paralelo sem carregar a extração inteira; cancelamento é cooperativo e a
 origem continua somente leitura. Cada importação grava `checkpoint-retomada.json` por
 substituição via arquivo temporário, com fonte, estado, progresso, limites e versão do
-formato. Estados interrompidos nunca são tratados como sucesso; a retomada automática
-da mesma transação ainda não é habilitada para evitar duplicação de registros.
+formato. O avaliador `avaliar_retomada` compara a fonte registrada com a fonte atual e
+sempre devolve conferência obrigatória; fonte divergente não pode ser reaproveitada.
+Estados interrompidos nunca são tratados como sucesso; a retomada automática da mesma
+transação ainda não é habilitada para evitar duplicação de registros.
 
 Fixtures sintéticas cobrem hashing paralelo, cancelamento e leitura de lote. O benchmark
 `cargo bench -p sied-ingestao --bench inventario` mede o núcleo de hash com bytes sintéticos

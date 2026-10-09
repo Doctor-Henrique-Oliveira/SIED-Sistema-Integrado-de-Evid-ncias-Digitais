@@ -95,6 +95,13 @@ pub struct CheckpointRetomada {
     pub limite_bytes: u64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AvaliacaoRetomada {
+    SemCheckpoint,
+    FonteDivergente { registrada: String, atual: String },
+    ConferenciaObrigatoria(CheckpointRetomada),
+}
+
 /// Lê um checkpoint derivado sem tratá-lo como autorização para concluir a importação.
 /// Ausência é normal para casos antigos; formato inválido é reportado para recuperação
 /// manual, nunca convertido em sucesso silencioso.
@@ -122,6 +129,21 @@ pub fn ler_checkpoint(caminho: &Path) -> Resultado<Option<CheckpointRetomada>> {
         ));
     }
     Ok(Some(checkpoint))
+}
+
+/// Avalia se um checkpoint pertence à mesma fonte antes de qualquer tentativa manual
+/// de recuperação. O resultado nunca executa a retomada nem libera gravações existentes.
+pub fn avaliar_retomada(caminho: &Path, fonte_atual: &str) -> Resultado<AvaliacaoRetomada> {
+    let Some(checkpoint) = ler_checkpoint(caminho)? else {
+        return Ok(AvaliacaoRetomada::SemCheckpoint);
+    };
+    if checkpoint.fonte != fonte_atual {
+        return Ok(AvaliacaoRetomada::FonteDivergente {
+            registrada: checkpoint.fonte,
+            atual: fonte_atual.into(),
+        });
+    }
+    Ok(AvaliacaoRetomada::ConferenciaObrigatoria(checkpoint))
 }
 
 fn gravar_checkpoint(
@@ -1622,6 +1644,39 @@ mod testes {
         assert!(matches!(
             ler_checkpoint(&caminho),
             Err(ErroIngestao::Interno(m)) if m.contains("fora do contrato")
+        ));
+    }
+
+    #[test]
+    fn avaliacao_exige_mesma_fonte_e_conferencia_humana() {
+        let dir = tempfile::tempdir().unwrap();
+        let ctx = ContextoImportacao {
+            pasta_importacao: dir.path().join("importacao"),
+            pasta_copias: dir.path().join("copias"),
+            fuso_horario: "America/Sao_Paulo".into(),
+        };
+        std::fs::create_dir_all(&ctx.pasta_importacao).unwrap();
+        gravar_checkpoint(
+            &ctx,
+            "FONTE ORIGINAL",
+            "interrompida",
+            1,
+            10,
+            LimitesRecursos {
+                max_arquivos: 10,
+                max_bytes: 100,
+                workers_hash: 1,
+            },
+        )
+        .unwrap();
+        let caminho = ctx.pasta_importacao.join(NOME_CHECKPOINT);
+        assert!(matches!(
+            avaliar_retomada(&caminho, "FONTE ORIGINAL").unwrap(),
+            AvaliacaoRetomada::ConferenciaObrigatoria(c) if c.estado == "interrompida"
+        ));
+        assert!(matches!(
+            avaliar_retomada(&caminho, "OUTRA FONTE").unwrap(),
+            AvaliacaoRetomada::FonteDivergente { .. }
         ));
     }
 

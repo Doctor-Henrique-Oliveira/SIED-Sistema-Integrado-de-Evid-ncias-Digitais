@@ -44,12 +44,14 @@ deve ser editado para forçar sucesso.
 1. Preservar o caso e sua auditoria; não apagar `importacoes/` nem `cache/bancos/` para
    “limpar” uma execução.
 2. Abrir o checkpoint e o log da importação para identificar o último estado e a origem.
-3. Conferir os hashes do manifesto e a integridade do banco antes de qualquer nova
+3. Avaliar a compatibilidade da fonte com `avaliar_retomada`; fonte divergente deve ser
+   tratada como uma nova importação, nunca como continuação.
+4. Conferir os hashes do manifesto e a integridade do banco antes de qualquer nova
    tentativa.
-4. Iniciar uma nova importação somente após decisão explícita do analista. A retomada
+5. Iniciar uma nova importação somente após decisão explícita do analista. A retomada
    automática da mesma transação permanece desabilitada até haver reabertura transacional
    que confira registros já gravados e impeça duplicação.
-5. Registrar a nova execução separadamente na auditoria.
+6. Registrar a nova execução separadamente na auditoria.
 
 ## Artefato de distribuição
 
