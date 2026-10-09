@@ -12,6 +12,7 @@ use sied_armazenamento::controle_descoberta::ControleDescoberta;
 use sied_armazenamento::conversas::{AppConversas, Conversa, FiltroConversas, PosicaoMensagem};
 use sied_armazenamento::derivados::{ConferenciaDerivados, ReconstrucaoDerivados};
 use sied_armazenamento::descoberta::{PedidoDescoberta, ResultadoDescoberta};
+use sied_armazenamento::embeddings::{ResultadoBuscaHibrida, ResumoIndexacaoEmbeddings};
 use sied_armazenamento::evidencias::{Evidencia, Marcacoes, NovaEvidencia, TextosEvidencia};
 use sied_armazenamento::extracoes::{
     ArquivoExtracao, ArtefatoDetalhe, ArtefatoResumo, ExecucaoParser, Extracao, Pagina,
@@ -78,6 +79,21 @@ impl LeituraTranscricao {
             caminho: caminho.clone(),
         };
         Ok(fonte.abrir(caminho)?)
+    }
+
+    /// Caminho físico somente para um arquivo regular da pasta da extração.
+    /// Contêineres (`!/`) continuam restritos ao leitor somente leitura e não
+    /// são entregues a um processo externo.
+    pub(crate) fn caminho_absoluto(&self) -> Option<PathBuf> {
+        if self
+            .caminho
+            .como_str()
+            .contains(sied_ingestao::fonte::SEPARADOR_CONTEINER)
+        {
+            return None;
+        }
+        let caminho = self.pasta_extracao.join(self.caminho.como_str());
+        caminho.is_file().then_some(caminho)
     }
 }
 
@@ -860,6 +876,24 @@ impl Servico {
         )?)
     }
 
+    /// Resolve o caminho do arquivo de mídia somente a partir do inventário
+    /// do caso ativo. O frontend converte o caminho para `asset:` do Tauri;
+    /// nenhum caminho informado pelo usuário é aceito diretamente.
+    pub fn caminho_midia_transcricao(
+        &mut self,
+        caso_id: CasoId,
+        arquivo_id: i64,
+    ) -> ResultadoApp<String> {
+        let leitura = self.pedido_transcricao(arquivo_id, caso_id)?;
+        let caminho = leitura.caminho_absoluto().ok_or_else(|| {
+            ErroApp::novo(
+                CodigoErro::NaoSuportado,
+                "a reprodução direta está disponível apenas para arquivos regulares da extração",
+            )
+        })?;
+        Ok(caminho.to_string_lossy().into_owned())
+    }
+
     pub fn obter_conversa(&mut self, conversa_id: i64) -> ResultadoApp<Conversa> {
         Ok(self.banco()?.conversa(conversa_id)?)
     }
@@ -890,6 +924,38 @@ impl Servico {
         Ok(self
             .banco()?
             .buscar(filtro, deslocamento.max(0), limite.clamp(1, 200))?)
+    }
+
+    pub fn indexar_embeddings(
+        &mut self,
+        caso_id: CasoId,
+        controle: &Arc<ControleDescoberta>,
+    ) -> ResultadoApp<ResumoIndexacaoEmbeddings> {
+        controle.verificar()?;
+        self.pesquisa_sem_importacao()?;
+        Ok(self
+            .banco_documental(caso_id)?
+            .indexar_embeddings(controle)?)
+    }
+
+    pub fn buscar_hibrida(
+        &mut self,
+        caso_id: CasoId,
+        texto: String,
+        deslocamento: i64,
+        limite: i64,
+        peso_semantico: f64,
+        controle: &Arc<ControleDescoberta>,
+    ) -> ResultadoApp<ResultadoBuscaHibrida> {
+        controle.verificar()?;
+        self.pesquisa_sem_importacao()?;
+        Ok(self.banco_documental(caso_id)?.buscar_hibrida(
+            &texto,
+            deslocamento.max(0),
+            limite.clamp(1, 200),
+            peso_semantico.clamp(0.0, 1.0),
+            controle,
+        )?)
     }
 
     pub fn resumo_caso(&mut self) -> ResultadoApp<ResumoCaso> {

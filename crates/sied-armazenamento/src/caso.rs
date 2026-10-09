@@ -39,6 +39,7 @@ use crate::documentos::{
     self, AchadoDocumento, DocumentoIndexado, EntidadeDocumento, EstadoRevisaoEntidade,
     NovoDocumento, RegiaoDocumento, RevisaoEntidade,
 };
+use crate::embeddings::{self, ResultadoBuscaHibrida, ResumoIndexacaoEmbeddings};
 use crate::evidencias::{self, Evidencia, Marcacoes, NovaEvidencia, TextosEvidencia};
 use crate::extracoes::{
     self, ArquivoComOrigem, ArquivoExtracao, ArtefatoDetalhe, ArtefatoResumo, ExecucaoParser,
@@ -408,6 +409,18 @@ impl BancoCaso {
         transcricoes::listar(&self.conn, arquivo_id)
     }
 
+    pub fn transcricoes_caso(&self) -> Resultado<Vec<TranscricaoLocal>> {
+        transcricoes::listar_caso(&self.conn, self.caso.id)
+    }
+
+    pub fn segmentos_transcricao_relatorio(
+        &self,
+        transcricao_id: i64,
+        limite: i64,
+    ) -> Resultado<Vec<SegmentoTranscricao>> {
+        transcricoes::segmentos_relatorio(&self.conn, transcricao_id, limite)
+    }
+
     pub fn segmentos_transcricao(
         &self,
         id: i64,
@@ -694,6 +707,32 @@ impl BancoCaso {
         limite: i64,
     ) -> Resultado<ResultadoBusca> {
         busca::buscar(&self.conn, filtro, deslocamento, limite)
+    }
+
+    pub fn indexar_embeddings(
+        &mut self,
+        controle: &Arc<ControleDescoberta>,
+    ) -> Resultado<ResumoIndexacaoEmbeddings> {
+        embeddings::indexar(&mut self.conn, &self.caso.id, controle, &self.sessao)
+    }
+
+    pub fn buscar_hibrida(
+        &self,
+        texto: &str,
+        deslocamento: i64,
+        limite: i64,
+        peso_semantico: f64,
+        controle: &Arc<ControleDescoberta>,
+    ) -> Resultado<ResultadoBuscaHibrida> {
+        embeddings::buscar(
+            &self.conn,
+            &self.caso.id,
+            texto,
+            deslocamento,
+            limite,
+            peso_semantico,
+            controle,
+        )
     }
 
     pub fn listar_vocabularios_pesquisa(&self) -> Resultado<Vec<VersaoVocabularioPesquisa>> {

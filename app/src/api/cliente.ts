@@ -95,6 +95,7 @@ import type { PedidoAmostraSupervisionada } from "./tipos/PedidoAmostraSupervisi
 import type { AmostraSupervisionada } from "./tipos/AmostraSupervisionada";
 import type { AvaliacaoSupervisionada } from "./tipos/AvaliacaoSupervisionada";
 import type { PaginaTranscricao, SegmentoTranscricao, TranscricaoLocal } from "./transcricao";
+import type { ResumoIndexacaoEmbeddings, ResultadoBuscaHibrida } from "./embeddings";
 
 export type {
   MecanismoUniversal,
@@ -115,6 +116,8 @@ export type {
   TranscricaoLocal,
   SegmentoTranscricao,
   PaginaTranscricao,
+  ResumoIndexacaoEmbeddings,
+  ResultadoBuscaHibrida,
   PedidoDescoberta,
   ResultadoDescoberta,
   AchadoDescoberta,
@@ -324,6 +327,8 @@ export const api = {
     chamar<TranscricaoLocal[]>("listar_transcricoes", { casoId, arquivoId }),
   segmentosTranscricao: (casoId: CasoId, transcricaoId: number, deslocamento: number, limite: number, termo?: string) =>
     chamar<PaginaTranscricao>("segmentos_transcricao", { casoId, transcricaoId, deslocamento, limite, termo: termo?.trim() || null }),
+  caminhoMidiaTranscricao: (casoId: CasoId, arquivoId: number) =>
+    chamar<string>("caminho_midia_transcricao", { casoId, arquivoId }),
   /** Descritor estrutural local com origem conferida; não detecção/classificação de objetos. */
   indexarVisual: (casoId: CasoId, arquivoId: number) =>
     chamar<VisualIndexado>("indexar_visual", { casoId, arquivoId }),
@@ -357,6 +362,10 @@ export const api = {
   cancelarDescoberta: (operacaoId: string) => chamar<boolean>("cancelar_descoberta", { operacaoId }),
   pesquisarUniversal: (casoId: CasoId, operacaoId: string, pedido: PedidoUniversal, deslocamento: number, limite: number) =>
     chamar<ResultadoUniversal>("pesquisar_universal", { casoId, operacaoId, pedido, deslocamento, limite }),
+  indexarEmbeddings: (casoId: CasoId, operacaoId: string) =>
+    chamar<ResumoIndexacaoEmbeddings>("indexar_embeddings", { casoId, operacaoId }),
+  buscarHibrida: (casoId: CasoId, operacaoId: string, texto: string, deslocamento: number, limite: number, pesoSemantico: number) =>
+    chamar<ResultadoBuscaHibrida>("buscar_hibrida", { casoId, operacaoId, texto, deslocamento, limite, pesoSemantico }),
   contextoRelacoes: (casoId: CasoId, operacaoId: string, artefatoId: number, janelaMinutos: number, limite: number) =>
     chamar<ContextoRelacoes>("contexto_relacoes", { casoId, operacaoId, artefatoId, janelaMinutos, limite }),
   listarConsultasDescoberta: (casoId: CasoId) => chamar<ConsultaDescobertaSalva[]>("listar_consultas_descoberta", { casoId }),

@@ -275,6 +275,28 @@ pub fn listar(conn: &Connection, arquivo_id: i64) -> Resultado<Vec<TranscricaoLo
         .collect::<Result<_, _>>()?)
 }
 
+/// Lista todas as transcrições derivadas do caso para consumo de relatórios.
+/// A ordenação é estável e não altera o conteúdo original do inventário.
+pub fn listar_caso(conn: &Connection, caso_id: CasoId) -> Resultado<Vec<TranscricaoLocal>> {
+    let mut st = conn.prepare("SELECT t.id,t.caso_id,t.extracao_id,t.arquivo_id,t.caminho,t.sha256_origem,t.estado,t.idioma,t.motor_id,t.motor_versao,t.iniciado_em,t.concluido_em,t.erro,t.hash_derivado,(SELECT COUNT(*) FROM segmento_transcricao s WHERE s.transcricao_id=t.id) FROM transcricao_local t WHERE t.caso_id=?1 ORDER BY t.iniciado_em ASC, t.id ASC")?;
+    Ok(st
+        .query_map([caso_id.to_string()], ler_transcricao)?
+        .collect::<Result<_, _>>()?)
+}
+
+/// Segmentos limitados para anexar contexto temporal a um relatório.
+pub fn segmentos_relatorio(
+    conn: &Connection,
+    transcricao_id: i64,
+    limite: i64,
+) -> Resultado<Vec<SegmentoTranscricao>> {
+    let limite = limite.clamp(1, 500);
+    let mut st = conn.prepare("SELECT s.id,s.transcricao_id,s.ordem,s.inicio_ms,s.fim_ms,s.texto,s.confianca,s.falante,s.hash_segmento FROM segmento_transcricao s WHERE s.transcricao_id=?1 ORDER BY s.ordem LIMIT ?2")?;
+    Ok(st
+        .query_map(params![transcricao_id, limite], ler_segmento)?
+        .collect::<Result<_, _>>()?)
+}
+
 pub fn segmentos(
     conn: &Connection,
     transcricao_id: i64,

@@ -134,6 +134,26 @@
     #p
     #parbreak()
   ]
+  #if d.transcricoes.len() > 0 [
+    == Transcrições locais
+    Os trechos abaixo são material derivado de execução local. A origem, o hash e o motor permanecem visíveis para revisão; os timestamps permitem localizar o trecho no arquivo original. A transcrição não constitui conclusão pericial.
+    #for t in d.transcricoes [
+      === #t.origem
+      #text(8.5pt, fill: suave)[Estado: #t.estado · Motor: #t.motor]
+      #linebreak()
+      #text(8.5pt, fill: suave)[SHA-256 da origem: #t.hash_origem]
+      #if t.segmentos.len() == 0 [
+        #parbreak()
+        Nenhum segmento persistido.
+      ]
+      #for s in t.segmentos [
+        #parbreak()
+        #text(8.5pt, fill: suave)[#s.inicio → #s.fim#if s.falante != none [ · #s.falante]]
+        #linebreak()
+        #s.texto
+      ]
+    ]
+  ]
 ]
 
 // ------------------------------------------------------------------ evidências

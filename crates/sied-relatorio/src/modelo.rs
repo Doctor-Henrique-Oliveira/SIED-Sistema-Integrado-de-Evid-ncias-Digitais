@@ -86,6 +86,7 @@ pub struct Documento {
     pub dispositivos: Vec<DispositivoDoc>,
     pub extracoes: Vec<ExtracaoDoc>,
     pub metodologia: Vec<String>,
+    pub transcricoes: Vec<TranscricaoDoc>,
     pub evidencias: Vec<EvidenciaDoc>,
     pub observacoes: Option<String>,
     pub conclusao: Option<String>,
@@ -102,6 +103,25 @@ pub struct DispositivoDoc {
 pub struct ExtracaoDoc {
     pub nome: String,
     pub campos: Vec<Campo>,
+}
+
+/// Resultado derivado de fala local, preservado no relatório com origem, hash,
+/// motor e timestamps. Não é uma conclusão pericial nem altera a evidência.
+#[derive(Debug, Clone, Serialize)]
+pub struct TranscricaoDoc {
+    pub origem: String,
+    pub estado: String,
+    pub motor: String,
+    pub hash_origem: String,
+    pub segmentos: Vec<SegmentoTranscricaoDoc>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SegmentoTranscricaoDoc {
+    pub inicio: String,
+    pub fim: String,
+    pub texto: String,
+    pub falante: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]

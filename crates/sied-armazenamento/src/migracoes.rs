@@ -108,6 +108,11 @@ pub const BANCO_CASO: TipoBanco = TipoBanco {
             nome: "transcricao_local",
             sql: include_str!("../migracoes/caso/0012_transcricao_local.sql"),
         },
+        Migracao {
+            versao: 13,
+            nome: "embeddings_locais",
+            sql: include_str!("../migracoes/caso/0013_embeddings_locais.sql"),
+        },
     ],
 };
 

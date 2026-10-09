@@ -54,17 +54,17 @@ Entregar OCR totalmente local para imagens e PDFs digitalizados, com página, re
 
 ### E02 — Transcrição local de áudio e vídeo
 
-**Status: EM ANDAMENTO (núcleo persistente e pesquisa de segmentos implementados; provedor de fala ainda depende de engine local configurada)**
+**Status: EM ANDAMENTO (núcleo persistente, pesquisa, playback por timestamp e adaptador offline configurável implementados; engine de fala continua dependente de instalação local)**
 
 Adicionar motor offline, extração segura de áudio, segmentos com timestamps, idioma/motor/versão, cancelamento, cache e pesquisa dentro da transcrição. Integrar resultado à origem, mídia, busca, timeline, evidências e relatório.
 
-**Concluída quando:** mídia sintética é transcrita localmente; clicar num trecho abre o instante correspondente; busca e relatório preservam timestamps e proveniência; nenhuma rede é usada. O checkpoint atual já aceita sidecars SRT/VTT conferidos e deixa explícita a ausência de um motor de fala quando não configurado; ainda falta um provedor offline de áudio/vídeo e a navegação de playback/timestamps no relatório.
+**Concluída quando:** mídia sintética é transcrita localmente; clicar num trecho abre o instante correspondente; busca e relatório preservam timestamps e proveniência; nenhuma rede é usada. O SIED agora aceita sidecars SRT/VTT conferidos e um comando local opt-in (`SIED_TRANSCRITOR_LOCAL`) que recebe a mídia regular e devolve SRT/VTT em stdout, com cancelamento e limite de saída. A instalação/configuração de Whisper/Vosk e a validação Rust/MSVC continuam externas; contêineres permanecem sem execução de processo.
 
 ### E03 — Embeddings locais e busca híbrida real
 
-**Status: PENDENTE**
+**Status: EM ANDAMENTO (índice local e busca híbrida funcional; modelo neural local ainda pendente)**
 
-Adicionar modelo local versionado, índices reconstruíveis, processamento incremental e ranking híbrido entre FTS e similaridade semântica. Expor score por mecanismo e impedir que um sinal domine silenciosamente o ranking.
+Foi adicionado o índice reconstruível `embedding_derivado` e a aba de pesquisa híbrida local. O motor atual `hash-embedding-local/tfidf-hash-v1` é determinístico, offline e explicitamente lexical: combina FTS5 com similaridade vetorial, pagina, permite cancelamento cooperativo e mostra a contribuição de cada mecanismo. Ele ainda não substitui um modelo neural local autorizado; OCR e demais derivados entram quando já existem no banco.
 
 **Concluída quando:** mensagens, documentos, OCR e transcrições sintéticas semanticamente relacionadas são recuperadas; índices podem ser reconstruídos; ranking é explicável e comparado à busca tradicional.
 

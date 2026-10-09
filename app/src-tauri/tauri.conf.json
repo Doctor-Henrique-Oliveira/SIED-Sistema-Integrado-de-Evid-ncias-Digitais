@@ -26,7 +26,8 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src ipc: http://ipc.localhost"
+      "assetProtocol": { "enable": true, "scope": ["$HOME/**", "$APPDATA/**", "$RESOURCE/**"] },
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: asset: http://asset.localhost https://asset.localhost; media-src 'self' asset: http://asset.localhost https://asset.localhost blob:; font-src 'self'; connect-src ipc: http://ipc.localhost"
     }
   },
   "bundle": {
