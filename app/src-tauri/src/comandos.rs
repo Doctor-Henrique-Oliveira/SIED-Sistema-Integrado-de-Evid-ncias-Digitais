@@ -545,6 +545,20 @@ pub async fn segmentos_transcricao(
     .await
 }
 
+/// Entrega somente o caminho resolvido pelo inventário para que o WebView
+/// possa usar o protocolo `asset:` do Tauri na reprodução local.
+#[tauri::command]
+pub async fn caminho_midia_transcricao(
+    app_handle: AppHandle,
+    caso_id: CasoId,
+    arquivo_id: i64,
+) -> ResultadoApp<String> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.caminho_midia_transcricao(caso_id, arquivo_id))
+    })
+    .await
+}
+
 #[tauri::command]
 pub async fn buscar_documentos(
     app_handle: AppHandle,

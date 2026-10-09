@@ -16,6 +16,7 @@ use sied_armazenamento::evidencias::{hash_do_trecho, Evidencia, TipoEvidencia};
 use sied_armazenamento::extracoes::{
     ArtefatoDetalhe, ArtefatoResumo, ConferenciaRegistro, Extracao,
 };
+use sied_armazenamento::transcricoes::EstadoTranscricao;
 use sied_armazenamento::{BancoCaso, Resultado};
 use sied_dominio::{Dispositivo, SistemaOperacional};
 use sied_midia::Pedido;
@@ -163,6 +164,28 @@ fn milhar(n: i64) -> String {
         format!("-{out}")
     } else {
         out
+    }
+}
+
+fn tempo_transcricao(ms: i64) -> String {
+    let total = (ms.max(0) / 1000) as u64;
+    let horas = total / 3600;
+    let minutos = (total % 3600) / 60;
+    let segundos = total % 60;
+    if horas > 0 {
+        format!("{horas}:{minutos:02}:{segundos:02}")
+    } else {
+        format!("{minutos}:{segundos:02}")
+    }
+}
+
+fn estado_transcricao(estado: EstadoTranscricao) -> &'static str {
+    match estado {
+        EstadoTranscricao::Processando => "processando",
+        EstadoTranscricao::Pronta => "pronta",
+        EstadoTranscricao::SemSuporte => "sem_suporte",
+        EstadoTranscricao::Cancelada => "cancelada",
+        EstadoTranscricao::Erro => "erro",
     }
 }
 
@@ -945,6 +968,30 @@ pub fn montar(
         docs_extracoes.push(ctx.extracao(x, &dispositivos)?);
     }
 
+    let transcricoes = banco
+        .transcricoes_caso()?
+        .into_iter()
+        .map(|t| {
+            let segmentos = banco
+                .segmentos_transcricao_relatorio(t.id, 500)?
+                .into_iter()
+                .map(|s| SegmentoTranscricaoDoc {
+                    inicio: tempo_transcricao(s.inicio_ms),
+                    fim: tempo_transcricao(s.fim_ms),
+                    texto: s.texto,
+                    falante: s.falante,
+                })
+                .collect();
+            Ok(TranscricaoDoc {
+                origem: t.caminho,
+                estado: estado_transcricao(t.estado).into(),
+                motor: format!("{} v{}", t.motor_id, t.motor_versao),
+                hash_origem: t.sha256_origem,
+                segmentos,
+            })
+        })
+        .collect::<Resultado<Vec<_>>>()?;
+
     let lista = banco.evidencias()?;
     let mut evidencias = Vec::new();
     let mut conferencias = Vec::new();
@@ -1047,6 +1094,7 @@ pub fn montar(
         dispositivos: dispositivos.iter().map(dispositivo).collect(),
         extracoes: docs_extracoes,
         metodologia: metodologia(),
+        transcricoes,
         evidencias,
         observacoes: limpo(pedido.observacoes.clone()),
         conclusao: limpo(pedido.conclusao.clone()),

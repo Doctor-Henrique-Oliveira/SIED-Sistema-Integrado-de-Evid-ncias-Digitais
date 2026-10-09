@@ -327,6 +327,8 @@ export const api = {
     chamar<TranscricaoLocal[]>("listar_transcricoes", { casoId, arquivoId }),
   segmentosTranscricao: (casoId: CasoId, transcricaoId: number, deslocamento: number, limite: number, termo?: string) =>
     chamar<PaginaTranscricao>("segmentos_transcricao", { casoId, transcricaoId, deslocamento, limite, termo: termo?.trim() || null }),
+  caminhoMidiaTranscricao: (casoId: CasoId, arquivoId: number) =>
+    chamar<string>("caminho_midia_transcricao", { casoId, arquivoId }),
   /** Descritor estrutural local com origem conferida; não detecção/classificação de objetos. */
   indexarVisual: (casoId: CasoId, arquivoId: number) =>
     chamar<VisualIndexado>("indexar_visual", { casoId, arquivoId }),

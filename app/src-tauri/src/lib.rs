@@ -123,6 +123,7 @@ pub fn executar() {
             comandos::cancelar_transcricao,
             comandos::listar_transcricoes,
             comandos::segmentos_transcricao,
+            comandos::caminho_midia_transcricao,
             comandos::buscar_documentos,
             comandos::pesquisar_universal,
             comandos::contexto_relacoes,

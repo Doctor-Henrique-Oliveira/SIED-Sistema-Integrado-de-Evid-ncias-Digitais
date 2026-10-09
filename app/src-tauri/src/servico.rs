@@ -80,6 +80,21 @@ impl LeituraTranscricao {
         };
         Ok(fonte.abrir(caminho)?)
     }
+
+    /// Caminho físico somente para um arquivo regular da pasta da extração.
+    /// Contêineres (`!/`) continuam restritos ao leitor somente leitura e não
+    /// são entregues a um processo externo.
+    pub(crate) fn caminho_absoluto(&self) -> Option<PathBuf> {
+        if self
+            .caminho
+            .como_str()
+            .contains(sied_ingestao::fonte::SEPARADOR_CONTEINER)
+        {
+            return None;
+        }
+        let caminho = self.pasta_extracao.join(self.caminho.como_str());
+        caminho.is_file().then_some(caminho)
+    }
 }
 
 impl LeituraDocumento {
@@ -859,6 +874,24 @@ impl Servico {
             limite.clamp(1, 200),
             termo.as_deref(),
         )?)
+    }
+
+    /// Resolve o caminho do arquivo de mídia somente a partir do inventário
+    /// do caso ativo. O frontend converte o caminho para `asset:` do Tauri;
+    /// nenhum caminho informado pelo usuário é aceito diretamente.
+    pub fn caminho_midia_transcricao(
+        &mut self,
+        caso_id: CasoId,
+        arquivo_id: i64,
+    ) -> ResultadoApp<String> {
+        let leitura = self.pedido_transcricao(arquivo_id, caso_id)?;
+        let caminho = leitura.caminho_absoluto().ok_or_else(|| {
+            ErroApp::novo(
+                CodigoErro::NaoSuportado,
+                "a reprodução direta está disponível apenas para arquivos regulares da extração",
+            )
+        })?;
+        Ok(caminho.to_string_lossy().into_owned())
     }
 
     pub fn obter_conversa(&mut self, conversa_id: i64) -> ResultadoApp<Conversa> {

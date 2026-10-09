@@ -409,6 +409,18 @@ impl BancoCaso {
         transcricoes::listar(&self.conn, arquivo_id)
     }
 
+    pub fn transcricoes_caso(&self) -> Resultado<Vec<TranscricaoLocal>> {
+        transcricoes::listar_caso(&self.conn, self.caso.id)
+    }
+
+    pub fn segmentos_transcricao_relatorio(
+        &self,
+        transcricao_id: i64,
+        limite: i64,
+    ) -> Resultado<Vec<SegmentoTranscricao>> {
+        transcricoes::segmentos_relatorio(&self.conn, transcricao_id, limite)
+    }
+
     pub fn segmentos_transcricao(
         &self,
         id: i64,
