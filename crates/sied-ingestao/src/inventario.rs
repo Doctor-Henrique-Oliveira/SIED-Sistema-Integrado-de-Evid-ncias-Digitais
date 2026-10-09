@@ -6,6 +6,10 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::io::{Read, Write};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
+use std::thread;
 use ts_rs::TS;
 
 use crate::fonte::{CaminhoFonte, EntradaFonte};
@@ -211,6 +215,68 @@ pub fn ler_com_hash(
     })
 }
 
+/// Calcula hashes em paralelo de um lote limitado de arquivos da fonte.
+///
+/// O lote é deliberadamente fornecido pelo pipeline em janelas pequenas: não há
+/// carregamento do caso inteiro na memória. Os workers só recebem caminhos da fonte
+/// e devolvem hashes/cabeçalhos; nenhum conteúdo é compartilhado entre threads e a
+/// fonte continua somente leitura. `workers` é limitado pelo chamador e o cancelamento
+/// é cooperativo entre blocos.
+pub fn ler_varios_com_hash(
+    fonte: &dyn crate::fonte::FonteSomenteLeitura,
+    entradas: Vec<EntradaFonte>,
+    workers: usize,
+    cancelar: &AtomicBool,
+) -> Vec<(EntradaFonte, Resultado<Leitura>)> {
+    if entradas.is_empty() {
+        return Vec::new();
+    }
+    let workers = workers.clamp(1, 8).min(entradas.len());
+    let (tx_jobs, rx_jobs) = mpsc::sync_channel::<EntradaFonte>(workers * 2);
+    let (tx_resultados, rx_resultados) = mpsc::channel::<(EntradaFonte, Resultado<Leitura>)>();
+    let mut resultados = Vec::with_capacity(entradas.len());
+    let rx_jobs = Arc::new(Mutex::new(rx_jobs));
+
+    thread::scope(|escopo| {
+        for _ in 0..workers {
+            let rx_jobs = Arc::clone(&rx_jobs);
+            let tx_resultados = tx_resultados.clone();
+            escopo.spawn(move || loop {
+                let entrada = match rx_jobs.lock().ok().and_then(|rx| rx.recv().ok()) {
+                    Some(entrada) => entrada,
+                    None => break,
+                };
+                let resultado = if cancelar.load(Ordering::SeqCst) {
+                    Err(ErroIngestao::Cancelado)
+                } else {
+                    fonte.abrir(&entrada.caminho).and_then(|mut leitor| {
+                        ler_com_hash(&mut leitor, None, |_| !cancelar.load(Ordering::SeqCst))
+                    })
+                };
+                if tx_resultados.send((entrada, resultado)).is_err() {
+                    break;
+                }
+            });
+        }
+        drop(tx_resultados);
+        for entrada in entradas {
+            if cancelar.load(Ordering::SeqCst) {
+                break;
+            }
+            if tx_jobs.send(entrada).is_err() {
+                break;
+            }
+        }
+        drop(tx_jobs);
+        // Todos os workers pertencem ao escopo; a coleta bloqueia somente até que
+        // cada item enviado tenha recebido um resultado.
+        while let Ok(item) = rx_resultados.recv() {
+            resultados.push(item);
+        }
+    });
+    resultados
+}
+
 /// Um arquivo inventariado, pronto para gravar.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ArquivoInventariado {
@@ -244,6 +310,8 @@ pub fn linha_manifesto(sha256: &str, caminho: &CaminhoFonte) -> String {
 #[cfg(test)]
 mod testes {
     use super::*;
+    use crate::fonte::{CaminhoFonte, EntradaFonte, FonteSomenteLeitura};
+    use std::io::Cursor;
 
     fn c(s: &str) -> CaminhoFonte {
         CaminhoFonte::novo(s).unwrap()
@@ -295,5 +363,55 @@ mod testes {
     fn manifesto_no_formato_sha256sum() {
         assert_eq!(linha_manifesto("ab", &c("a b/c.db")), "ab *a b/c.db\n");
         assert_eq!(linha_manifesto("ab", &c("a/x\ny")), "\\ab *a/x\\ny\n");
+    }
+
+    struct FonteLote;
+
+    impl FonteSomenteLeitura for FonteLote {
+        fn descricao(&self) -> String {
+            "FIXTURE E12".into()
+        }
+        fn listar(&self) -> Box<dyn Iterator<Item = Resultado<EntradaFonte>> + '_> {
+            Box::new((0..4).map(|n| {
+                Ok(EntradaFonte {
+                    caminho: CaminhoFonte::novo(&format!("lote/{n}.bin")).unwrap(),
+                    diretorio: false,
+                    tamanho: 4,
+                    modificado_em: None,
+                    criado_em: None,
+                })
+            }))
+        }
+        fn entrada(&self, caminho: &CaminhoFonte) -> Resultado<Option<EntradaFonte>> {
+            Ok(Some(EntradaFonte {
+                caminho: caminho.clone(),
+                diretorio: false,
+                tamanho: 4,
+                modificado_em: None,
+                criado_em: None,
+            }))
+        }
+        fn abrir(&self, caminho: &CaminhoFonte) -> Resultado<Box<dyn crate::fonte::LeitorFonte>> {
+            Ok(Box::new(Cursor::new(caminho.nome().as_bytes().to_vec())))
+        }
+    }
+
+    #[test]
+    fn lote_hash_paralelo_preserva_todos_os_itens() {
+        let fonte = FonteLote;
+        let entradas: Vec<_> = fonte.listar().map(Result::unwrap).collect();
+        let cancelar = AtomicBool::new(false);
+        let resultados = ler_varios_com_hash(&fonte, entradas, 4, &cancelar);
+        assert_eq!(resultados.len(), 4);
+        assert!(resultados.iter().all(|(_, r)| r.is_ok()));
+    }
+
+    #[test]
+    fn lote_hash_paralelo_respeita_cancelamento() {
+        let fonte = FonteLote;
+        let entradas: Vec<_> = fonte.listar().map(Result::unwrap).collect();
+        let cancelar = AtomicBool::new(true);
+        let resultados = ler_varios_com_hash(&fonte, entradas, 4, &cancelar);
+        assert!(resultados.is_empty());
     }
 }

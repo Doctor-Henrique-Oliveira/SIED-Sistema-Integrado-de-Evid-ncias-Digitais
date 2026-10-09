@@ -39,6 +39,13 @@ pub enum ErroIngestao {
     /// Defeito do próprio SIED (ex.: pânico capturado), registrado em vez de derrubar o programa.
     #[error("falha inesperada: {0}")]
     Interno(String),
+
+    #[error("limite de recurso excedido: {recurso} ({observado} > {limite})")]
+    LimiteRecursos {
+        recurso: String,
+        limite: u64,
+        observado: u64,
+    },
 }
 
 pub type Resultado<T> = Result<T, ErroIngestao>;

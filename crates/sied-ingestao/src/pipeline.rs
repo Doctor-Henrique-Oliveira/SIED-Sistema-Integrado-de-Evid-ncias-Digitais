@@ -13,7 +13,7 @@
 //! [`Destino`] (implementado pelo banco do caso), o que mantém este módulo testável.
 
 use chrono::{SecondsFormat, Utc};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sied_dominio::artefato::{NovoArtefato, ReferenciaRegistro};
 use std::collections::HashMap;
@@ -35,6 +35,7 @@ use crate::{ErroIngestao, InfoComponente, Registro, Resultado};
 pub const AUXILIARES_SQLITE: &[&str] = &["-wal", "-journal"];
 pub const NOME_MANIFESTO: &str = "manifesto.sha256";
 pub const NOME_LOG: &str = "log-importacao.jsonl";
+pub const NOME_CHECKPOINT: &str = "checkpoint-retomada.json";
 const LOTE: usize = 500;
 const MAX_OBSERVACOES: usize = 50;
 /// Bancos SQLite anunciados um a um no console durante o inventário.
@@ -43,6 +44,91 @@ const MAX_BANCOS_ANUNCIADOS: u64 = 30;
 const MAX_AVISOS_ANUNCIADOS: u64 = 20;
 /// Intervalo, em registros gravados, dos anúncios de gravação de cada parser.
 const ANUNCIO_REGISTROS: u64 = 5_000;
+
+/// Limites operacionais da ingestão. Podem ser reduzidos por ambiente de laboratório,
+/// mas nunca ampliados acima dos tetos seguros do SIED.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LimitesRecursos {
+    pub max_arquivos: u64,
+    pub max_bytes: u64,
+    pub workers_hash: usize,
+}
+
+const MAX_ARQUIVOS_ABSOLUTO: u64 = 2_000_000;
+const MAX_BYTES_ABSOLUTO: u64 = 4 * 1024 * 1024 * 1024 * 1024;
+
+fn limite_env(nome: &str, padrao: u64, teto: u64) -> u64 {
+    std::env::var(nome)
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .map(|v| v.clamp(1, teto))
+        .unwrap_or(padrao)
+}
+
+/// Resolve limites uma vez por execução, sem depender de configuração remota.
+pub fn limites_recursos() -> LimitesRecursos {
+    LimitesRecursos {
+        max_arquivos: limite_env(
+            "SIED_IMPORT_MAX_FILES",
+            MAX_ARQUIVOS_ABSOLUTO,
+            MAX_ARQUIVOS_ABSOLUTO,
+        ),
+        max_bytes: limite_env(
+            "SIED_IMPORT_MAX_BYTES",
+            MAX_BYTES_ABSOLUTO,
+            MAX_BYTES_ABSOLUTO,
+        ),
+        workers_hash: limite_env("SIED_IMPORT_HASH_THREADS", 1, 8) as usize,
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CheckpointRetomada {
+    schema: u8,
+    estado: String,
+    fonte: String,
+    atualizado_em: String,
+    arquivos_inventariados: u64,
+    bytes_lidos: u64,
+    workers_hash: usize,
+    limite_arquivos: u64,
+    limite_bytes: u64,
+}
+
+fn gravar_checkpoint(
+    ctx: &ContextoImportacao,
+    fonte: &str,
+    estado: &str,
+    arquivos: u64,
+    bytes: u64,
+    limites: LimitesRecursos,
+) -> Resultado<()> {
+    let checkpoint = CheckpointRetomada {
+        schema: 1,
+        estado: estado.into(),
+        fonte: fonte.into(),
+        atualizado_em: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+        arquivos_inventariados: arquivos,
+        bytes_lidos: bytes,
+        workers_hash: limites.workers_hash,
+        limite_arquivos: limites.max_arquivos,
+        limite_bytes: limites.max_bytes,
+    };
+    let temporario = ctx.pasta_importacao.join(format!("{NOME_CHECKPOINT}.tmp"));
+    let destino = ctx.pasta_importacao.join(NOME_CHECKPOINT);
+    let conteudo = serde_json::to_vec_pretty(&checkpoint)
+        .map_err(|e| ErroIngestao::Interno(format!("checkpoint inválido: {e}")))?;
+    let mut arquivo = File::create(&temporario)?;
+    arquivo.write_all(&conteudo)?;
+    arquivo.sync_all()?;
+    drop(arquivo);
+    // O arquivo temporário evita checkpoint truncado mesmo em queda; em Windows a
+    // substituição exige remover o destino existente, deixando no máximo uma janela
+    // curta sem o derivado (nunca altera a evidência).
+    let _ = fs::remove_file(&destino);
+    fs::rename(temporario, destino)?;
+    Ok(())
+}
 
 // ---------- Progresso e cancelamento ----------
 
@@ -465,6 +551,9 @@ pub fn executar(
         p.etapa_inicio_ms = p.inicio_ms;
     });
     fs::create_dir_all(&ctx.pasta_importacao)?;
+    let limites = limites_recursos();
+    let fonte_descricao = fonte.descricao();
+    gravar_checkpoint(ctx, &fonte_descricao, "iniciada", 0, 0, limites)?;
     let mut log = Log::criar(&ctx.pasta_importacao)?;
     let info = importador.info();
     log.anunciar(
@@ -473,11 +562,9 @@ pub fn executar(
         "inicio",
         format!(
             "Iniciando importação com {} {}. Origem aberta somente para leitura: {}",
-            info.nome,
-            info.versao,
-            fonte.descricao()
+            info.nome, info.versao, fonte_descricao
         ),
-        json!({ "fonte": fonte.descricao(), "importador": info }),
+        json!({ "fonte": fonte_descricao.clone(), "importador": info, "limites": limites }),
     );
     let r = executar_etapas(
         fonte, importador, registro, destino, controle, ctx, &mut log,
@@ -520,6 +607,22 @@ pub fn executar(
             json!({ "erro": e.to_string() }),
         ),
     }
+    if let Err(e) = &r {
+        let estado = if matches!(e, &ErroIngestao::Cancelado) {
+            "cancelada"
+        } else {
+            "interrompida"
+        };
+        let progresso = controle.progresso();
+        let _ = gravar_checkpoint(
+            ctx,
+            &fonte_descricao,
+            estado,
+            progresso.arquivos_feitos,
+            progresso.bytes_feitos,
+            limites,
+        );
+    }
     r
 }
 
@@ -533,6 +636,7 @@ fn executar_etapas(
     log: &mut Log,
 ) -> Resultado<ResumoImportacao> {
     let mut resumo = ResumoImportacao::default();
+    let limites = limites_recursos();
 
     // 1. Contar
     controle.atualizar(|p| p.entrar(Etapa::Contando));
@@ -541,6 +645,20 @@ fn executar_etapas(
         if !e.diretorio {
             n += 1;
             bytes += e.tamanho;
+            if n > limites.max_arquivos {
+                return Err(ErroIngestao::LimiteRecursos {
+                    recurso: "arquivos".into(),
+                    limite: limites.max_arquivos,
+                    observado: n,
+                });
+            }
+            if bytes > limites.max_bytes {
+                return Err(ErroIngestao::LimiteRecursos {
+                    recurso: "bytes".into(),
+                    limite: limites.max_bytes,
+                    observado: bytes,
+                });
+            }
             if n % 1000 == 0 {
                 controle.verificar()?;
                 controle.atualizar(|p| (p.arquivos_total, p.bytes_total) = (n, bytes));
@@ -641,6 +759,139 @@ fn observar(resumo: &mut ResumoImportacao, texto: String) {
     }
 }
 
+fn transformar_leitura(
+    entrada: EntradaFonte,
+    leitura: Resultado<inventario::Leitura>,
+    manifesto: &mut BufWriter<File>,
+    controle: &Controle,
+    log: &mut Log,
+    resumo: &mut ResumoImportacao,
+    limites: LimitesRecursos,
+) -> Resultado<ArquivoInventariado> {
+    match leitura {
+        Ok(l) => {
+            let k = inventario::classificar(&entrada.caminho, l.bytes, &l.cabecalho);
+            manifesto
+                .write_all(inventario::linha_manifesto(&l.sha256, &entrada.caminho).as_bytes())?;
+            resumo.bytes = resumo.bytes.saturating_add(l.bytes);
+            if resumo.bytes > limites.max_bytes {
+                return Err(ErroIngestao::LimiteRecursos {
+                    recurso: "bytes".into(),
+                    limite: limites.max_bytes,
+                    observado: resumo.bytes,
+                });
+            }
+            let mut entrada = entrada;
+            entrada.tamanho = l.bytes;
+            Ok(ArquivoInventariado {
+                entrada,
+                sha256: Some(l.sha256),
+                categoria: k.categoria,
+                assinatura: k.assinatura,
+                mime: k.mime,
+                erro: None,
+            })
+        }
+        Err(ErroIngestao::Cancelado) => Err(ErroIngestao::Cancelado),
+        Err(e) => {
+            resumo.ilegiveis += 1;
+            let caminho = entrada.caminho.to_string();
+            log.anunciar(
+                controle,
+                NivelEvento::Erro,
+                "leitura",
+                format!(
+                    "Não foi possível ler {caminho}: {e}. O arquivo fica no inventário sem hash."
+                ),
+                json!({ "caminho": caminho.clone(), "erro": e.to_string() }),
+            );
+            observar(resumo, format!("não foi possível ler {caminho}: {e}"));
+            let k = inventario::classificar(&entrada.caminho, 1, &[]);
+            Ok(ArquivoInventariado {
+                entrada,
+                sha256: None,
+                categoria: k.categoria,
+                assinatura: None,
+                mime: None,
+                erro: Some(e.to_string()),
+            })
+        }
+    }
+}
+
+fn registrar_arquivo(
+    arq: ArquivoInventariado,
+    destino: &mut dyn Destino,
+    controle: &Controle,
+    log: &mut Log,
+    resumo: &mut ResumoImportacao,
+    lote: &mut Vec<ArquivoInventariado>,
+    bancos: &mut u64,
+    total: u64,
+    passo: u64,
+) -> Resultado<()> {
+    resumo.arquivos += 1;
+    if arq.categoria == inventario::Categoria::BancoSqlite {
+        *bancos += 1;
+        if *bancos <= MAX_BANCOS_ANUNCIADOS {
+            log.anunciar(
+                controle,
+                NivelEvento::Info,
+                "banco_localizado",
+                format!("Banco SQLite localizado: {}", arq.entrada.caminho),
+                json!({ "caminho": arq.entrada.caminho, "sha256": arq.sha256 }),
+            );
+        }
+    }
+    lote.push(arq);
+    controle.atualizar(|p| p.arquivos_feitos += 1);
+    if resumo.arquivos.is_multiple_of(passo) && resumo.arquivos < total {
+        log.anunciar(
+            controle,
+            NivelEvento::Info,
+            "inventario_progresso",
+            format!(
+                "{} de {} arquivo(s) inventariados ({}%).",
+                numero_br(resumo.arquivos),
+                numero_br(total),
+                resumo.arquivos * 100 / total.max(1)
+            ),
+            json!({ "feitos": resumo.arquivos, "total": total }),
+        );
+    }
+    if lote.len() >= LOTE {
+        destino.gravar_arquivos(lote)?;
+        lote.clear();
+    }
+    Ok(())
+}
+
+fn processar_lote_hash(
+    fonte: &dyn FonteSomenteLeitura,
+    entradas: Vec<EntradaFonte>,
+    limites: LimitesRecursos,
+    destino: &mut dyn Destino,
+    controle: &Controle,
+    manifesto: &mut BufWriter<File>,
+    log: &mut Log,
+    resumo: &mut ResumoImportacao,
+    lote: &mut Vec<ArquivoInventariado>,
+    bancos: &mut u64,
+    total: u64,
+    passo: u64,
+) -> Resultado<()> {
+    let resultados =
+        inventario::ler_varios_com_hash(fonte, entradas, limites.workers_hash, &controle.cancelar);
+    for (entrada, leitura) in resultados {
+        controle.verificar()?;
+        let arq = transformar_leitura(entrada, leitura, manifesto, controle, log, resumo, limites)?;
+        registrar_arquivo(
+            arq, destino, controle, log, resumo, lote, bancos, total, passo,
+        )?;
+    }
+    Ok(())
+}
+
 fn inventariar(
     fonte: &dyn FonteSomenteLeitura,
     destino: &mut dyn Destino,
@@ -651,11 +902,14 @@ fn inventariar(
     total: u64,
 ) -> Resultado<()> {
     let caminho_manifesto = ctx.pasta_importacao.join(NOME_MANIFESTO);
+    let limites = limites_recursos();
     let mut bancos = 0u64;
     // Marco de progresso a cada 10% dos arquivos (ao menos a cada arquivo).
     let passo = (total / 10).max(1);
     let mut manifesto = BufWriter::new(File::create(&caminho_manifesto)?);
     let mut lote: Vec<ArquivoInventariado> = Vec::with_capacity(LOTE);
+    let janela_hash = (limites.workers_hash * 4).max(1);
+    let mut pendentes_hash = Vec::with_capacity(janela_hash);
 
     for item in fonte.listar() {
         controle.verificar()?;
@@ -679,92 +933,86 @@ fn inventariar(
             resumo.diretorios += 1;
             continue;
         }
+        if resumo.arquivos + 1 > limites.max_arquivos {
+            return Err(ErroIngestao::LimiteRecursos {
+                recurso: "arquivos".into(),
+                limite: limites.max_arquivos,
+                observado: resumo.arquivos + 1,
+            });
+        }
         controle.atualizar(|p| p.item_atual = Some(entrada.caminho.to_string()));
+        if limites.workers_hash > 1 {
+            pendentes_hash.push(entrada);
+            if pendentes_hash.len() >= janela_hash {
+                processar_lote_hash(
+                    fonte,
+                    std::mem::take(&mut pendentes_hash),
+                    limites,
+                    destino,
+                    controle,
+                    &mut manifesto,
+                    log,
+                    resumo,
+                    &mut lote,
+                    &mut bancos,
+                    total,
+                    passo,
+                )?;
+            }
+            continue;
+        }
         let leitura = fonte.abrir(&entrada.caminho).and_then(|mut l| {
             inventario::ler_com_hash(&mut l, None, |b| {
                 controle.atualizar(|p| p.bytes_feitos += b);
                 !controle.cancelado()
             })
         });
-        let arq = match leitura {
-            Ok(l) => {
-                let k = inventario::classificar(&entrada.caminho, l.bytes, &l.cabecalho);
-                manifesto.write_all(
-                    inventario::linha_manifesto(&l.sha256, &entrada.caminho).as_bytes(),
-                )?;
-                resumo.bytes += l.bytes;
-                let mut entrada = entrada;
-                entrada.tamanho = l.bytes; // tamanho efetivamente lido e coberto pelo hash
-                ArquivoInventariado {
-                    entrada,
-                    sha256: Some(l.sha256),
-                    categoria: k.categoria,
-                    assinatura: k.assinatura,
-                    mime: k.mime,
-                    erro: None,
-                }
-            }
-            Err(ErroIngestao::Cancelado) => return Err(ErroIngestao::Cancelado),
-            Err(e) => {
-                resumo.ilegiveis += 1;
-                log.anunciar(
-                    controle,
-                    NivelEvento::Erro,
-                    "leitura",
-                    format!(
-                        "Não foi possível ler {}: {e}. O arquivo fica no inventário sem hash.",
-                        entrada.caminho
-                    ),
-                    json!({ "caminho": entrada.caminho, "erro": e.to_string() }),
-                );
-                observar(
-                    resumo,
-                    format!("não foi possível ler {}: {e}", entrada.caminho),
-                );
-                let k = inventario::classificar(&entrada.caminho, 1, &[]);
-                ArquivoInventariado {
-                    entrada,
-                    sha256: None,
-                    categoria: k.categoria,
-                    assinatura: None,
-                    mime: None,
-                    erro: Some(e.to_string()),
-                }
-            }
-        };
-        resumo.arquivos += 1;
-        if arq.categoria == inventario::Categoria::BancoSqlite {
-            bancos += 1;
-            if bancos <= MAX_BANCOS_ANUNCIADOS {
-                log.anunciar(
-                    controle,
-                    NivelEvento::Info,
-                    "banco_localizado",
-                    format!("Banco SQLite localizado: {}", arq.entrada.caminho),
-                    json!({ "caminho": arq.entrada.caminho, "sha256": arq.sha256 }),
-                );
-            }
+        let arq = transformar_leitura(
+            entrada,
+            leitura,
+            &mut manifesto,
+            controle,
+            log,
+            resumo,
+            limites,
+        )?;
+        registrar_arquivo(
+            arq,
+            destino,
+            controle,
+            log,
+            resumo,
+            &mut lote,
+            &mut bancos,
+            total,
+            passo,
+        )?;
+        if resumo.arquivos.is_multiple_of(LOTE as u64) {
+            gravar_checkpoint(
+                ctx,
+                &fonte.descricao(),
+                "inventariando",
+                resumo.arquivos,
+                resumo.bytes,
+                limites,
+            )?;
         }
-        lote.push(arq);
-        controle.atualizar(|p| p.arquivos_feitos += 1);
-        if resumo.arquivos.is_multiple_of(passo) && resumo.arquivos < total {
-            log.anunciar(
-                controle,
-                NivelEvento::Info,
-                "inventario_progresso",
-                format!(
-                    "{} de {} arquivo(s) inventariados ({}%).",
-                    numero_br(resumo.arquivos),
-                    numero_br(total),
-                    resumo.arquivos * 100 / total.max(1)
-                ),
-                json!({ "feitos": resumo.arquivos, "total": total }),
-            );
-        }
-        if lote.len() >= LOTE {
-            destino.gravar_arquivos(&lote)?;
-            lote.clear();
-        }
+    }
+    if !pendentes_hash.is_empty() {
+        processar_lote_hash(
+            fonte,
+            pendentes_hash,
+            limites,
+            destino,
+            controle,
+            &mut manifesto,
+            log,
+            resumo,
+            &mut lote,
+            &mut bancos,
+            total,
+            passo,
+        )?;
     }
     if !lote.is_empty() {
         destino.gravar_arquivos(&lote)?;
@@ -772,6 +1020,14 @@ fn inventariar(
     manifesto.flush()?;
     manifesto.get_ref().sync_all()?;
     drop(manifesto);
+    gravar_checkpoint(
+        ctx,
+        &fonte.descricao(),
+        "inventario_concluido",
+        resumo.arquivos,
+        resumo.bytes,
+        limites,
+    )?;
 
     let mut f = File::open(&caminho_manifesto)?;
     resumo.hash_manifesto = inventario::ler_com_hash(&mut f, None, |_| true)?.sha256;

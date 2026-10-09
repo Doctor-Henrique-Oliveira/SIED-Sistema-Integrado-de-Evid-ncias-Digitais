@@ -4,7 +4,7 @@ Atualizado em 09/10/2026. Este documento transforma a visão, o README e o ROADM
 
 ## Ponteiro atual
 
-**Próxima etapa: E09 — Relatórios investigativos avançados.**
+**Próxima etapa: E12 — Desempenho, retomada e preparação de release.**
 
 O código incorporado à `main` até `87b10e8` é a linha de base. AI-0–AI-7 possuem fundações e interfaces, porém vários motores continuam conservadores ou ausentes. As etapas abaixo aprofundam essas fundações sem duplicá-las.
 
@@ -158,9 +158,22 @@ continuam recusados e segredos não são aceitos.
 
 ### E12 — Desempenho, retomada e preparação de release
 
-**Status: PENDENTE**
+**Status: EM ANDAMENTO — limites, hashing controlado e checkpoint de inventário implementados localmente**
 
-Implementar retomada segura de tarefas/importações onde tecnicamente possível, hashing paralelo controlado, limites de recursos, benchmarks e testes de grande volume. Consolidar instalador, atualização, recuperação de falhas e documentação operacional.
+O pipeline agora resolve limites locais por execução (`SIED_IMPORT_MAX_FILES`,
+`SIED_IMPORT_MAX_BYTES` e `SIED_IMPORT_HASH_THREADS`, com tetos internos de segurança),
+recusa a importação antes de exceder arquivos/bytes e registra os limites no log da
+operação. O inventário pode usar uma janela limitada de workers (1–8) para calcular
+SHA-256 em paralelo sem carregar a extração inteira; cancelamento é cooperativo e a
+origem continua somente leitura. Cada importação grava `checkpoint-retomada.json` por
+substituição via arquivo temporário, com fonte, estado, progresso, limites e versão do
+formato. Estados interrompidos nunca são tratados como sucesso; a retomada automática
+da mesma transação ainda não é habilitada para evitar duplicação de registros.
+
+Fixtures sintéticas cobrem hashing paralelo, cancelamento e leitura de lote. O benchmark
+reprodutível de volume deve ser executado em ambiente Rust/MSVC suportado. Consolidação
+do instalador, atualização e recuperação operacional ainda dependem do pipeline de CI e
+da validação Windows correspondente.
 
 **Concluída quando:** cenários grandes possuem métricas reproduzíveis; cancelamento/retomada não falsificam sucesso; testes completos, Clippy, typecheck, build e instalador passam em ambiente suportado.
 
