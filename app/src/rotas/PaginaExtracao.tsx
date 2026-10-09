@@ -10,7 +10,7 @@ import { Icone, type NomeIcone } from "../componentes/Icone";
 import { PainelTecnico } from "../componentes/PainelTecnico";
 import { nomeSistema } from "../componentes/SecoesCaso";
 import { dataHora, dataHoraMs, duracao, numero, tamanho } from "../util/formatar";
-import { nomeEstadoRegistro, nomeStatusExecucao, nomeStatusExtracao, nomeTipoArtefato, rotuloApp, tomStatus } from "../util/rotulos";
+import { diagnosticoCheckpoint, nomeEstadoRegistro, nomeStatusExecucao, nomeStatusExtracao, nomeTipoArtefato, rotuloApp, tomStatus } from "../util/rotulos";
 import { ComCasoAberto, VoltarAoCaso } from "./PaginaCaso";
 
 const LIMITE = 100;
@@ -111,6 +111,7 @@ function Par({ rotulo, children, mono }: { rotulo: string; children: ReactNode; 
 
 function BlocosTecnicos({ caso, x, disp, parsers, checkpoint }: { caso: Caso; x: Extracao; disp: Dispositivo | undefined; parsers: number | undefined; checkpoint?: string | null }) {
   const fuso = caso.fuso_horario;
+  const diagnostico = checkpoint ? diagnosticoCheckpoint(checkpoint, x.status) : null;
   return (
     <div className="space-y-3">
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -167,9 +168,11 @@ function BlocosTecnicos({ caso, x, disp, parsers, checkpoint }: { caso: Caso; x:
         </Bloco>
       </div>
       {x.erro && x.status !== "concluida" && <Aviso tipo={x.status === "falhou" ? "erro" : "atencao"}>{x.erro}</Aviso>}
-      {checkpoint && (
-        <Aviso tipo="info">
-          Checkpoint de recuperação: <span className="font-mono">{checkpoint}</span>. Ele é apenas diagnóstico; a retomada automática permanece desativada.
+      {diagnostico && (
+        <Aviso tipo={diagnostico.tipo}>
+          <strong>{diagnostico.titulo}</strong>
+          <span className="ml-1 font-mono text-xs">({checkpoint})</span>
+          <span className="mt-0.5 block">{diagnostico.detalhe}</span>
         </Aviso>
       )}
       {x.observacoes.length > 0 && (

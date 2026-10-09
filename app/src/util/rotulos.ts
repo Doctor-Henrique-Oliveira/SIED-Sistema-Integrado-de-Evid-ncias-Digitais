@@ -19,6 +19,45 @@ export const nomeStatusExtracao: Record<string, string> = {
   interrompida: "Interrompida",
 };
 
+export const nomeEstadoCheckpoint: Record<string, string> = {
+  iniciada: "Iniciada",
+  inventariando: "Inventariando",
+  inventario_concluido: "Inventário concluído",
+  concluida: "Concluída",
+  cancelada: "Cancelada",
+  interrompida: "Interrompida",
+};
+
+export type DiagnosticoCheckpoint = {
+  tipo: "info" | "sucesso" | "atencao";
+  titulo: string;
+  detalhe: string;
+};
+
+/** Texto operacional do checkpoint sem sugerir que ele autoriza uma retomada. */
+export function diagnosticoCheckpoint(estado: string, statusExtracao: string): DiagnosticoCheckpoint {
+  const rotulo = nomeEstadoCheckpoint[estado] ?? estado;
+  if (estado === "concluida" && statusExtracao === "concluida") {
+    return {
+      tipo: "sucesso",
+      titulo: `Checkpoint final: ${rotulo}`,
+      detalhe: "A importação foi encerrada. Este checkpoint não é candidato à recuperação.",
+    };
+  }
+  if (estado === "concluida") {
+    return {
+      tipo: "atencao",
+      titulo: `Checkpoint final: ${rotulo}`,
+      detalhe: `O checkpoint está concluído, mas o registro da extração está “${nomeStatusExtracao[statusExtracao] ?? statusExtracao}”. Confira a auditoria antes de uma nova execução.`,
+    };
+  }
+  return {
+    tipo: estado === "interrompida" || estado === "cancelada" ? "atencao" : "info",
+    titulo: `Checkpoint: ${rotulo}`,
+    detalhe: "É um marcador diagnóstico. A retomada automática permanece desativada e qualquer nova execução exige decisão explícita.",
+  };
+}
+
 export const nomeStatusExecucao: Record<string, string> = {
   em_andamento: "Em andamento",
   ok: "Concluída",
