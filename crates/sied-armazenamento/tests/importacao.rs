@@ -351,7 +351,8 @@ fn caso_v1_e_migrado_com_copia_de_seguranca() {
     banco.fechar().unwrap();
     let conn = Connection::open(pasta.join("caso.sied.db")).unwrap();
     conn.execute_batch(
-        "DROP TABLE visual_derivado; DELETE FROM schema_migracao WHERE versao=10;
+        "DROP TABLE regiao_documental; DELETE FROM schema_migracao WHERE versao=11;
+         DROP TABLE visual_derivado; DELETE FROM schema_migracao WHERE versao=10;
          DROP TABLE amostra_supervisionada; DROP TABLE dataset_supervisionado;
          DELETE FROM schema_migracao WHERE versao=9;
          DROP TABLE revisao_entidade_documental; DROP TABLE entidade_documental;
@@ -537,7 +538,8 @@ fn caso_v2_ganha_conversas_e_busca_do_que_ja_foi_importado() {
     // Volta o banco para a versão 2 (sem as tabelas derivadas).
     let conn = Connection::open(pasta.join("caso.sied.db")).unwrap();
     conn.execute_batch(
-        "DROP TABLE visual_derivado; DELETE FROM schema_migracao WHERE versao=10;
+        "DROP TABLE regiao_documental; DELETE FROM schema_migracao WHERE versao=11;
+         DROP TABLE visual_derivado; DELETE FROM schema_migracao WHERE versao=10;
          DROP TABLE amostra_supervisionada; DROP TABLE dataset_supervisionado;
          DELETE FROM schema_migracao WHERE versao=9;
          DROP TABLE revisao_entidade_documental; DROP TABLE entidade_documental;

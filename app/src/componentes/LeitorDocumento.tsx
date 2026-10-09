@@ -11,7 +11,9 @@ import { Icone } from "./Icone";
 import { PainelAnaliseDocumento } from "./PainelAnaliseDocumento";
 
 const EXTENSOES_TEXTO = new Set(["txt", "csv", "tsv", "json", "xml", "md", "log"]);
+const EXTENSOES_IMAGEM_OCR = new Set(["png", "jpg", "jpeg"]);
 const LIMITE_BYTES = 2 * 1024 * 1024;
+const LIMITE_BYTES_OCR = 64 * 1024 * 1024;
 const LIMITE_PAGINAS = 512;
 
 type Props = { caso: Caso; extracaoId: string; arquivo: ArquivoExtracao };
@@ -31,6 +33,8 @@ export function LeitorDocumento(props: Props) {
 
 function SessaoLeitura({ caso, extracaoId, arquivo }: Props) {
   const [leitura, setLeitura] = useState<Leitura>({ estado: "inicial" });
+  const imagem = EXTENSOES_IMAGEM_OCR.has(extensao(arquivo.caminho));
+  const [modo, setModo] = useState<"automatico" | "ocr">(imagem ? "ocr" : "automatico");
   const [paginaSelecionada, setPaginaSelecionada] = useState(1);
   const [totalPaginas, setTotalPaginas] = useState<number | null>(null);
   const [indexando, setIndexando] = useState(false);
@@ -54,8 +58,11 @@ function SessaoLeitura({ caso, extracaoId, arquivo }: Props) {
   }, []);
 
   const pdf = extensao(arquivo.caminho) === "pdf";
-  const suportado = (pdf || EXTENSOES_TEXTO.has(extensao(arquivo.caminho))) && !arquivo.caminho.includes("!/");
-  const disponivel = suportado && !!arquivo.sha256 && arquivo.tamanho <= LIMITE_BYTES;
+  const ocr = modo === "ocr";
+  const suportado = (pdf || imagem || EXTENSOES_TEXTO.has(extensao(arquivo.caminho))) && !arquivo.caminho.includes("!/");
+  const modoDisponivel = ocr ? (pdf || imagem) : (pdf || EXTENSOES_TEXTO.has(extensao(arquivo.caminho)));
+  const limiteAtual = ocr ? LIMITE_BYTES_OCR : LIMITE_BYTES;
+  const disponivel = suportado && modoDisponivel && !!arquivo.sha256 && arquivo.tamanho <= limiteAtual;
 
   async function ler(pagina = paginaSelecionada) {
     if (!disponivel || leitura.estado === "carregando" || indexando) return;
@@ -67,8 +74,8 @@ function SessaoLeitura({ caso, extracaoId, arquivo }: Props) {
     setLeitura({ estado: "carregando" });
     try {
       const resultado = pdf
-        ? await api.lerDocumento(arquivo.id, caso.id, pagina)
-        : await api.lerDocumento(arquivo.id, caso.id);
+        ? await api.lerDocumento(arquivo.id, caso.id, pagina, ocr ? "ocr" : undefined)
+        : await api.lerDocumento(arquivo.id, caso.id, undefined, ocr ? "ocr" : undefined);
       if (!ativa.current || tentativa.current !== atual) return;
       const texto = resultado.texto;
       // Não publique conteúdo de outra seleção/caso, mesmo se uma resposta IPC
@@ -85,7 +92,9 @@ function SessaoLeitura({ caso, extracaoId, arquivo }: Props) {
           ? texto.pagina === pagina && Number.isInteger(texto.total_paginas) && texto.total_paginas !== null &&
             texto.total_paginas >= pagina && texto.total_paginas <= LIMITE_PAGINAS &&
             (totalPaginas === null || texto.total_paginas === totalPaginas)
-          : texto.pagina === null && texto.total_paginas === null;
+          : ocr
+            ? texto.pagina === 1 && texto.total_paginas === 1
+            : texto.pagina === null && texto.total_paginas === null;
         if (!paginacaoCorreta) {
           setLeitura({ estado: "erro", mensagem: "A paginação do resultado não corresponde à leitura solicitada. O conteúdo não foi exibido." });
           return;
@@ -121,8 +130,8 @@ function SessaoLeitura({ caso, extracaoId, arquivo }: Props) {
     setIndexando(true); setIndexado(null); setErroIndexacao(null); setAvisoCancelamento(null);
     try {
       const documento = pdf
-        ? await api.indexarDocumento(arquivo.id, caso.id, texto.pagina!)
-        : await api.indexarDocumento(arquivo.id, caso.id);
+        ? await api.indexarDocumento(arquivo.id, caso.id, texto.pagina!, ocr ? "ocr" : undefined)
+        : await api.indexarDocumento(arquivo.id, caso.id, undefined, ocr ? "ocr" : undefined);
       if (!ativa.current || tentativa.current !== atual) return;
       if (documento.caso_id !== caso.id || documento.extracao_id !== extracaoId ||
           documento.arquivo_id !== arquivo.id || documento.caminho !== arquivo.caminho ||
@@ -158,7 +167,7 @@ function SessaoLeitura({ caso, extracaoId, arquivo }: Props) {
           setFila({ estado: "pausada", total, concluidas: confirmadas, proxima: paginaAtual });
           return;
         }
-        const documento = await api.indexarDocumento(arquivo.id, caso.id, paginaAtual);
+        const documento = await api.indexarDocumento(arquivo.id, caso.id, paginaAtual, ocr ? "ocr" : undefined);
         if (!ativa.current || tentativa.current !== atual) return;
         if (!Number.isSafeInteger(documento.id) || documento.id <= 0 || documento.caso_id !== caso.id ||
             documento.extracao_id !== extracaoId || documento.arquivo_id !== arquivo.id ||
@@ -217,24 +226,30 @@ function SessaoLeitura({ caso, extracaoId, arquivo }: Props) {
         <Selo tom="neutro">LOCAL · SOMENTE LEITURA</Selo>
       </div>
       <p className="mt-1 text-xs leading-relaxed text-texto-2">
-        {pdf ? "Texto nativo do PDF, por página, com origem conferida pelo SHA-256." : "Texto UTF-8 com origem conferida pelo SHA-256."} Sem alterar a extração original.
+        {ocr ? "OCR local do Windows, por página, com regiões e origem conferida pelo SHA-256." : pdf ? "Texto nativo do PDF, por página, com origem conferida pelo SHA-256." : "Texto UTF-8 com origem conferida pelo SHA-256."} Sem alterar a extração original.
       </p>
-      {pdf && <p className="mt-1 text-xs leading-relaxed text-texto-3">Texto derivado. A ordem de leitura do PDF pode diferir da composição visual. PDFs sem texto nativo ou com recursos não suportados podem ser recusados; OCR não está disponível.</p>}
+      {pdf && !ocr && <p className="mt-1 text-xs leading-relaxed text-texto-3">Texto derivado. A ordem de leitura do PDF pode diferir da composição visual. Para páginas digitalizadas, selecione OCR local.</p>}
+      {ocr && <p className="mt-1 text-xs leading-relaxed text-texto-3">Processamento local/offline. O motor nativo não fornece confiança numérica; essa ausência é preservada e não é substituída por um score fictício.</p>}
       {suportado ? (
         <>
           <div className="mt-3 flex flex-wrap items-center gap-2">
+            {pdf && <>
+              <Botao variante={modo === "automatico" ? "secundario" : "fantasma"} tamanho="p" onClick={() => { ocultar(); setModo("automatico"); }} disabled={indexando}>Texto nativo</Botao>
+              <Botao variante={modo === "ocr" ? "secundario" : "fantasma"} tamanho="p" onClick={() => { ocultar(); setModo("ocr"); }} disabled={indexando}>OCR local</Botao>
+            </>}
             <Botao icone="documento" tamanho="p" onClick={() => void ler()} disabled={!disponivel || indexando} carregando={leitura.estado === "carregando"}>
-              {texto ? "Conferir e reler" : "Ler documento"}
+              {texto ? (ocr ? "Conferir e reprocessar" : "Conferir e reler") : ocr ? "Executar OCR" : "Ler documento"}
             </Botao>
             {aberta && <Botao variante="fantasma" tamanho="p" onClick={ocultar} disabled={indexando}>Ocultar leitura</Botao>}
-            <span className="text-2xs text-texto-3">Até 2 MiB{pdf ? " · até 512 páginas" : ""} · sem OCR</span>
+            <span className="text-2xs text-texto-3">Até {ocr ? "64" : "2"} MiB{pdf ? " · até 512 páginas" : ""} · local/offline</span>
           </div>
           {!arquivo.sha256 && <p className="mt-2 text-xs text-atencao-claro">Leitura indisponível: o inventário não possui SHA-256 deste arquivo.</p>}
-          {arquivo.tamanho > LIMITE_BYTES && <p className="mt-2 text-xs text-atencao-claro">Este arquivo excede o limite de leitura documental de 2 MiB.</p>}
+          {arquivo.tamanho > limiteAtual && <p className="mt-2 text-xs text-atencao-claro">{ocr ? "Este arquivo excede o limite de 64 MiB do OCR local." : "Este arquivo excede o limite de leitura documental de 2 MiB."}</p>}
+          {!modoDisponivel && <p className="mt-2 text-xs text-atencao-claro">O modo selecionado não é compatível com este formato.</p>}
         </>
       ) : (
         <p className="mt-3 text-xs leading-relaxed text-texto-3">
-          Este formato ainda não possui leitor documental. Imagens/OCR, Office e arquivos em contêineres não são processados nesta versão.
+          Este formato ainda não possui leitor documental. Office e arquivos em contêineres não são processados nesta versão.
         </p>
       )}
 
@@ -268,7 +283,7 @@ function SessaoLeitura({ caso, extracaoId, arquivo }: Props) {
             <Selo tom="ok">ORIGEM CONFERIDA</Selo>
           </div>
           {texto.texto === "" ? (
-            <p className="px-3 py-8 text-sm text-texto-2" role="status">{pdf ? "Página sem texto nativo; OCR não disponível." : "Arquivo vazio. A origem foi conferida; não há texto para exibir."}</p>
+            <p className="px-3 py-8 text-sm text-texto-2" role="status">{ocr ? "Nenhum texto foi reconhecido nesta página. Isso não comprova ausência de conteúdo visual." : pdf ? "Página sem texto nativo. Tente o OCR local." : "Arquivo vazio. A origem foi conferida; não há texto para exibir."}</p>
           ) : (
             <pre
               role="region"
@@ -285,6 +300,7 @@ function SessaoLeitura({ caso, extracaoId, arquivo }: Props) {
               <div><dt className="sobrelinha">SHA-256 da origem conferida</dt><dd className="mt-1"><Hash valor={texto.sha256} /></dd></div>
               <div><dt className="sobrelinha">SHA-256 do texto{pdf ? " da página" : ""}</dt><dd className="mt-1"><Hash valor={texto.sha256_texto} /></dd></div>
               <div><dt className="sobrelinha">Motor</dt><dd className="mt-1 font-mono">{texto.motor_id} v{texto.motor_versao}</dd></div>
+              {ocr && <div><dt className="sobrelinha">Confiança técnica</dt><dd className="mt-1">Não fornecida pelo motor nativo; nenhuma estimativa foi inventada.</dd></div>}
               <div><dt className="sobrelinha">Leitura realizada em</dt><dd className="mt-1">{dataHora(texto.executado_em, caso.fuso_horario)}</dd></div>
               <div><dt className="sobrelinha">Página</dt><dd className="mt-1">{texto.pagina === null ? "Não se aplica ao texto nativo" : `${texto.pagina} de ${texto.total_paginas}`}</dd></div>
             </dl>

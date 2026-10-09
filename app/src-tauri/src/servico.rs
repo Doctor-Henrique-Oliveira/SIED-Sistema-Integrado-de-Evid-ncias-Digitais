@@ -53,6 +53,11 @@ pub struct LeituraDocumento {
 }
 
 impl LeituraDocumento {
+    pub fn com_modo(mut self, modo: ModoDocumento) -> Self {
+        self.pedido.modo = modo;
+        self
+    }
+
     #[cfg(test)]
     pub fn executar(self) -> ResultadoDocumento {
         self.executar_pagina(None)

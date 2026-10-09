@@ -36,7 +36,12 @@ Uma etapa só muda para `CONCLUÍDA` quando seus critérios forem atendidos no c
 
 ### E01 — OCR local e documentos pesquisáveis
 
-**Status: PENDENTE**
+**Status: EM ANDAMENTO**
+
+Branch de trabalho: `feat/e01-ocr-local-documentos`. O motor local Windows,
+persistência append-only, pesquisa e interface estão em integração; a etapa só
+será marcada como concluída após contratos Rust, testes multiplataforma e
+validação visual do fluxo imagem/PDF.
 
 Entregar OCR totalmente local para imagens e PDFs digitalizados, com página, região/bounding box, mecanismo, versão, confiança técnica, hash da origem, cache versionado e busca navegável. Ampliar formatos documentais somente quando houver parser seguro e origem conferível. O processamento deve ser cancelável e incremental, sem alterar a evidência.
 

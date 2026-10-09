@@ -200,14 +200,32 @@ describe("leitor documental local", () => {
     expect(screen.queryByRole("region", { name: "Texto documental" })).not.toBeInTheDocument();
   });
 
-  it("explica formato sem suporte sem abrir Office, imagem ou contêiner", () => {
-    for (const caminho of ["sintetico.docx", "sintetico.jpg", "pasta.zip!/nota.txt", "pasta.zip!/sintetico.pdf"]) {
+  it("explica formato sem suporte sem abrir Office ou contêiner", () => {
+    for (const caminho of ["sintetico.docx", "pasta.zip!/nota.txt", "pasta.zip!/sintetico.pdf"]) {
       const tela = montar({ ...arquivo, caminho });
       expect(screen.getByText(/Este formato ainda não possui leitor documental/)).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Ler documento" })).not.toBeInTheDocument();
       tela.unmount();
     }
     expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("oferece OCR local para imagem e envia somente identidade inventariada e modo", async () => {
+    const imagem = { ...arquivo, caminho: "imagens/CARTAZ-SINTETICO.jpg", mime: "image/jpeg", categoria: "imagem" };
+    vi.mocked(invoke).mockResolvedValue(pronto("TEXTO OCR SINTÉTICO", {
+      caminho: imagem.caminho,
+      motor_id: "windows_media_ocr",
+      motor_versao: "1.0.0",
+      pagina: 1,
+      total_paginas: 1,
+    }));
+    montar(imagem);
+    await userEvent.click(screen.getByRole("button", { name: "Executar OCR" }));
+    expect(invoke).toHaveBeenCalledWith("ler_documento", {
+      arquivoId: 27, casoId: "caso-sintetico", modo: "ocr",
+    });
+    expect(await screen.findByRole("region", { name: "Texto documental" })).toHaveTextContent("TEXTO OCR SINTÉTICO");
+    expect(screen.getByText(/Não fornecida pelo motor nativo/)).toBeInTheDocument();
   });
 
   it("não faz leitura sem hash ou além do limite e explica por que", () => {
@@ -366,7 +384,7 @@ describe("leitura nativa de PDF por página", () => {
     vi.mocked(invoke).mockResolvedValue(paginaPronta(1, ""));
     montar(pdfArquivo);
     await userEvent.click(screen.getByRole("button", { name: "Ler documento" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("Página sem texto nativo; OCR não disponível.");
+    expect(await screen.findByRole("status")).toHaveTextContent("Página sem texto nativo. Tente o OCR local.");
     expect(screen.getByRole("navigation", { name: "Páginas do documento" })).toHaveTextContent("1 de 3");
     expect(screen.queryByRole("region", { name: "Texto documental" })).not.toBeInTheDocument();
   });

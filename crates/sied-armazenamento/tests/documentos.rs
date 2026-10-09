@@ -8,8 +8,8 @@ use rusqlite::Connection;
 use sha2::{Digest, Sha256};
 use sied_armazenamento::caso::NOME_ARQUIVO_CASO;
 use sied_armazenamento::documentos::{
-    EstadoRevisaoEntidade as Estado, NovaEntidadeDocumento, NovoDocumento, MAX_ENTIDADES_DOCUMENTO,
-    TAMANHO_MAXIMO_TEXTO,
+    EstadoRevisaoEntidade as Estado, NovaEntidadeDocumento, NovaRegiaoDocumento, NovoDocumento,
+    MAX_ENTIDADES_DOCUMENTO, TAMANHO_MAXIMO_TEXTO,
 };
 use sied_armazenamento::{BancoCaso, ErroArmazenamento};
 use std::fs;
@@ -61,6 +61,9 @@ fn preparado() -> (
         texto: TEXTO.into(),
         pagina: None,
         total_paginas: None,
+        largura_px: None,
+        altura_px: None,
+        regioes: vec![],
         motor_id: "texto_utf8_nativo".into(),
         motor_versao: "0.1.0".into(),
         executado_em: chrono::Utc::now().to_rfc3339(),
@@ -478,7 +481,8 @@ fn migracao_oito_e_nova_faz_backup_e_preserva_hashes_das_anteriores() {
         .collect::<Result<_, _>>()
         .unwrap();
     c.execute_batch(
-        "DROP TABLE visual_derivado; DELETE FROM schema_migracao WHERE versao=10;
+        "DROP TABLE regiao_documental; DELETE FROM schema_migracao WHERE versao=11;
+         DROP TABLE visual_derivado; DELETE FROM schema_migracao WHERE versao=10;
          DROP TABLE amostra_supervisionada; DROP TABLE dataset_supervisionado;
          DELETE FROM schema_migracao WHERE versao=9;
          DROP TABLE revisao_entidade_documental; DROP TABLE entidade_documental;
@@ -503,6 +507,42 @@ fn migracao_oito_e_nova_faz_backup_e_preserva_hashes_das_anteriores() {
     assert_eq!(contar(&c, "documento_derivado"), 0);
     banco.verificar_auditoria().unwrap();
     assert!(raiz.path().is_dir());
+}
+
+#[test]
+fn regioes_ocr_sao_append_only_pesquisaveis_e_reutilizadas_sem_perder_origem() {
+    let (_raiz, _origem, mut banco, mut novo) = preparado();
+    novo.motor_id = "windows_media_ocr".into();
+    novo.motor_versao = "1.0.0".into();
+    novo.pagina = Some(1);
+    novo.total_paginas = Some(1);
+    novo.largura_px = Some(1200);
+    novo.altura_px = Some(800);
+    novo.regioes = vec![NovaRegiaoDocumento {
+        ordem: 0,
+        inicio_utf8: 0,
+        fim_utf8: "SINTÉTICO".len() as u32,
+        texto: "SINTÉTICO".into(),
+        x: 100,
+        y: 80,
+        largura: 240,
+        altura: 52,
+        confianca: None,
+    }];
+    let primeiro = banco.guardar_documento(&novo).unwrap();
+    let repetido = banco.guardar_documento(&novo).unwrap();
+    assert_eq!(primeiro.id, repetido.id);
+    assert_eq!(repetido.largura_px, Some(1200));
+    assert_eq!(repetido.altura_px, Some(800));
+    assert_eq!(repetido.regioes.len(), 1);
+    assert_eq!(repetido.regioes[0].texto, "SINTÉTICO");
+    assert_eq!(repetido.regioes[0].confianca, None);
+    let encontrados = banco.buscar_documentos("SINTETICO", 0, 20).unwrap();
+    assert_eq!(encontrados.total, 1);
+    assert_eq!(encontrados.itens[0].motor_id, "windows_media_ocr");
+    let c = conn(&banco);
+    assert!(c.execute("UPDATE regiao_documental SET x=0", []).is_err());
+    assert!(c.execute("DELETE FROM regiao_documental", []).is_err());
 }
 
 #[test]

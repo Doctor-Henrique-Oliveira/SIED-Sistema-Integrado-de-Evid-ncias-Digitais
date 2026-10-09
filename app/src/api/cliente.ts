@@ -289,11 +289,11 @@ export const api = {
   /** Miniatura de uma imagem do inventário (lida da extração e conferida pelo SHA-256). */
   miniatura: async (arquivoId: number) => (await chamar<Miniatura | undefined>("miniatura", { arquivoId })) ?? null,
   /** Texto conferido contra o inventário; PDF admite página real. Não recebe caminho ou hash do frontend. */
-  lerDocumento: (arquivoId: number, casoId: CasoId, pagina?: number) =>
-    chamar<ResultadoDocumento>("ler_documento", { arquivoId, casoId, ...(pagina === undefined ? {} : { pagina }) }),
+    lerDocumento: (arquivoId: number, casoId: CasoId, pagina?: number, modo?: "automatico" | "ocr") =>
+      chamar<ResultadoDocumento>("ler_documento", { arquivoId, casoId, ...(pagina === undefined ? {} : { pagina }), ...(modo === undefined ? {} : { modo }) }),
   /** Relê/confronta a origem no backend antes de armazenar o derivado. Nunca recebe texto/hash do frontend. */
-  indexarDocumento: (arquivoId: number, casoId: CasoId, pagina?: number) =>
-    chamar<DocumentoIndexado>("indexar_documento", { arquivoId, casoId, ...(pagina === undefined ? {} : { pagina }) }),
+    indexarDocumento: (arquivoId: number, casoId: CasoId, pagina?: number, modo?: "automatico" | "ocr") =>
+      chamar<DocumentoIndexado>("indexar_documento", { arquivoId, casoId, ...(pagina === undefined ? {} : { pagina }), ...(modo === undefined ? {} : { modo }) }),
   /** Busca somente em textos derivados armazenados; não relê nem confere a origem atual. */
   buscarDocumentos: (casoId: CasoId, termo: string, deslocamento: number, limite: number) =>
     chamar<Pagina<AchadoDocumento>>("buscar_documentos", { casoId, termo, deslocamento, limite }),

@@ -3,7 +3,7 @@
 
 use sied_armazenamento::documentos::{
     AchadoDocumento, DocumentoIndexado, EntidadeDocumento, EstadoRevisaoEntidade,
-    NovaEntidadeDocumento, NovoDocumento, RevisaoEntidade,
+    NovaEntidadeDocumento, NovaRegiaoDocumento, NovoDocumento, RevisaoEntidade,
 };
 use sied_armazenamento::extracoes::Pagina;
 use sied_documentos::{ControleDocumento, EstadoDocumento, ResultadoDocumento};
@@ -54,6 +54,23 @@ pub(crate) fn preparar_derivado(
         texto: texto.texto,
         pagina: texto.pagina,
         total_paginas: texto.total_paginas,
+        largura_px: texto.largura_px,
+        altura_px: texto.altura_px,
+        regioes: texto
+            .regioes
+            .into_iter()
+            .map(|r| NovaRegiaoDocumento {
+                ordem: r.ordem,
+                inicio_utf8: r.inicio_utf8,
+                fim_utf8: r.fim_utf8,
+                texto: r.texto,
+                x: r.x,
+                y: r.y,
+                largura: r.largura,
+                altura: r.altura,
+                confianca: r.confianca,
+            })
+            .collect(),
         motor_id: texto.motor_id,
         motor_versao: texto.motor_versao,
         executado_em: texto.executado_em.to_rfc3339(),

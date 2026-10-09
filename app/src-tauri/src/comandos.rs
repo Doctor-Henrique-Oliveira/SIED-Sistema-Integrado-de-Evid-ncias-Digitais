@@ -31,7 +31,7 @@ use sied_armazenamento::pesquisa_local::{
 use sied_armazenamento::relatorios::{ConferenciaPastaRelatorios, RelatorioRegistrado};
 use sied_armazenamento::resumo::{Identificador, ResumoCaso};
 use sied_armazenamento::CasoCatalogado;
-use sied_documentos::ResultadoDocumento;
+use sied_documentos::{ModoDocumento, ResultadoDocumento};
 use sied_dominio::{CasoId, Dispositivo, DispositivoId, ExtracaoId, NovoCaso, NovoDispositivo};
 use sied_ingestao::eventos::EventoImportacao;
 use sied_ingestao::importador::Deteccao;
@@ -445,11 +445,14 @@ pub async fn ler_documento(
     arquivo_id: i64,
     caso_id: CasoId,
     pagina: Option<u32>,
+    modo: Option<ModoDocumento>,
 ) -> ResultadoApp<ResultadoDocumento> {
     let guarda = DOCUMENTOS.iniciar(caso_id)?;
     em_segundo_plano(app_handle, move |estado| {
         // A guarda permanece na thread mesmo se o frontend descartar a requisição.
-        let pedido = estado.com(|s| s.pedido_documento(arquivo_id, caso_id))?;
+        let pedido = estado
+            .com(|s| s.pedido_documento(arquivo_id, caso_id))?
+            .com_modo(modo.unwrap_or_default());
         Ok(pedido.executar_controlado(pagina, guarda.controle()))
     })
     .await
@@ -463,10 +466,13 @@ pub async fn indexar_documento(
     arquivo_id: i64,
     caso_id: CasoId,
     pagina: Option<u32>,
+    modo: Option<ModoDocumento>,
 ) -> ResultadoApp<DocumentoIndexado> {
     let guarda = DOCUMENTOS.iniciar(caso_id)?;
     em_segundo_plano(app_handle, move |estado| {
-        let pedido = estado.com(|s| s.pedido_documento(arquivo_id, caso_id))?;
+        let pedido = estado
+            .com(|s| s.pedido_documento(arquivo_id, caso_id))?
+            .com_modo(modo.unwrap_or_default());
         let leitura = pedido.executar_controlado(pagina, guarda.controle());
         let novo = crate::documentos::preparar_derivado(leitura, guarda.controle())?;
         estado.com(|s| {

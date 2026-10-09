@@ -294,7 +294,8 @@ fn copia_de_seguranca_existente_nao_bloqueia_a_migracao() {
     // migrações posteriores neste banco sintético recém-criado.
     let c = Connection::open(pasta.join(NOME_ARQUIVO_CASO)).unwrap();
     c.execute_batch(
-        "DROP TABLE visual_derivado; DELETE FROM schema_migracao WHERE versao=10;
+        "DROP TABLE regiao_documental; DELETE FROM schema_migracao WHERE versao=11;
+         DROP TABLE visual_derivado; DELETE FROM schema_migracao WHERE versao=10;
          DROP TABLE amostra_supervisionada; DROP TABLE dataset_supervisionado;
          DELETE FROM schema_migracao WHERE versao=9;
          DROP TABLE revisao_entidade_documental;

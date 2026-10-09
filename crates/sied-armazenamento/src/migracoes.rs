@@ -98,6 +98,11 @@ pub const BANCO_CASO: TipoBanco = TipoBanco {
             nome: "similaridade_visual",
             sql: include_str!("../migracoes/caso/0010_similaridade_visual.sql"),
         },
+        Migracao {
+            versao: 11,
+            nome: "ocr_documental",
+            sql: include_str!("../migracoes/caso/0011_ocr_documental.sql"),
+        },
     ],
 };
 
