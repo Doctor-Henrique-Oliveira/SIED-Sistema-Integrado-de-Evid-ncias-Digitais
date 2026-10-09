@@ -12,6 +12,10 @@ pub const MOTOR_ID: &str = "windows_media_ocr";
 pub const MOTOR_VERSAO: &str = "1.0.0";
 pub const TAMANHO_MAXIMO_ORIGEM: u64 = 64 * 1024 * 1024;
 
+pub(crate) const fn disponivel() -> bool {
+    cfg!(windows)
+}
+
 pub(crate) struct SaidaOcr {
     pub texto: String,
     pub regioes: Vec<RegiaoTexto>,

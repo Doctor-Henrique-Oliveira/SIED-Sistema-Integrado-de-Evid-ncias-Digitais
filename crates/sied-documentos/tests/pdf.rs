@@ -459,7 +459,8 @@ fn cancelamento_durante_leitura_descarta_todo_texto() {
 }
 
 #[test]
-fn ocr_e_pdf_em_conteiner_recusam_sem_abrir() {
+#[cfg(not(windows))]
+fn ocr_indisponivel_fora_do_windows_recusa_sem_abrir() {
     let fonte = FonteMemoria::nova("ocr-sintetico.pdf", duas_paginas());
     let mut pedido = fonte.pedido();
     pedido.modo = ModoDocumento::Ocr;
@@ -468,6 +469,10 @@ fn ocr_e_pdf_em_conteiner_recusam_sem_abrir() {
         EstadoDocumento::SemSuporte,
     );
     fonte.sem_abertura();
+}
+
+#[test]
+fn pdf_em_conteiner_recusa_sem_abrir() {
     let fonte = FonteMemoria::nova("sintetico.zip!/nativo.pdf", duas_paginas());
     recusa(
         analisar(&fonte, &fonte.pedido(), &ControleDocumento::novo()),

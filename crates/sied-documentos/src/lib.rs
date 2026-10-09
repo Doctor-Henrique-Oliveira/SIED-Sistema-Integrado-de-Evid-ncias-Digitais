@@ -261,6 +261,12 @@ pub fn analisar_pagina(
             "Documentos dentro de contêineres não são analisados neste incremento.",
         );
     }
+    if p.modo == ModoDocumento::Ocr && !ocr::disponivel() {
+        return ResultadoDocumento::sem(
+            SemSuporte,
+            "O OCR local desta versão usa o motor nativo do Windows e não está disponível neste sistema.",
+        );
+    }
     let extensao = p.caminho.extensao();
     let eh_pdf = extensao.as_deref() == Some("pdf");
     let eh_imagem = matches!(extensao.as_deref(), Some("png" | "jpg" | "jpeg"));
