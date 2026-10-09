@@ -5,6 +5,7 @@ import { dataHora } from "../util/formatar";
 import { Botao } from "./Botao";
 import { AreaTexto, Campo, Selecao } from "./Campo";
 import { Aviso, Carregando, Hash, Paginacao, Selo, tabela, Vazio } from "./Estrutura";
+import { FilaRevisao } from "./FilaRevisao";
 
 const ESTADOS: [EstadoRevisaoEntidade, string][] = [["nao_revisado", "Não revisado"], ["confirmado", "Rótulo conferido"], ["inconclusivo", "Inconclusivo"], ["descartado", "Descartado"]];
 function mensagem(erro: unknown) { return erro instanceof Error ? erro.message : "A operação de avaliação local não pôde ser concluída."; }
@@ -53,6 +54,7 @@ function SessaoDatasets({ caso }: { caso: Caso }) {
     finally { if (montado.current) setCriando(false); }
   }
   return <section aria-label="Datasets e avaliação local" className="space-y-4">
+    <FilaRevisao caso={caso} />
     <div className="painel p-4">
       <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-sm font-semibold text-texto">Revisão supervisionada · avaliação local</h2><Selo tom="neutro">SEM TREINAMENTO / SEM TRANSFERÊNCIA</Selo></div>
       <p className="mt-2 text-xs leading-relaxed text-texto-2">Datasets são conjuntos de anotações explicitamente autorizadas, restritos a este caso. Não treinam modelos, não copiam a extração para um catálogo global e não enviam dados. Rótulos se referem a ocorrências candidatas, não à identidade ou veracidade do conteúdo.</p>

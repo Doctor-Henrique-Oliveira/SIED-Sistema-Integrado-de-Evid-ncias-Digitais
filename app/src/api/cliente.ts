@@ -98,6 +98,7 @@ import type { PaginaTranscricao, SegmentoTranscricao, TranscricaoLocal } from ".
 import type { ResumoIndexacaoEmbeddings, ResultadoBuscaHibrida } from "./embeddings";
 import type { ResultadoVisaoLocal } from "./visual";
 import type { ItemMultimodal, MecanismoMultimodal, PedidoMultimodal, ResultadoMultimodal } from "./multimodal";
+import type { CandidatoRevisao, FiltroFilaRevisao } from "./revisao";
 
 export type {
   MecanismoUniversal,
@@ -125,6 +126,8 @@ export type {
   ResultadoMultimodal,
   ItemMultimodal,
   MecanismoMultimodal,
+  CandidatoRevisao,
+  FiltroFilaRevisao,
   PedidoDescoberta,
   ResultadoDescoberta,
   AchadoDescoberta,
@@ -356,6 +359,8 @@ export const api = {
     chamar<Pagina<AmostraSupervisionada>>("amostras_dataset", { casoId, datasetId, deslocamento, limite }),
   avaliarDataset: (casoId: CasoId, datasetId: number, operacaoId: string) =>
     chamar<AvaliacaoSupervisionada>("avaliar_dataset", { casoId, datasetId, operacaoId }),
+  filaRevisao: (casoId: CasoId, filtro: FiltroFilaRevisao, deslocamento = 0, limite = 50) =>
+    chamar<Pagina<CandidatoRevisao>>("fila_revisao", { casoId, filtro, deslocamento, limite }),
   obterConversa: (conversaId: number) => chamar<Conversa>("obter_conversa", { conversaId }),
   mensagensConversa: (conversaId: number, deslocamento: number, limite: number) =>
     chamar<Pagina<ArtefatoResumo>>("mensagens_conversa", { conversaId, deslocamento, limite }),

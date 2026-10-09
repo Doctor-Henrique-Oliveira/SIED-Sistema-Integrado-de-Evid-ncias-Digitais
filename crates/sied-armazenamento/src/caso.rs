@@ -57,8 +57,8 @@ use crate::relacoes::{self, ContextoRelacoes};
 use crate::relatorios::{self, NovoRelatorio, RelatorioRegistrado};
 use crate::resumo::{self, Identificador, ResumoCaso};
 use crate::supervisao::{
-    self, AmostraSupervisionada, AvaliacaoSupervisionada, DatasetSupervisionado,
-    PedidoAmostraSupervisionada,
+    self, AmostraSupervisionada, AvaliacaoSupervisionada, CandidatoRevisao, DatasetSupervisionado,
+    FiltroFilaRevisao, PedidoAmostraSupervisionada,
 };
 use crate::transcricoes::{self, NovaTranscricao, SegmentoTranscricao, TranscricaoLocal};
 use crate::universal::{self, PedidoUniversal, ResultadoUniversal};
@@ -470,6 +470,15 @@ impl BancoCaso {
         limite: i64,
     ) -> Resultado<Pagina<RevisaoEntidade>> {
         documentos::revisoes(&self.conn, id, deslocamento, limite)
+    }
+
+    pub fn fila_revisao(
+        &self,
+        filtro: &FiltroFilaRevisao,
+        deslocamento: i64,
+        limite: i64,
+    ) -> Resultado<Pagina<CandidatoRevisao>> {
+        supervisao::fila_revisao(&self.conn, self.caso.id, filtro, deslocamento, limite)
     }
 
     pub fn criar_dataset(

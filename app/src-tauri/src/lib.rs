@@ -143,6 +143,7 @@ pub fn executar() {
             comandos::amostras_dataset,
             comandos::avaliar_dataset,
             comandos::revisar_entidade,
+            comandos::fila_revisao,
             comandos::revisoes_entidade,
             comandos::obter_conversa,
             comandos::mensagens_conversa,

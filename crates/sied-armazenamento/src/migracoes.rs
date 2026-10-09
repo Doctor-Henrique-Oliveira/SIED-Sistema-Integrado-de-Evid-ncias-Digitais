@@ -113,6 +113,11 @@ pub const BANCO_CASO: TipoBanco = TipoBanco {
             nome: "embeddings_locais",
             sql: include_str!("../migracoes/caso/0013_embeddings_locais.sql"),
         },
+        Migracao {
+            versao: 14,
+            nome: "fila_revisao",
+            sql: include_str!("../migracoes/caso/0014_fila_revisao.sql"),
+        },
     ],
 };
 

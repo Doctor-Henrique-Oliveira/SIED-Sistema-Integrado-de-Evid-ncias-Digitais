@@ -975,6 +975,23 @@ pub async fn revisar_entidade(
 }
 
 #[tauri::command]
+pub async fn fila_revisao(
+    app_handle: AppHandle,
+    caso_id: CasoId,
+    filtro: sied_armazenamento::supervisao::FiltroFilaRevisao,
+    deslocamento: i64,
+    limite: i64,
+) -> ResultadoApp<Pagina<sied_armazenamento::supervisao::CandidatoRevisao>> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| {
+            Ok(s.banco_documental(caso_id)?
+                .fila_revisao(&filtro, deslocamento, limite)?)
+        })
+    })
+    .await
+}
+
+#[tauri::command]
 pub async fn revisoes_entidade(
     app_handle: AppHandle,
     caso_id: CasoId,

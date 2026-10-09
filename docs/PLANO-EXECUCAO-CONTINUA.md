@@ -1,10 +1,10 @@
 # SIED — Plano oficial de execução contínua
 
-Atualizado em 08/10/2026. Este documento transforma a visão, o README e o ROADMAP MDFML em uma fila executável. Ele não substitui os invariantes de `VISAO.md`, `ARQUITETURA.md` e `ROADMAP-MDFML.md`.
+Atualizado em 09/10/2026. Este documento transforma a visão, o README e o ROADMAP MDFML em uma fila executável. Ele não substitui os invariantes de `VISAO.md`, `ARQUITETURA.md` e `ROADMAP-MDFML.md`.
 
 ## Ponteiro atual
 
-**Próxima etapa: E08 — Revisão humana, avaliação e governança de modelos.**
+**Próxima etapa: E09 — Relatórios investigativos avançados.**
 
 O código incorporado à `main` até `87b10e8` é a linha de base. AI-0–AI-7 possuem fundações e interfaces, porém vários motores continuam conservadores ou ausentes. As etapas abaixo aprofundam essas fundações sem duplicá-las.
 
@@ -108,11 +108,11 @@ Limites deliberados: esta primeira camada não é chatbot nem modelo generativo;
 
 ### E08 — Revisão humana, avaliação e governança de modelos
 
-**Status: PENDENTE**
+**Status: IMPLEMENTADA LOCALMENTE (E08)**
 
-Completar AI-7 com filas de revisão para todos os motores, revisão em lote segura, comparação controlada entre versões e métricas apropriadas. Preservar inferência original e decisão humana separadamente. Não treinar silenciosamente.
+AI-7 recebeu uma fila paginada de revisão humana para candidatos de entidades documentais, com filtros por estado e versão do motor, proveniência/hash/offsets e navegação até o arquivo original. A decisão continua append-only em `revisao_entidade_documental`, separada da inferência automática. Os datasets autorizados já existentes preservam autorização, retenção, versões, hashes, revisor e métricas de precision/recall/F1/acurácia/cobertura; continuam sem treinamento silencioso ou transferência entre casos. A fila confere novamente o snapshot textual antes de apresentar qualquer candidato.
 
-**Concluída quando:** modelos/versões podem ser avaliados em datasets sintéticos ou autorizados, com precision, recall, falsos positivos/negativos, cobertura, desempenho e limitações reproduzíveis.
+**Concluída quando:** modelos/versões podem ser avaliados em datasets sintéticos ou autorizados, com precision, recall, falsos positivos/negativos, cobertura, desempenho e limitações reproduzíveis. O comparativo controlado entre versões e revisão em lote permanecem como extensão posterior, sem bloquear a fila segura individual.
 
 ### E09 — Relatórios investigativos avançados
 

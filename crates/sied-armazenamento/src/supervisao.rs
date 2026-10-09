@@ -8,7 +8,7 @@ use rusqlite::{params, Connection, OptionalExtension, Row, Transaction};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
-use sied_dominio::CasoId;
+use sied_dominio::{CasoId, ExtracaoId};
 use std::sync::Arc;
 use ts_rs::TS;
 
@@ -18,6 +18,44 @@ use crate::extracoes::{uuid, Pagina};
 use crate::{auditoria, ControleDescoberta, ErroArmazenamento, Resultado, Sessao};
 
 const MAX_AMOSTRAS: i64 = 10_000;
+
+/// Filtros da fila operacional de candidatos que ainda precisam de decisão
+/// humana. O filtro nunca altera o snapshot: só restringe a consulta.
+#[derive(Debug, Clone, Default, Deserialize, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+#[ts(export)]
+pub struct FiltroFilaRevisao {
+    pub estado: Option<EstadoRevisaoEntidade>,
+    pub motor_versao: Option<String>,
+}
+
+/// Candidato derivado com sua proveniência mínima para revisão. A inferência
+/// original (literal, offsets, hashes e versão do motor) é somente leitura;
+/// decisões posteriores são gravadas em `revisao_entidade_documental`.
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
+pub struct CandidatoRevisao {
+    #[ts(type = "number")]
+    pub id: i64,
+    #[ts(type = "number")]
+    pub documento_id: i64,
+    pub caso_id: CasoId,
+    pub extracao_id: ExtracaoId,
+    #[ts(type = "number")]
+    pub arquivo_id: i64,
+    pub caminho: String,
+    pub tipo: String,
+    pub literal: String,
+    pub inicio_utf8: u32,
+    pub fim_utf8: u32,
+    pub estado: EstadoRevisaoEntidade,
+    pub nota: Option<String>,
+    pub motor_versao: String,
+    pub sha256_origem: String,
+    pub sha256_texto: String,
+    pub revista_em: Option<String>,
+    pub revisor: Option<String>,
+}
 
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
@@ -129,6 +167,98 @@ fn paginacao(deslocamento: i64, limite: i64) -> Resultado<()> {
 
 fn campo(valor: &str, limite: usize) -> bool {
     !valor.trim().is_empty() && valor.len() <= limite && !valor.contains('\0')
+}
+
+fn ler_candidato(r: &Row<'_>) -> rusqlite::Result<CandidatoRevisao> {
+    Ok(CandidatoRevisao {
+        id: r.get(0)?,
+        documento_id: r.get(1)?,
+        caso_id: uuid(r.get(2)?)?,
+        extracao_id: uuid(r.get(3)?)?,
+        arquivo_id: r.get(4)?,
+        caminho: r.get(5)?,
+        tipo: r.get(6)?,
+        literal: r.get(7)?,
+        inicio_utf8: r.get(8)?,
+        fim_utf8: r.get(9)?,
+        estado: serde_json::from_value(json!(r.get::<_, String>(10)?))
+            .map_err(|_| rusqlite::Error::InvalidQuery)?,
+        nota: r.get(11)?,
+        motor_versao: r.get(12)?,
+        sha256_origem: r.get(13)?,
+        sha256_texto: r.get(14)?,
+        revista_em: r.get(15)?,
+        revisor: r.get(16)?,
+    })
+}
+
+const COLUNAS_FILA: &str = "e.id,e.documento_id,d.caso_id,d.extracao_id,d.arquivo_id,d.caminho,
+    e.tipo,e.literal,e.inicio_utf8,e.fim_utf8,coalesce(r.estado,'nao_revisado'),r.nota,
+    d.entidades_motor_versao,d.sha256_origem,d.sha256_texto,r.revista_em,r.revisor";
+
+const ULTIMA_REVISAO_FILA: &str = "LEFT JOIN revisao_entidade_documental r ON r.id =
+    (SELECT MAX(r2.id) FROM revisao_entidade_documental r2 WHERE r2.entidade_id=e.id)";
+
+/// Retorna candidatos de entidades documentais de forma paginada. Cada linha
+/// é conferida novamente contra o texto/hash do snapshot antes de sair do
+/// backend, evitando que uma fila de revisão mascare corrupção derivada.
+pub fn fila_revisao(
+    conn: &Connection,
+    caso_id: CasoId,
+    filtro: &FiltroFilaRevisao,
+    deslocamento: i64,
+    limite: i64,
+) -> Resultado<Pagina<CandidatoRevisao>> {
+    paginacao(deslocamento, limite)?;
+    if filtro
+        .motor_versao
+        .as_deref()
+        .is_some_and(|v| v.len() > 400 || v.contains('\0'))
+    {
+        return Err(recusar("filtro de versão do motor inválido"));
+    }
+    let caso = caso_id.to_string();
+    let estado = filtro.estado.map(estado_str);
+    let motor = filtro.motor_versao.as_deref();
+    let total: i64 = conn.query_row(
+        &format!(
+            "SELECT COUNT(*) FROM entidade_documental e
+             JOIN documento_derivado d ON e.documento_id=d.id {ULTIMA_REVISAO_FILA}
+             WHERE d.caso_id=?1 AND (?2 IS NULL OR coalesce(r.estado,'nao_revisado')=?2)
+               AND (?3 IS NULL OR d.entidades_motor_versao=?3)"
+        ),
+        params![&caso, estado, motor],
+        |r| r.get(0),
+    )?;
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {COLUNAS_FILA} FROM entidade_documental e
+         JOIN documento_derivado d ON e.documento_id=d.id {ULTIMA_REVISAO_FILA}
+         WHERE d.caso_id=?1 AND (?2 IS NULL OR coalesce(r.estado,'nao_revisado')=?2)
+           AND (?3 IS NULL OR d.entidades_motor_versao=?3)
+         ORDER BY e.id DESC LIMIT ?4 OFFSET ?5"
+    ))?;
+    let itens: Vec<CandidatoRevisao> = stmt
+        .query_map(
+            params![&caso, estado, motor, limite, deslocamento],
+            ler_candidato,
+        )?
+        .collect::<std::result::Result<_, _>>()?;
+    for item in &itens {
+        let documento = documentos::obter(conn, item.documento_id)?;
+        let trecho = documento
+            .texto
+            .get(item.inicio_utf8 as usize..item.fim_utf8 as usize);
+        if documento.caso_id != caso_id
+            || documento.sha256_origem != item.sha256_origem
+            || documento.sha256_texto != item.sha256_texto
+            || trecho != Some(item.literal.as_str())
+        {
+            return Err(ErroArmazenamento::Inconsistente(
+                "fila de revisão diverge do snapshot documental".into(),
+            ));
+        }
+    }
+    Ok(Pagina { total, itens })
 }
 
 const COLUNAS_DATASET: &str =
@@ -526,6 +656,8 @@ mod contratos {
             };
         }
         exportar!(DatasetSupervisionado);
+        exportar!(FiltroFilaRevisao);
+        exportar!(CandidatoRevisao);
         exportar!(PedidoAmostraSupervisionada);
         exportar!(AmostraSupervisionada);
         exportar!(AvaliacaoSupervisionada);
