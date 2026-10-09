@@ -7,6 +7,7 @@ pub mod android_sms;
 pub mod browser_history;
 pub(crate) mod comum;
 pub mod email_eml;
+pub mod ios_contatos;
 pub mod ios_sms;
 pub mod iped_lista;
 pub mod leapp_tsv;

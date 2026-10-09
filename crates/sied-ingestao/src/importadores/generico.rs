@@ -25,7 +25,7 @@ use crate::importador::{
 };
 use crate::parsers::{
     android_chamadas, android_contatos, android_mms, android_sms, browser_history, email_eml,
-    ios_sms, telegram_json, whatsapp_android,
+    ios_contatos, ios_sms, telegram_json, whatsapp_android,
 };
 use crate::{InfoComponente, Resultado};
 
@@ -103,6 +103,20 @@ impl Importador for ImportadorGenerico {
                     parser_id: ios_sms::ID.into(),
                     arquivos: vec![ArquivoParaParser {
                         papel: ios_sms::PAPEL.into(),
+                        caminho: c.clone(),
+                    }],
+                });
+                continue;
+            }
+            if n == "addressbook.sqlitedb" {
+                plano.observacoes.push(format!(
+                    "{c} → parser {} (contatos iOS; só aceita tabela ABPerson e preserva colunas brutas)",
+                    ios_contatos::ID
+                ));
+                plano.tarefas.push(TarefaParser {
+                    parser_id: ios_contatos::ID.into(),
+                    arquivos: vec![ArquivoParaParser {
+                        papel: ios_contatos::PAPEL.into(),
                         caminho: c.clone(),
                     }],
                 });
@@ -346,6 +360,7 @@ mod testes {
         let d = tempfile::tempdir().unwrap();
         for p in [
             "Library/SMS/sms.db",
+            "Library/AddressBook/AddressBook.sqlitedb",
             "Chrome/Default/History",
             "Firefox/places.sqlite",
             "Telegram/result.json",
@@ -358,6 +373,7 @@ mod testes {
         let plano = ImportadorGenerico.planejar(&fonte).unwrap();
         let ids: Vec<_> = plano.tarefas.iter().map(|t| t.parser_id.as_str()).collect();
         assert!(ids.contains(&"ios_sms"));
+        assert!(ids.contains(&"ios_contatos"));
         assert_eq!(
             ids.iter()
                 .filter(|id| **id == "historico_navegador")

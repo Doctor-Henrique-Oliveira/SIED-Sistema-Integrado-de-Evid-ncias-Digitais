@@ -14,6 +14,7 @@ use crate::parsers::android_mms::ParserMmsAndroid;
 use crate::parsers::android_sms::ParserSmsAndroid;
 use crate::parsers::browser_history::ParserHistoricoNavegador;
 use crate::parsers::email_eml::ParserEmailEml;
+use crate::parsers::ios_contatos::ParserIosContatos;
 use crate::parsers::ios_sms::ParserIosSms;
 use crate::parsers::iped_lista::ParserListaIped;
 use crate::parsers::leapp_tsv::{Ferramenta, ParserLeappTsv};
@@ -42,6 +43,7 @@ impl Registro {
         r.adicionar_parser(Box::new(ParserChamadasAndroid));
         r.adicionar_parser(Box::new(ParserMmsAndroid));
         r.adicionar_parser(Box::new(ParserIosSms));
+        r.adicionar_parser(Box::new(ParserIosContatos));
         r.adicionar_parser(Box::new(ParserHistoricoNavegador));
         r.adicionar_parser(Box::new(ParserTelegramJson));
         r.adicionar_parser(Box::new(ParserEmailEml));

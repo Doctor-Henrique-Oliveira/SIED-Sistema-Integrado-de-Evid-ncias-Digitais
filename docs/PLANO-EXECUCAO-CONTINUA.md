@@ -124,7 +124,7 @@ O PDF agora inclui, dentro da metodologia, um bloco de derivados investigativos 
 
 ### E10 — Expansão de parsers e contêineres, exceto Avilla
 
-**Status: EM PROGRESSO — ZIP SEGURO IMPLEMENTADO**
+**Status: EM PROGRESSO — ZIP SEGURO E CONTATOS iOS CONSERVADORES IMPLEMENTADOS**
 
 O ingestão agora abre o diretório central de ZIPs sem extração automática, rejeita nomes
 inseguros/duplicados, limita a 200.000 entradas e limita a materialização de cada item a
@@ -133,8 +133,10 @@ inseguros/duplicados, limita a 200.000 entradas e limita a materialização de c
 fixtures sintéticas cobrem leitura, preservação da origem e traversal. Os demais formatos com
 documentação e amostras autorizadas foram iniciados com parsers versionados para SMS do iOS,
 histórico Chrome/Firefox/Safari, exportação JSON oficial do Telegram e e-mail RFC 5322 (`.eml`).
-RCS, bases de contatos do iOS, formatos proprietários de e-mail e extensões avançadas do
-WhatsApp continuam pendentes; não implementar parser por suposição. O plano IPED agora preserva
+RCS, formatos proprietários de e-mail e extensões avançadas do WhatsApp continuam pendentes;
+não implementar parser por suposição. `AddressBook.sqlitedb` agora é encaminhado ao parser
+`ios_contatos`, que exige a tabela `ABPerson`, preserva as colunas brutas e recusa esquemas
+desconhecidos. O plano IPED agora preserva
 também um manifesto limitado dos arquivos de configuração conhecidos (`IPEDConfig.txt`,
 `LocalConfig.txt`, OCR e transcrição), além da versão apenas quando declarada no próprio caso;
 chaves fora da lista permitida e conteúdo do índice Lucene continuam sem leitura.
@@ -183,9 +185,14 @@ da validação Windows correspondente.
 
 ### E13 — Avilla Forensics
 
-**Status: PENDENTE — ÚLTIMA ETAPA OBRIGATÓRIA**
+**Status: EM ANDAMENTO — RECONHECIMENTO LOCAL; PARSER BLOQUEADO POR AUSÊNCIA DE EXTRAÇÃO**
 
-Implementar somente após todas as etapas anteriores e após receber árvore/amostras de laboratório autorizadas, versão da ferramenta, opções de aquisição e arquivos de manifesto/log aplicáveis. Não presumir nomes, bancos ou caminhos.
+O reconhecimento local confirmou a instalação/suíte Avilla, as ferramentas chamadas pelo módulo iOS
+e a existência de diretórios de aquisição, mas não encontrou arquivos em uma extração real. O
+importador continua `NaoImplementado` por segurança. Implementar somente após receber árvore/amostras
+de laboratório autorizadas, versão da ferramenta, opções de aquisição e arquivos de manifesto/log
+aplicáveis. Não presumir nomes, bancos ou caminhos. Evidência do reconhecimento:
+`docs/checkpoints/2026-10-09-e13-avilla-reconhecimento.md`.
 
 **Concluída quando:** detecção e planejamento são baseados em estrutura real documentada; fixture sintética reproduz apenas a estrutura necessária; origem permanece intacta; importação, parsers, testes e interface funcionam de ponta a ponta.
 
