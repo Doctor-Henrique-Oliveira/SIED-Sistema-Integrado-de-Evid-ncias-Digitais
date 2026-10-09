@@ -134,7 +134,10 @@ fixtures sintéticas cobrem leitura, preservação da origem e traversal. Os dem
 documentação e amostras autorizadas foram iniciados com parsers versionados para SMS do iOS,
 histórico Chrome/Firefox/Safari, exportação JSON oficial do Telegram e e-mail RFC 5322 (`.eml`).
 RCS, bases de contatos do iOS, formatos proprietários de e-mail e extensões avançadas do
-WhatsApp continuam pendentes; não implementar parser por suposição.
+WhatsApp continuam pendentes; não implementar parser por suposição. O plano IPED agora preserva
+também um manifesto limitado dos arquivos de configuração conhecidos (`IPEDConfig.txt`,
+`LocalConfig.txt`, OCR e transcrição), além da versão apenas quando declarada no próprio caso;
+chaves fora da lista permitida e conteúdo do índice Lucene continuam sem leitura.
 
 **Concluída quando:** cada novo formato possui detecção, fixture sintética identificada, teste de origem/intacto, parser versionado, integração visual e limites explícitos.
 

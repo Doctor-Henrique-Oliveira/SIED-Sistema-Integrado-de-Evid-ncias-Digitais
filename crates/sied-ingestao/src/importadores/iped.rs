@@ -33,6 +33,34 @@ const PASTA_IPED: &str = "iped";
 const MARCAS: &[&str] = &["iped/IPEDConfig.txt", "iped/index", "iped/conf"];
 /// Bytes lidos do começo de uma lista para conferir o cabeçalho.
 const MAX_CABECALHO: u64 = 16 * 1024;
+/// Configurações são apenas metadados do plano; nunca carregamos arquivos inteiros
+/// nem tentamos interpretar o índice Lucene ou bancos internos do IPED.
+const MAX_CONFIGURACAO: u64 = 64 * 1024;
+const CONFIGURACOES_CONHECIDAS: &[&str] = &[
+    "iped/IPEDConfig.txt",
+    "iped/LocalConfig.txt",
+    "iped/conf/OCRConfig.txt",
+    "iped/conf/AudioTranscriptConfig.txt",
+];
+const CHAVES_CONFIGURACAO: &[&str] = &[
+    "enableHash",
+    "ignoreDuplicates",
+    "enableOCR",
+    "enableAudioTranscription",
+    "enableImageSimilarity",
+    "enableFaceRecognition",
+    "enableGraphGeneration",
+    "enableQRCode",
+    "enableCarving",
+    "indexFileContents",
+    "expandContainers",
+    "processEmbeddedDisks",
+    "locale",
+    "numThreads",
+    "commitIntervalSeconds",
+    "implementationClass",
+    "OCRLanguage",
+];
 
 pub struct IpedImporter;
 
@@ -67,6 +95,109 @@ impl IpedImporter {
             }
         }
         Ok(r)
+    }
+
+    /// Lê somente arquivos de configuração conhecidos e em limite pequeno. Os valores
+    /// entram no log do plano para explicar quais derivados podem ser reaproveitados;
+    /// não são usados para habilitar processamento nem para alterar a extração.
+    fn observacoes_configuracao(&self, fonte: &dyn FonteSomenteLeitura) -> Resultado<Vec<String>> {
+        let mut observacoes = Vec::new();
+        for caminho in CONFIGURACOES_CONHECIDAS {
+            let c = CaminhoFonte::novo(caminho)?;
+            let Some(entrada) = fonte.entrada(&c)? else {
+                continue;
+            };
+            if entrada.diretorio {
+                continue;
+            }
+            let mut bytes = Vec::new();
+            BufReader::new(fonte.abrir(&c)?.take(MAX_CONFIGURACAO)).read_to_end(&mut bytes)?;
+            let texto = String::from_utf8_lossy(&bytes);
+            let mut achados = Vec::new();
+            for linha in texto.lines() {
+                let linha = linha.trim();
+                if linha.is_empty() || linha.starts_with('#') || linha.starts_with(';') {
+                    continue;
+                }
+                let Some((chave, valor)) = linha.split_once('=') else {
+                    continue;
+                };
+                let chave = chave.trim();
+                let valor = valor.trim();
+                if !CHAVES_CONFIGURACAO.contains(&chave) || valor.is_empty() {
+                    continue;
+                }
+                // Chaves permitidas são deliberadamente restritas e o valor é truncado
+                // para impedir que o plano replique endpoints ou conteúdo inesperado.
+                let valor: String = valor.chars().take(120).collect();
+                achados.push(format!("{chave}={valor}"));
+            }
+            if !achados.is_empty() {
+                observacoes.push(format!(
+                    "{caminho}: configuração declarada ({})",
+                    achados.join(", ")
+                ));
+            } else {
+                observacoes.push(format!(
+                    "{caminho}: arquivo de configuração presente (sem chaves deriváveis)",
+                ));
+            }
+        }
+        Ok(observacoes)
+    }
+
+    /// Obtém a versão somente quando ela está explicitamente registrada em um arquivo
+    /// do caso. A ausência do arquivo não é preenchida com a versão do instalador local.
+    fn versao_declarada(&self, fonte: &dyn FonteSomenteLeitura) -> Resultado<Option<String>> {
+        for caminho in ["iped/version.txt", "iped/ReleaseNotes.txt"] {
+            let c = CaminhoFonte::novo(caminho)?;
+            let Some(entrada) = fonte.entrada(&c)? else {
+                continue;
+            };
+            if entrada.diretorio {
+                continue;
+            }
+            let mut bytes = Vec::new();
+            BufReader::new(fonte.abrir(&c)?.take(MAX_CABECALHO)).read_to_end(&mut bytes)?;
+            let texto = String::from_utf8_lossy(&bytes);
+            let tokens: Vec<&str> = texto.split_whitespace().collect();
+            for (indice, token) in tokens.iter().enumerate() {
+                if let Some(versao) = Self::token_versao(token) {
+                    return Ok(Some(versao));
+                }
+                if token.eq_ignore_ascii_case("IPED") {
+                    if let Some(proximo) = tokens.get(indice + 1).and_then(|t| Self::versao_bare(t))
+                    {
+                        return Ok(Some(format!("IPED-{proximo}")));
+                    }
+                }
+            }
+        }
+        Ok(None)
+    }
+
+    fn token_versao(token: &str) -> Option<String> {
+        let token =
+            token.trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '.' && c != '-');
+        let sem_prefixo = token
+            .strip_prefix("IPED-")
+            .or_else(|| token.strip_prefix("iped-"))
+            .or_else(|| token.strip_prefix("IPED_"))
+            .or_else(|| token.strip_prefix("iped_"))?;
+        if Self::versao_bare(sem_prefixo).is_some() {
+            Some(format!("IPED-{sem_prefixo}"))
+        } else {
+            None
+        }
+    }
+
+    fn versao_bare(token: &str) -> Option<String> {
+        let token = token.trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '.');
+        if token.chars().next().is_some_and(|c| c.is_ascii_digit()) && token.contains('.') {
+            Some(token.to_string())
+        } else {
+            None
+        }
     }
 }
 
@@ -123,6 +254,20 @@ impl Importador for IpedImporter {
             tipo_extracao: Some("caso IPED".into()),
             ..Default::default()
         };
+        plano.ferramenta_versao = self.versao_declarada(fonte)?;
+        if plano.ferramenta_versao.is_none() {
+            plano.observacoes.push(
+                "versão do IPED não declarada nos arquivos do caso; não foi inferida do ambiente local"
+                    .into(),
+            );
+        } else if let Some(versao) = &plano.ferramenta_versao {
+            plano
+                .observacoes
+                .push(format!("versão declarada do IPED: {versao}"));
+        }
+        plano
+            .observacoes
+            .extend(self.observacoes_configuracao(fonte)?);
         let listas = self.listas(fonte)?;
         for l in &listas {
             plano.observacoes.push(format!(
@@ -252,5 +397,51 @@ mod testes {
             ]
         );
         assert_eq!(plano.tipo_extracao.as_deref(), Some("caso IPED"));
+    }
+
+    #[test]
+    fn plano_preserva_versao_e_capacidades_declaradas_sem_inferir() {
+        let d = tempfile::tempdir().unwrap();
+        caso(d.path(), false);
+        fs::write(
+            d.path().join("iped/IPEDConfig.txt"),
+            "enableHash=true\nenableOCR=false\nenableGraphGeneration=true\nendpoint=https://nao-deve-aparecer\n",
+        )
+        .unwrap();
+        fs::write(d.path().join("iped/version.txt"), "IPED-4.3.1\n").unwrap();
+        fs::write(
+            d.path().join("iped/conf/OCRConfig.txt"),
+            "OCRLanguage=por\n",
+        )
+        .unwrap();
+
+        let f = PastaSomenteLeitura::abrir(d.path()).unwrap();
+        let plano = IpedImporter.planejar(&f).unwrap();
+        assert_eq!(plano.ferramenta_versao.as_deref(), Some("IPED-4.3.1"));
+        assert!(plano
+            .observacoes
+            .iter()
+            .any(|o| o.contains("enableHash=true") && o.contains("enableOCR=false")));
+        assert!(plano
+            .observacoes
+            .iter()
+            .any(|o| o.contains("OCRLanguage=por")));
+        assert!(!plano
+            .observacoes
+            .iter()
+            .any(|o| o.contains("endpoint=") || o.contains("nao-deve-aparecer")));
+    }
+
+    #[test]
+    fn plano_nao_inventa_versao_ausente() {
+        let d = tempfile::tempdir().unwrap();
+        caso(d.path(), false);
+        let f = PastaSomenteLeitura::abrir(d.path()).unwrap();
+        let plano = IpedImporter.planejar(&f).unwrap();
+        assert_eq!(plano.ferramenta_versao, None);
+        assert!(plano
+            .observacoes
+            .iter()
+            .any(|o| o.contains("versão do IPED não declarada")));
     }
 }
