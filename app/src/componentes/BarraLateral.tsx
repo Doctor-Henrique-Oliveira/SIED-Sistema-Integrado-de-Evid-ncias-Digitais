@@ -56,7 +56,7 @@ export const configuracoes: Modulo = { rotulo: "Configurações", icone: "config
 
 function Item({ m, casoId }: { m: Modulo; casoId: string | undefined }) {
   const precisaCaso = m.para.includes(":caso");
-  const base = "sied-sidebar__item group relative flex h-9 items-center gap-2.5 rounded-md px-3 text-sm transition-colors";
+  const base = "group relative flex h-9 items-center gap-2.5 rounded-md px-3 text-sm transition-colors";
   if (precisaCaso && !casoId) {
     return (
       <span
@@ -94,19 +94,19 @@ function Item({ m, casoId }: { m: Modulo; casoId: string | undefined }) {
 
 export function BarraLateral({ caso, info }: { caso: Caso | undefined; info: InfoApp | undefined }) {
   return (
-    <aside className="sied-sidebar flex w-[238px] shrink-0 flex-col border-r border-borda bg-lateral">
-      <div className="sied-sidebar__marca flex h-[58px] shrink-0 items-center gap-3 border-b border-borda px-4">
-        <span className="grid size-8 place-items-center rounded-md border border-ouro/45 bg-ouro/5 text-ouro">
+    <aside className="sied-sidebar flex w-[244px] shrink-0 flex-col border-r border-borda bg-lateral">
+      <div className="flex h-14 shrink-0 items-center gap-3 border-b border-borda px-4">
+        <span className="grid size-7 place-items-center rounded-md border border-ouro/45 text-ouro">
           <Icone nome="escudo" className="size-4" />
         </span>
         <div className="min-w-0 leading-none">
-          <p className="text-sm font-semibold tracking-[0.2em] text-texto">SIED</p>
-          <p className="mt-1 truncate text-3xs uppercase tracking-[0.08em] text-texto-3">Estação forense</p>
+          <p className="text-sm font-semibold tracking-[0.18em] text-texto">SIED</p>
+          <p className="mt-1 truncate text-3xs tracking-wide text-texto-3">Evidências Digitais</p>
         </div>
       </div>
 
-      <div className="sied-sidebar__caso border-b border-borda px-4 py-3.5">
-        <p className="sobrelinha flex items-center gap-2"><span className="sied-sidebar__pulso size-1.5 rounded-full bg-ok" aria-hidden /> Caso ativo</p>
+      <div className="border-b border-borda px-4 py-3.5">
+        <p className="sobrelinha flex items-center gap-2"><span className="size-1.5 rounded-full bg-ok" aria-hidden /> Caso ativo</p>
         {caso ? (
           <div className="mt-1.5 min-w-0">
             <p className="truncate text-sm font-semibold tracking-tight text-ouro-claro" title={identificacaoCaso(caso)}>{identificacaoCaso(caso)}</p>
@@ -119,7 +119,7 @@ export function BarraLateral({ caso, info }: { caso: Caso | undefined; info: Inf
 
       <nav className="flex-1 space-y-4 overflow-y-auto px-3 py-4" aria-label="Navegação principal">
         {grupos.map((g) => (
-          <div key={g.titulo} className="sied-sidebar__grupo">
+          <div key={g.titulo}>
             <p className="sobrelinha px-2.5 pb-1.5 text-texto-4!">{g.titulo}</p>
             <div className="space-y-px">
               {g.modulos.map((m) => (
@@ -133,7 +133,7 @@ export function BarraLateral({ caso, info }: { caso: Caso | undefined; info: Inf
       <div className="border-t border-borda px-3 py-2">
         <Item m={configuracoes} casoId={caso?.id} />
       </div>
-      <footer className="sied-sidebar__rodape flex items-center justify-between gap-2 whitespace-nowrap border-t border-borda px-4 py-2.5 text-2xs text-texto-3">
+      <footer className="flex items-center justify-between gap-2 whitespace-nowrap border-t border-borda px-4 py-2.5 text-2xs text-texto-3">
         <p className="flex items-center gap-1.5" title="O SIED não usa internet: tudo fica nesta estação">
           <span className="size-1.5 rounded-full bg-ok" aria-hidden />
           <span className="text-texto-2">Offline</span> · dados locais
