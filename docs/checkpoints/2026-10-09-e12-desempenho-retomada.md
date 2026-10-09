@@ -11,6 +11,8 @@
 - estados `iniciada`, `inventariando`, `inventario_concluido`, `cancelada` e `interrompida`;
 - bloqueio persistente de uma segunda importação da mesma origem/dispositivo/importador
   enquanto a primeira está `em_andamento`, evitando duplicação após reinício;
+- ação explícita na tela da extração para marcar uma execução órfã como `interrompida`,
+  com auditoria, sem iniciar retomada ou apagar dados;
 - limites e progresso preservados no log da importação;
 - testes sintéticos para lote paralelo, cancelamento e volume de hash.
 

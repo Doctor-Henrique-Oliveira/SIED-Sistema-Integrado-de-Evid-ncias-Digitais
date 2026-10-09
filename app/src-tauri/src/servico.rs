@@ -733,6 +733,22 @@ impl Servico {
         Ok(self.banco()?.extracao(id)?)
     }
 
+    /// Registra a recuperação manual de uma importação que ficou aberta após
+    /// queda da estação. Não executa retomada nem grava novos artefatos.
+    pub fn marcar_extracao_interrompida(&mut self, id: ExtracaoId) -> ResultadoApp<Extracao> {
+        if self
+            .importacao
+            .as_ref()
+            .is_some_and(|t| t.extracao_id == id && t.em_curso())
+        {
+            return Err(ErroApp::novo(
+                CodigoErro::Conflito,
+                "a importação ainda está em execução nesta estação; cancele-a antes de marcar a recuperação",
+            ));
+        }
+        Ok(self.banco()?.marcar_extracao_interrompida(id)?)
+    }
+
     pub fn totais_por_categoria(&mut self, id: ExtracaoId) -> ResultadoApp<Vec<TotalCategoria>> {
         Ok(self.banco()?.totais_por_categoria(id)?)
     }

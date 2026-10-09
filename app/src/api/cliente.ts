@@ -308,6 +308,8 @@ export const api = {
   eventosDaExtracao: (id: ExtracaoId) => chamar<EventoImportacao[]>("eventos_da_extracao", { id }),
   listarExtracoes: () => chamar<Extracao[]>("listar_extracoes"),
   obterExtracao: (extracaoId: ExtracaoId) => chamar<Extracao>("obter_extracao", { extracaoId }),
+  marcarExtracaoInterrompida: (extracaoId: ExtracaoId) =>
+    chamar<Extracao>("marcar_extracao_interrompida", { extracaoId }),
   totaisPorCategoria: (extracaoId: ExtracaoId) =>
     chamar<TotalCategoria[]>("totais_por_categoria", { extracaoId }),
   listarArquivos: (

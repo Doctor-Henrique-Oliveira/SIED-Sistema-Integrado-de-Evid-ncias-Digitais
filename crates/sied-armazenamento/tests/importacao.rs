@@ -338,6 +338,27 @@ fn recusa_importacao_concorrente_da_mesma_origem() {
 }
 
 #[test]
+fn recuperacao_manual_fecha_execucao_aberta_sem_retomar() {
+    let raiz = tempfile::tempdir().unwrap();
+    let origem = raiz.path().join("ext");
+    extracao_sintetica(&origem);
+    let (mut banco, d) = caso(raiz.path());
+    let info = ImportadorGenerico.info();
+    let imp = banco.iniciar_importacao(d.id, &info, &origem).unwrap();
+    let id = imp.extracao_id();
+    drop(imp);
+
+    let finalizada = banco.marcar_extracao_interrompida(id).unwrap();
+    assert_eq!(finalizada.status, "interrompida");
+    assert!(banco
+        .auditoria(10)
+        .unwrap()
+        .iter()
+        .any(|r| r.acao == "importacao_interrompida_manual"));
+    banco.verificar_auditoria().unwrap();
+}
+
+#[test]
 fn recusa_extracao_dentro_do_caso_e_vice_versa() {
     let raiz = tempfile::tempdir().unwrap();
     let (banco, d) = caso(raiz.path());

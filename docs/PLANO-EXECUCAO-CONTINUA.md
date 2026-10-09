@@ -176,6 +176,8 @@ transação ainda não é habilitada para evitar duplicação de registros. O ar
 também recusa uma segunda importação da mesma origem, dispositivo e importador enquanto
 a primeira permanece `em_andamento`, inclusive após reinício do aplicativo. Execuções
 canceladas, falhas ou interrompidas continuam exigindo uma nova decisão explícita.
+Na tela da extração, a ação “Marcar interrompida” fecha somente uma execução órfã,
+registra auditoria e não retoma, apaga ou reinterpreta registros.
 
 Fixtures sintéticas cobrem hashing paralelo, cancelamento e leitura de lote. O benchmark
 `cargo bench -p sied-ingestao --bench inventario` mede o núcleo de hash com bytes sintéticos

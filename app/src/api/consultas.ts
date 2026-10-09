@@ -253,6 +253,19 @@ export function useExtracao(id: ExtracaoId) {
   return useQuery({ queryKey: chaves.extracao(id), queryFn: () => api.obterExtracao(id) });
 }
 
+/** Fecha uma execução órfã após recuperação da estação; nunca inicia retomada. */
+export function useMarcarExtracaoInterrompida(casoId: CasoId, extracaoId: ExtracaoId) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.marcarExtracaoInterrompida(extracaoId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: chaves.extracao(extracaoId) });
+      void qc.invalidateQueries({ queryKey: chaves.extracoes(casoId) });
+      void qc.invalidateQueries({ queryKey: chaves.auditoria(casoId) });
+    },
+  });
+}
+
 export function useTotaisPorCategoria(id: ExtracaoId) {
   return useQuery({ queryKey: [...chaves.extracao(id), "categorias"], queryFn: () => api.totaisPorCategoria(id) });
 }

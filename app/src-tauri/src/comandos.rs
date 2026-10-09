@@ -420,6 +420,17 @@ pub async fn obter_extracao(
 }
 
 #[tauri::command]
+pub async fn marcar_extracao_interrompida(
+    app_handle: AppHandle,
+    extracao_id: ExtracaoId,
+) -> ResultadoApp<Extracao> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.marcar_extracao_interrompida(extracao_id))
+    })
+    .await
+}
+
+#[tauri::command]
 pub async fn totais_por_categoria(
     app_handle: AppHandle,
     extracao_id: ExtracaoId,

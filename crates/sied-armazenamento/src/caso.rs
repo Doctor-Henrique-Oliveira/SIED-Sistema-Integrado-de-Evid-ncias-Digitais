@@ -609,6 +609,48 @@ impl BancoCaso {
         extracoes::obter(&self.conn, id)
     }
 
+    /// Fecha explicitamente uma execução que ficou aberta após uma queda da
+    /// estação. Isto não retoma nem reprocessa a extração: apenas registra o
+    /// estado interrompido e permite uma nova decisão do analista.
+    pub fn marcar_extracao_interrompida(&mut self, id: ExtracaoId) -> Resultado<Extracao> {
+        let id_texto = id.to_string();
+        let status: String = self.conn.query_row(
+            "SELECT status FROM extracao WHERE id = ?1",
+            [&id_texto],
+            |r| r.get(0),
+        )?;
+        if status != "em_andamento" {
+            return Err(ErroArmazenamento::Recusado(format!(
+                "a extração está em '{}'; somente execuções em andamento podem ser marcadas como interrompidas",
+                status
+            )));
+        }
+        let agora = Utc::now().to_rfc3339();
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        tx.execute(
+            "UPDATE execucao_parser SET status = 'interrompida', concluida_em = ?2,
+             erro = COALESCE(erro, 'execução encerrada manualmente após recuperação da estação')
+             WHERE extracao_id = ?1 AND status = 'em_andamento'",
+            params![&id_texto, &agora],
+        )?;
+        tx.execute(
+            "UPDATE extracao SET status = 'interrompida', concluida_em = ?2,
+             erro = COALESCE(erro, 'importação marcada como interrompida pelo analista após recuperação da estação')
+             WHERE id = ?1 AND status = 'em_andamento'",
+            params![&id_texto, &agora],
+        )?;
+        auditoria::registrar(
+            &tx,
+            &self.sessao,
+            "importacao_interrompida_manual",
+            json!({ "extracao_id": id, "motivo": "recuperacao_da_estacao" }),
+        )?;
+        tx.commit()?;
+        extracoes::obter(&self.conn, id)
+    }
+
     /// Console de uma importação já feita, relido do `log-importacao.jsonl` da pasta
     /// do caso (vazio se o log não existir, por exemplo numa cópia parcial do caso).
     pub fn eventos_da_importacao(&self, id: ExtracaoId) -> Resultado<Vec<EventoImportacao>> {

@@ -1,10 +1,11 @@
 import { useState, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
 import type { Caso, Dispositivo, Extracao } from "../api/cliente";
-import { useArtefatos, useDispositivos, useEventosDaExtracao, useExecucoes, useExtracao } from "../api/consultas";
+import { useArtefatos, useDispositivos, useEventosDaExtracao, useExecucoes, useExtracao, useMarcarExtracaoInterrompida } from "../api/consultas";
 import { ConsoleEventos } from "../componentes/ConsoleEventos";
 import { InventarioArquivos } from "../componentes/Arquivos";
 import { Abas, Aviso, Cabecalho, Cartao, Carregando, Hash, Paginacao, Selo, tabela, Vazio } from "../componentes/Estrutura";
+import { Botao } from "../componentes/Botao";
 import { Icone, type NomeIcone } from "../componentes/Icone";
 import { PainelTecnico } from "../componentes/PainelTecnico";
 import { nomeSistema } from "../componentes/SecoesCaso";
@@ -25,6 +26,7 @@ function DetalheExtracao({ caso, extracaoId }: { caso: Caso; extracaoId: string 
   const extracao = useExtracao(extracaoId);
   const dispositivos = useDispositivos(caso.id);
   const execucoes = useExecucoes(extracaoId);
+  const recuperar = useMarcarExtracaoInterrompida(caso.id, extracaoId);
   const [aba, setAba] = useState<Aba>("artefatos");
 
   if (extracao.isPending) return <Carregando />;
@@ -39,7 +41,27 @@ function DetalheExtracao({ caso, extracaoId }: { caso: Caso; extracaoId: string 
         sobre={<VoltarAoCaso caso={caso} />}
         titulo={`Extração — ${disp?.apelido ?? "dispositivo"}`}
         subtitulo={`${x.importador_nome} · importada em ${dataHora(x.iniciada_em, caso.fuso_horario)}`}
-        acoes={<Selo tom={tomStatus(x.status)}>{nomeStatusExtracao[x.status] ?? x.status}</Selo>}
+        acoes={<>
+          <Selo tom={tomStatus(x.status)}>{nomeStatusExtracao[x.status] ?? x.status}</Selo>
+          {x.status === "em_andamento" && (
+            <div className="flex flex-col items-end gap-1">
+              <Botao
+                variante="perigo"
+                tamanho="p"
+                icone="alerta"
+                carregando={recuperar.isPending}
+                onClick={() => {
+                  if (window.confirm("Marcar esta execução como interrompida? Nenhum dado será retomado ou apagado.")) {
+                    recuperar.mutate();
+                  }
+                }}
+              >
+                Marcar interrompida
+              </Botao>
+              {recuperar.isError && <span className="max-w-64 text-right text-2xs text-erro">{recuperar.error.message}</span>}
+            </div>
+          )}
+        </>}
       />
       <div className="space-y-4">
         <BlocosTecnicos caso={caso} x={x} disp={disp} parsers={execucoes.data?.length} />
