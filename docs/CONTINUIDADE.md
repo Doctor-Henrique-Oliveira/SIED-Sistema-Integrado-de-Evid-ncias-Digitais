@@ -563,11 +563,6 @@ Detalhes no `README.md`.
 
 ## 13. Próximo passo recomendado
 
-O comando permanente **`CONTINUE O PROJETO`** e a fila oficial atual estão documentados em
-[`../CONTINUE-PROJETO.md`](../CONTINUE-PROJETO.md) e
-[`PLANO-EXECUCAO-CONTINUA.md`](PLANO-EXECUCAO-CONTINUA.md). Esse plano prevalece para a ordem
-das próximas implementações e mantém Avilla Forensics como última etapa obrigatória.
-
 **Fase 1: ciclo completo na `main`, auditado.** Volume real (PR #9) e evidências com relatório PDF
 (PR #10) estão descritos no §4 e nos checkpoints `2026-09-28-fase1-visual-volume.md` e
 `2026-09-29-fase1-evidencias-relatorio.md`. A auditoria pré-produção (PR #11) está em
@@ -639,26 +634,34 @@ da importação, para que o console de uma importação passada possa ser reaber
 
 ### 14.2 Motor de Descoberta Forense Multimodal Local (MDFML)
 
-Planejamento estratégico: [ROADMAP-MDFML.md](ROADMAP-MDFML.md). Preservar distinção entre
-ideias futuras, mecanismos implementados e capacidades efetivamente validadas. OCR,
-documentos, semântica, visão, correlação e assistente são fases distintas; nenhum resultado
-assistido vira fato forense ou evidência automaticamente. Núcleo local, sem envio a terceiros.
+**FUTURO — não implementado.** Registrado pelo responsável pelo produto em 02/10/2026 como
+capacidade estratégica de diferenciação do SIED. Nome e sigla provisórios. Este registro é
+contexto de produto e planejamento; não autoriza implementação, instalação de modelos ou
+alteração da arquitetura vigente. Especificação: [ROADMAP-MDFML.md](ROADMAP-MDFML.md).
 
-Em 02/10/2026, o responsável autorizou iniciar **AI-1**. Branch
-`feat/mdfml-ai1-documentos-locais`, a partir da `main` `f3123f5`, independente da AI-0
-ainda em validação no PR #24. Primeiro incremento: biblioteca interna `sied-documentos`
-para leitura documental UTF-8 com origem/hash conferidos e recursos limitados, sem alterar
-parsers, banco, relatórios ou invariantes. Sem OCR/PDF/entidades implementados, sem nova UI
-ou comandos desktop. Ver [checkpoint AI-1](checkpoints/2026-10-02-ai1-fundacao-documental.md).
-Em seguida foi implementada a primeira entrega visível: **leitor UTF-8 no detalhe de Arquivos**,
-com leitura sob demanda, origem conferida, proveniência e proteção contra troca de caso/seleção.
-O comando desktop resolve os metadados no inventário do caso; não aceita caminhos/hashes do frontend.
-Ver [checkpoint do leitor](checkpoints/2026-10-02-ai1-leitor-documental.md).
-Próximo incremento implementado: **PDF nativo por página em Arquivos**, com contagem
-real e hash do texto derivado separado da origem. Suporte inicial conservador, sem OCR.
-Ver [checkpoint PDF](checkpoints/2026-10-02-ai1-pdf-nativo.md) para formatos, limites e
-validações efetivamente realizadas. AI-1 **parcialmente implementada, ainda não concluída**;
-validação desktop/Windows, OCR/entidades/indexação documental pendentes. Não fazer merge automaticamente.
+**Objetivo:** reduzir o tempo para encontrar, revisar, correlacionar e documentar artefatos
+relevantes em grandes extrações, com pesquisa local sobre mensagens, imagens, prints, OCR,
+PDFs, documentos, arquivos, metadados, indicadores e localizações. Preservar a pesquisa
+textual/FTS existente; resultados assistidos serão candidatos para revisão humana, nunca
+conclusões periciais automáticas.
+
+**Diretrizes:** offline-first; original intocado; derivados separados; explicação do mecanismo
+e da origem de cada resultado; modelos/vocabulários/configurações versionados; decisão humana
+separada da inferência; processamento incremental que não bloqueie o caso. Integração externa,
+se futuramente aprovada, será opcional, institucionalmente autorizada, identificada,
+explicitamente solicitada e auditável; não integra o núcleo local nem modifica as permissões
+atuais do frontend.
+
+**Faseamento proposto, ainda sem autorização de execução:** AI-0 (pesquisa tradicional,
+vocabulários, árvore de pesquisa, emojis e indicadores); AI-1 (OCR, PDFs/documentos e entidades);
+AI-2 (embeddings locais, semântica e ranking híbrido); AI-3 (visão, regiões e near-duplicates);
+AI-4 (multimodal); AI-5 (correlação, timeline assistida e grafo **experimental**); AI-6
+(assistente local explicável); AI-7 (feedback supervisionado, datasets autorizados e avaliação).
+Cada fase exige desenho técnico, modelo de ameaças, testes/benchmarks, avaliação de erros,
+privacidade, auditoria e checkpoint antes de qualquer merge.
+
+O detalhe documenta limites e tensões com o estado atual. Não substitui a ordem de continuidade
+do §13, não desbloqueia o importador Avilla e não altera o trabalho visual/premium em andamento.
 
 ---
 
