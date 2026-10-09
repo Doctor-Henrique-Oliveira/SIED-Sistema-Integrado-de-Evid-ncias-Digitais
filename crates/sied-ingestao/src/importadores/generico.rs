@@ -64,7 +64,8 @@ impl Importador for ImportadorGenerico {
                 "interpreta apenas bancos com nome padrão do Android e do WhatsApp \
                  (mmssms.db, contacts2.db, calllog.db, msgstore.db, wa.db)"
                     .into(),
-                "abre .tar e backup .ab sem cifra (itens de dentro também entram no inventário)"
+                "abre .tar, .zip e backup .ab sem cifra (itens de dentro também entram no inventário; \
+                 ZIP tem limite de 200.000 entradas e 512 MiB por item)"
                     .into(),
             ],
         })

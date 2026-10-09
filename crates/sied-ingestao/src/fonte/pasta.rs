@@ -3,10 +3,11 @@
 //! Arquivos são abertos com `File::open` (somente leitura). Links simbólicos não são
 //! seguidos: um link poderia apontar para fora da extração.
 //!
-//! Contêineres (`.tar` e backup `.ab` do Android sem cifra) são abertos em memória, sem
-//! extrair nada: a listagem traz, logo depois do contêiner, os itens de dentro dele com o
-//! endereço `contêiner!/caminho/interno` (ver [`super::conteiner`]). Contêiner dentro de
-//! contêiner não é aberto.
+//! Contêineres (`.tar`, `.zip` e backup `.ab` do Android sem cifra) são lidos sem tocar na
+//! origem: a listagem traz, logo depois do contêiner, os itens de dentro dele com o endereço
+//! `contêiner!/caminho/interno` (ver [`super::conteiner`]). ZIPs só materializam o item
+//! solicitado em temporário derivado, com limite de expansão; contêiner dentro de contêiner
+//! não é aberto.
 
 use chrono::{DateTime, SecondsFormat, Utc};
 use std::collections::HashSet;
@@ -17,7 +18,7 @@ use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 use walkdir::WalkDir;
 
-use super::conteiner::{self, Cursor, LeitorTar, TipoConteiner, TipoItem};
+use super::conteiner::{self, Cursor, ItemZip, LeitorTar, TipoConteiner, TipoItem};
 use super::{CaminhoFonte, EntradaFonte, FonteSomenteLeitura, LeitorFonte, SEPARADOR_CONTEINER};
 use crate::{ErroIngestao, Resultado};
 
@@ -155,6 +156,9 @@ impl PastaSomenteLeitura {
         tipo: TipoConteiner,
         interno: &str,
     ) -> Resultado<Box<dyn LeitorFonte>> {
+        if tipo == TipoConteiner::Zip {
+            return Ok(Box::new(conteiner::abrir_zip_item(disco, interno)?));
+        }
         let chave = disco.display().to_string();
         let anterior = self.cursor.lock().unwrap_or_else(|e| e.into_inner()).take();
         let mut cur = match anterior {
@@ -217,6 +221,7 @@ impl Drop for ItemDoConteiner {
 struct Expansao {
     conteiner: CaminhoFonte,
     tar: Option<LeitorTar>,
+    zip: Option<(Vec<ItemZip>, usize)>,
     /// Motivo de não abrir (ex.: backup cifrado), avisado uma vez.
     recusa: Option<String>,
     vistos: HashSet<String>,
@@ -239,6 +244,7 @@ impl Listagem<'_> {
         let mut x = Expansao {
             conteiner: e.caminho.clone(),
             tar: None,
+            zip: None,
             recusa: None,
             vistos: HashSet::new(),
         };
@@ -261,9 +267,16 @@ impl Listagem<'_> {
                 }
             }
         }
-        match conteiner::abrir_tar(&disco, tipo) {
-            Ok(t) => x.tar = Some(t),
-            Err(err) => x.recusa = Some(format!("contêiner não aberto: {err}")),
+        if tipo == TipoConteiner::Zip {
+            match conteiner::listar_zip(&disco) {
+                Ok(itens) => x.zip = Some((itens, 0)),
+                Err(err) => x.recusa = Some(format!("ZIP não aberto: {err}")),
+            }
+        } else {
+            match conteiner::abrir_tar(&disco, tipo) {
+                Ok(t) => x.tar = Some(t),
+                Err(err) => x.recusa = Some(format!("contêiner não aberto: {err}")),
+            }
         }
         Some(x)
     }
@@ -274,6 +287,38 @@ impl Listagem<'_> {
             |caminho: String, motivo: String| ErroIngestao::ItemIgnorado { caminho, motivo };
         if let Some(m) = x.recusa.take() {
             return Some(Err(ignorado(x.conteiner.to_string(), m)));
+        }
+        if x.zip.is_some() {
+            let item = {
+                let (itens, indice) = x.zip.as_mut().expect("zip presente");
+                let item = itens.get(*indice).cloned();
+                *indice += 1;
+                item
+            };
+            let Some(item) = item else {
+                x.zip = None;
+                return None;
+            };
+            let texto = format!("{}{SEPARADOR_CONTEINER}{}", x.conteiner, item.nome);
+            let Ok(caminho) = CaminhoFonte::novo(&texto) else {
+                return Some(Err(ignorado(
+                    texto,
+                    "nome interno que não pode ser endereçado com segurança".into(),
+                )));
+            };
+            return Some(match item.tipo {
+                TipoItem::Outro(t) => Err(ignorado(
+                    texto,
+                    format!("item especial do ZIP (tipo '{}'), não seguido", t as char),
+                )),
+                tipo => Ok(EntradaFonte {
+                    caminho,
+                    diretorio: tipo == TipoItem::Diretorio,
+                    tamanho: item.tamanho,
+                    modificado_em: None,
+                    criado_em: None,
+                }),
+            });
         }
         let tar = x.tar.as_mut()?;
         loop {
@@ -392,6 +437,19 @@ impl FonteSomenteLeitura for PastaSomenteLeitura {
 
     fn entrada(&self, caminho: &CaminhoFonte) -> Resultado<Option<EntradaFonte>> {
         if let Some((p, tipo, interno)) = self.dentro(caminho)? {
+            if tipo == TipoConteiner::Zip {
+                let itens = conteiner::listar_zip(&p).map_err(ErroIngestao::Io)?;
+                return Ok(itens
+                    .into_iter()
+                    .find(|i| i.nome == interno)
+                    .map(|i| EntradaFonte {
+                        caminho: caminho.clone(),
+                        diretorio: i.tipo == TipoItem::Diretorio,
+                        tamanho: i.tamanho,
+                        modificado_em: None,
+                        criado_em: None,
+                    }));
+            }
             let mut tar = conteiner::abrir_tar(&p, tipo)?;
             while let Some(i) = tar.proximo()? {
                 if i.nome == interno {
@@ -596,6 +654,25 @@ mod testes {
         assert!(f
             .abrir(&CaminhoFonte::novo("backup.ab!/apps/com.exemplo/db").unwrap())
             .is_err());
+    }
+
+    #[test]
+    fn lista_e_le_dentro_de_zip() {
+        let dir = tempfile::tempdir().unwrap();
+        let zip = conteiner::testes::zip_sintetico();
+        let caminho = dir.path().join("extracao.zip");
+        fs::write(&caminho, zip).unwrap();
+        let f = PastaSomenteLeitura::abrir(dir.path()).unwrap();
+        let itens: Vec<_> = f.listar().map(|e| e.unwrap()).collect();
+        let nomes: Vec<_> = itens.iter().map(|e| e.caminho.to_string()).collect();
+        assert!(nomes.iter().any(|n| n == "extracao.zip"));
+        assert!(nomes
+            .iter()
+            .any(|n| n == "extracao.zip!/apps/com.exemplo/db/msgstore.db"));
+        let c = CaminhoFonte::novo("extracao.zip!/apps/com.exemplo/db/msgstore.db").unwrap();
+        let mut s = Vec::new();
+        f.abrir(&c).unwrap().read_to_end(&mut s).unwrap();
+        assert_eq!(s, b"SQLite format 3\0");
     }
 
     #[test]

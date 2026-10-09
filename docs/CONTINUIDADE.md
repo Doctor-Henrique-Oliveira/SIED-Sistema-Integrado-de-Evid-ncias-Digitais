@@ -376,9 +376,12 @@ REAL infinito. Medições com volume em `tests/desempenho.rs` (ignoradas; ver o 
 ## 6. Limitações conhecidas
 
 - **Avilla sem importador**: falta a árvore de uma extração real (ver §10).
-- **Contêineres**: `.tar` e `.ab` sem cifra são lidos por dentro; `.zip` e outros continuam só
-  inventariados com hash. Backup `.ab` cifrado não é aberto (exige a senha). Ler itens fora de
-  ordem num contêiner grande comprimido é lento (a leitura recomeça do início).
+- **Contêineres**: `.tar`, `.zip` e `.ab` sem cifra são lidos por dentro. ZIP usa o diretório
+  central, rejeita traversal/nomes duplicados, limita 200.000 entradas e materializa o item
+  solicitado em temporário derivado descartável de até 512 MiB; a origem permanece intacta.
+  Outros contêineres continuam só inventariados. Backup `.ab` cifrado não é aberto (exige a
+  senha). Ler itens fora de ordem num contêiner tar grande comprimido é lento (a leitura
+  recomeça do início).
 - **ADB**: conferido só com backup sintético; `apps/<pacote>/f/` e `sp/` só inventariados.
 - **ALEAPP/iLEAPP**: só as exportações TSV (relatório gerado sem TSV não tem registros); cada
   linha fica como "outro registro", sem virar mensagem, contato ou chamada do SIED; datas sem

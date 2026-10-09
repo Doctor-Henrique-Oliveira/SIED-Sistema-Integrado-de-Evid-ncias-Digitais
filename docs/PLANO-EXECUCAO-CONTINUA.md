@@ -124,9 +124,15 @@ O PDF agora inclui, dentro da metodologia, um bloco de derivados investigativos 
 
 ### E10 — Expansão de parsers e contêineres, exceto Avilla
 
-**Status: PENDENTE**
+**Status: EM PROGRESSO — ZIP SEGURO IMPLEMENTADO**
 
-Priorizar formatos com documentação e amostras autorizadas: ZIP seguro, iOS, RCS, Telegram, navegadores, e-mail e extensões do WhatsApp (reações, edições, enquetes, chamadas e mapeamentos de identificadores). Não implementar parser por suposição.
+O ingestão agora abre o diretório central de ZIPs sem extração automática, rejeita nomes
+inseguros/duplicados, limita a 200.000 entradas e limita a materialização de cada item a
+512 MiB em temporário derivado descartável. Itens internos recebem o mesmo endereço estável
+`arquivo.zip!/caminho`, entram no inventário/hash e podem ser entregues a parsers existentes;
+fixtures sintéticas cobrem leitura, preservação da origem e traversal. Os demais formatos com
+documentação e amostras autorizadas (iOS, RCS, Telegram, navegadores, e-mail e extensões do
+WhatsApp) continuam pendentes; não implementar parser por suposição.
 
 **Concluída quando:** cada novo formato possui detecção, fixture sintética identificada, teste de origem/intacto, parser versionado, integração visual e limites explícitos.
 

@@ -1,4 +1,4 @@
-//! Leitura, só para leitura, de dentro de contêineres: `.tar` e backup do Android
+//! Leitura, só para leitura, de dentro de contêineres: `.tar`, `.zip` e backup do Android
 //! (`.ab`, gerado por `adb backup`).
 //!
 //! Formato do `.ab`, público no código do Android (AOSP, `BackupManagerService` /
@@ -14,14 +14,19 @@ use chrono::{DateTime, SecondsFormat};
 use flate2::read::ZlibDecoder;
 use std::collections::HashSet;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Read};
+use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+use super::CaminhoFonte;
+use zip::ZipArchive;
 
 /// Tipo de contêiner reconhecido pelo nome do arquivo.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TipoConteiner {
     Tar,
     BackupAndroid,
+    Zip,
 }
 
 pub fn tipo_por_nome(nome: &str) -> Option<TipoConteiner> {
@@ -30,9 +35,171 @@ pub fn tipo_por_nome(nome: &str) -> Option<TipoConteiner> {
         Some(TipoConteiner::Tar)
     } else if n.ends_with(".ab") {
         Some(TipoConteiner::BackupAndroid)
+    } else if n.ends_with(".zip") {
+        Some(TipoConteiner::Zip)
     } else {
         None
     }
+}
+
+/// Limites aplicados antes de abrir um ZIP. O inventário só lê o diretório
+/// central; o conteúdo é materializado em arquivo temporário apenas quando um
+/// parser realmente o solicita.
+pub const LIMITE_ENTRADAS_ZIP: usize = 200_000;
+pub const LIMITE_ITEM_ZIP: u64 = 512 * 1024 * 1024;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ItemZip {
+    pub nome: String,
+    pub tipo: TipoItem,
+    pub tamanho: u64,
+}
+
+fn erro_zip(e: zip::result::ZipError) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidData, format!("ZIP inválido: {e}"))
+}
+
+fn caminho_zip(nome: &str) -> io::Result<String> {
+    if nome.as_bytes().contains(&0) || nome.contains("!/") {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "nome interno do ZIP não pode conter NUL ou !/",
+        ));
+    }
+    let nome = nome.trim_end_matches('/');
+    CaminhoFonte::novo(nome)
+        .map(|c| c.to_string())
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))
+}
+
+/// Lista o diretório central sem descomprimir arquivos.
+pub fn listar_zip(p: &Path) -> io::Result<Vec<ItemZip>> {
+    let mut arquivo = ZipArchive::new(std::fs::File::open(p)?).map_err(erro_zip)?;
+    if arquivo.len() > LIMITE_ENTRADAS_ZIP {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("ZIP excede o limite de {LIMITE_ENTRADAS_ZIP} entradas"),
+        ));
+    }
+    let mut vistos = std::collections::HashSet::new();
+    let mut itens = Vec::with_capacity(arquivo.len());
+    for i in 0..arquivo.len() {
+        let entrada = arquivo.by_index(i).map_err(erro_zip)?;
+        let nome = caminho_zip(entrada.name())?;
+        if !vistos.insert(nome.clone()) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("ZIP contém nome interno repetido: {nome}"),
+            ));
+        }
+        let diretorio = entrada.is_dir() || entrada.name().ends_with('/');
+        let tamanho = if diretorio { 0 } else { entrada.size() };
+        itens.push(ItemZip {
+            nome,
+            tipo: if diretorio {
+                TipoItem::Diretorio
+            } else {
+                TipoItem::Arquivo
+            },
+            tamanho,
+        });
+    }
+    Ok(itens)
+}
+
+static PROXIMO_TEMP: AtomicU64 = AtomicU64::new(0);
+
+/// Leitor de uma entrada ZIP. O item é descomprimido em um temporário derivado
+/// e removido quando o leitor é descartado; nunca é gravado dentro da extração.
+pub struct LeitorZip {
+    arquivo: std::fs::File,
+    temporario: std::path::PathBuf,
+}
+
+impl Read for LeitorZip {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.arquivo.read(buf)
+    }
+}
+
+impl Drop for LeitorZip {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.temporario);
+    }
+}
+
+/// Abre uma entrada ZIP com limite de expansão e caminho interno já validado.
+pub fn abrir_zip_item(p: &Path, interno: &str) -> io::Result<LeitorZip> {
+    let interno = caminho_zip(interno)?;
+    let mut arquivo = ZipArchive::new(std::fs::File::open(p)?).map_err(erro_zip)?;
+    let indice = (0..arquivo.len())
+        .find(|&i| {
+            arquivo
+                .by_index(i)
+                .ok()
+                .and_then(|e| caminho_zip(e.name()).ok())
+                .is_some_and(|nome| nome == interno)
+        })
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "entrada ZIP não encontrada"))?;
+    let mut entrada = arquivo.by_index(indice).map_err(erro_zip)?;
+    if entrada.is_dir() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "entrada ZIP é diretório",
+        ));
+    }
+    if entrada.size() > LIMITE_ITEM_ZIP {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("entrada ZIP excede o limite de {LIMITE_ITEM_ZIP} bytes"),
+        ));
+    }
+    let seq = PROXIMO_TEMP.fetch_add(1, Ordering::Relaxed);
+    let nome = format!("sied-zip-{}-{seq}.tmp", std::process::id());
+    let caminho = std::env::temp_dir().join(nome);
+    let mut temporario = std::fs::OpenOptions::new()
+        .write(true)
+        .read(true)
+        .create_new(true)
+        .open(&caminho)?;
+    let mut lidos = 0u64;
+    let mut buf = [0u8; 1024 * 1024];
+    loop {
+        let n = match entrada.read(&mut buf) {
+            Ok(n) => n,
+            Err(e) => {
+                drop(temporario);
+                let _ = std::fs::remove_file(&caminho);
+                return Err(e);
+            }
+        };
+        if n == 0 {
+            break;
+        }
+        lidos = lidos.saturating_add(n as u64);
+        if lidos > LIMITE_ITEM_ZIP {
+            drop(temporario);
+            let _ = std::fs::remove_file(&caminho);
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("entrada ZIP excede o limite de {LIMITE_ITEM_ZIP} bytes"),
+            ));
+        }
+        if let Err(e) = temporario.write_all(&buf[..n]) {
+            drop(temporario);
+            let _ = std::fs::remove_file(&caminho);
+            return Err(e);
+        }
+    }
+    if let Err(e) = temporario.seek(SeekFrom::Start(0)) {
+        drop(temporario);
+        let _ = std::fs::remove_file(&caminho);
+        return Err(e);
+    }
+    Ok(LeitorZip {
+        arquivo: temporario,
+        temporario: caminho,
+    })
 }
 
 /// Cabeçalho de texto de um backup `.ab`.
@@ -129,6 +296,12 @@ pub fn abrir_tar(p: &Path, tipo: TipoConteiner) -> io::Result<LeitorTar> {
             } else {
                 Box::new(r)
             }
+        }
+        TipoConteiner::Zip => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "abrir_tar recebeu um ZIP",
+            ));
         }
     };
     Ok(LeitorTar::novo(fluxo))
@@ -411,6 +584,8 @@ pub(crate) mod testes {
     use flate2::write::ZlibEncoder;
     use flate2::Compression;
     use std::io::Write;
+    use zip::write::SimpleFileOptions;
+    use zip::ZipWriter;
 
     /// Cabeçalho ustar mínimo (para montar tar SINTÉTICO nos testes).
     pub fn cabecalho(nome: &str, tamanho: usize, tipo: u8) -> [u8; 512] {
@@ -456,6 +631,21 @@ pub(crate) mod testes {
             v.extend_from_slice(tar);
         }
         v
+    }
+
+    pub fn zip_sintetico() -> Vec<u8> {
+        let mut v = std::io::Cursor::new(Vec::new());
+        {
+            let mut z = ZipWriter::new(&mut v);
+            let op = SimpleFileOptions::default();
+            z.add_directory("apps/", op).unwrap();
+            z.start_file("apps/com.exemplo/db/msgstore.db", op).unwrap();
+            z.write_all(b"SQLite format 3\0").unwrap();
+            z.start_file("apps/com.exemplo/db/wa.db", op).unwrap();
+            z.write_all(b"contatos sinteticos").unwrap();
+            z.finish().unwrap();
+        }
+        v.into_inner()
     }
 
     fn itens(dados: Vec<u8>) -> Vec<(ItemTar, Vec<u8>)> {
@@ -549,5 +739,38 @@ pub(crate) mod testes {
         t[0] = b'b'; // altera o nome sem corrigir a soma
         let mut l = LeitorTar::novo(Box::new(io::Cursor::new(t)));
         assert!(l.proximo().is_err());
+    }
+
+    #[test]
+    fn lista_e_abre_zip_sem_alterar_o_original() {
+        let d = tempfile::tempdir().unwrap();
+        let p = d.path().join("extracao.zip");
+        let bytes = zip_sintetico();
+        std::fs::write(&p, &bytes).unwrap();
+        let antes = std::fs::read(&p).unwrap();
+        let itens = listar_zip(&p).unwrap();
+        assert_eq!(itens.len(), 3);
+        assert_eq!(itens[1].nome, "apps/com.exemplo/db/msgstore.db");
+        let mut leitor = abrir_zip_item(&p, "apps/com.exemplo/db/msgstore.db").unwrap();
+        let mut conteudo = Vec::new();
+        leitor.read_to_end(&mut conteudo).unwrap();
+        assert_eq!(conteudo, b"SQLite format 3\0");
+        assert_eq!(std::fs::read(&p).unwrap(), antes);
+    }
+
+    #[test]
+    fn recusa_caminho_zip_inseguro() {
+        let d = tempfile::tempdir().unwrap();
+        let p = d.path().join("ruim.zip");
+        let mut v = std::io::Cursor::new(Vec::new());
+        {
+            let mut z = ZipWriter::new(&mut v);
+            z.start_file("../fora.txt", SimpleFileOptions::default())
+                .unwrap();
+            z.write_all(b"nao deve sair").unwrap();
+            z.finish().unwrap();
+        }
+        std::fs::write(&p, v.into_inner()).unwrap();
+        assert!(listar_zip(&p).is_err());
     }
 }

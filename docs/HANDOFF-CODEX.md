@@ -314,6 +314,10 @@ Artefato: `normalizar()` (−0.0 → 0.0; `app` vazio → ausente) e depois `has
 - A leitura mantém um cursor por contêiner: ler os itens na ordem da listagem descomprime cada
   contêiner uma vez; voltar atrás recomeça do início. `LeitorFonte` deixou de exigir `Seek`.
 - `listar_sem_conteineres()` serve à detecção (rápida; não abre contêineres).
+- ZIP é listado pelo diretório central, com rejeição de traversal/duplicados e limites de
+  200.000 entradas/512 MiB por item; quando um parser pede o conteúdo, ele é descomprimido
+  para temporário derivado descartável e a origem não é alterada. Contêiner dentro de
+  contêiner continua fechado.
 - Fixture: gerada nos testes por `testes/rust/backup_sintetico.rs` a partir das fixtures SQL;
   gerador `--adb`. `atributos_dispositivo` (ex.: `api_android`) ainda não é gravado no caso.
 
