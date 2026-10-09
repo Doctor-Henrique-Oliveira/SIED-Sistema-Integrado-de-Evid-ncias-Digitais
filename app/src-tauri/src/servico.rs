@@ -38,7 +38,7 @@ use sied_ingestao::eventos::{EventoImportacao, NivelEvento};
 use sied_ingestao::fonte::pasta::PastaSomenteLeitura;
 use sied_ingestao::fonte::{CaminhoFonte, EntradaFonte, FonteSomenteLeitura, LeitorFonte};
 use sied_ingestao::importador::{Deteccao, Suporte};
-use sied_ingestao::pipeline::{self, Controle, Progresso};
+use sied_ingestao::pipeline::{self, Controle, Progresso, NOME_CHECKPOINT};
 use sied_ingestao::{ErroIngestao, Registro};
 use sied_midia::Pedido as PedidoMiniatura;
 use sied_relatorio::PedidoRelatorio;
@@ -731,6 +731,19 @@ impl Servico {
 
     pub fn obter_extracao(&mut self, id: ExtracaoId) -> ResultadoApp<Extracao> {
         Ok(self.banco()?.extracao(id)?)
+    }
+
+    /// Lê apenas o estado do checkpoint derivado. O estado nunca autoriza
+    /// retomada automática e não altera o banco do caso.
+    pub fn estado_checkpoint(&mut self, id: ExtracaoId) -> ResultadoApp<Option<String>> {
+        let banco = self.banco()?;
+        let _ = banco.extracao(id)?;
+        let caminho = banco
+            .pasta()
+            .join("importacoes")
+            .join(id.to_string())
+            .join(NOME_CHECKPOINT);
+        Ok(pipeline::ler_checkpoint(&caminho)?.map(|c| c.estado))
     }
 
     /// Registra a recuperação manual de uma importação que ficou aberta após

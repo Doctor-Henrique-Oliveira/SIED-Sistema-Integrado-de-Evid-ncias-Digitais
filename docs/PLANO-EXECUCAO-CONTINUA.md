@@ -177,7 +177,8 @@ também recusa uma segunda importação da mesma origem, dispositivo e importado
 a primeira permanece `em_andamento`, inclusive após reinício do aplicativo. Execuções
 canceladas, falhas ou interrompidas continuam exigindo uma nova decisão explícita.
 Na tela da extração, a ação “Marcar interrompida” fecha somente uma execução órfã,
-registra auditoria e não retoma, apaga ou reinterpreta registros.
+registra auditoria e não retoma, apaga ou reinterpreta registros. A mesma tela mostra
+o estado do checkpoint como diagnóstico, sem transformá-lo em autorização de retomada.
 
 Fixtures sintéticas cobrem hashing paralelo, cancelamento e leitura de lote. O benchmark
 `cargo bench -p sied-ingestao --bench inventario` mede o núcleo de hash com bytes sintéticos

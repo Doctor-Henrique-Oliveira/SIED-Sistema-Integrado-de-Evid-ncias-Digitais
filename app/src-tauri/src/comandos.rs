@@ -420,6 +420,17 @@ pub async fn obter_extracao(
 }
 
 #[tauri::command]
+pub async fn estado_checkpoint(
+    app_handle: AppHandle,
+    extracao_id: ExtracaoId,
+) -> ResultadoApp<Option<String>> {
+    em_segundo_plano(app_handle, move |estado| {
+        estado.com(|s| s.estado_checkpoint(extracao_id))
+    })
+    .await
+}
+
+#[tauri::command]
 pub async fn marcar_extracao_interrompida(
     app_handle: AppHandle,
     extracao_id: ExtracaoId,

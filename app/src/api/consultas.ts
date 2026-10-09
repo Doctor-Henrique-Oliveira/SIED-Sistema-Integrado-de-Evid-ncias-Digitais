@@ -253,6 +253,10 @@ export function useExtracao(id: ExtracaoId) {
   return useQuery({ queryKey: chaves.extracao(id), queryFn: () => api.obterExtracao(id) });
 }
 
+export function useEstadoCheckpoint(id: ExtracaoId) {
+  return useQuery({ queryKey: [...chaves.extracao(id), "checkpoint"], queryFn: () => api.estadoCheckpoint(id) });
+}
+
 /** Fecha uma execução órfã após recuperação da estação; nunca inicia retomada. */
 export function useMarcarExtracaoInterrompida(casoId: CasoId, extracaoId: ExtracaoId) {
   const qc = useQueryClient();

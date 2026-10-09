@@ -117,6 +117,7 @@ pub fn executar() {
             comandos::eventos_da_extracao,
             comandos::listar_extracoes,
             comandos::obter_extracao,
+            comandos::estado_checkpoint,
             comandos::marcar_extracao_interrompida,
             comandos::totais_por_categoria,
             comandos::listar_arquivos,

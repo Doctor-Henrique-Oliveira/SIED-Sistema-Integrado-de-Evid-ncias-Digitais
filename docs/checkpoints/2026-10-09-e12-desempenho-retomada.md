@@ -13,6 +13,8 @@
   enquanto a primeira está `em_andamento`, evitando duplicação após reinício;
 - ação explícita na tela da extração para marcar uma execução órfã como `interrompida`,
   com auditoria, sem iniciar retomada ou apagar dados;
+- leitura do estado do checkpoint na mesma tela para tornar a recuperação observável,
+  mantendo o checkpoint somente como diagnóstico;
 - limites e progresso preservados no log da importação;
 - testes sintéticos para lote paralelo, cancelamento e volume de hash.
 

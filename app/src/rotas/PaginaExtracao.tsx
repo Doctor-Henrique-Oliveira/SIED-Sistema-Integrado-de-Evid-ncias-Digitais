@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
 import type { Caso, Dispositivo, Extracao } from "../api/cliente";
-import { useArtefatos, useDispositivos, useEventosDaExtracao, useExecucoes, useExtracao, useMarcarExtracaoInterrompida } from "../api/consultas";
+import { useArtefatos, useDispositivos, useEstadoCheckpoint, useEventosDaExtracao, useExecucoes, useExtracao, useMarcarExtracaoInterrompida } from "../api/consultas";
 import { ConsoleEventos } from "../componentes/ConsoleEventos";
 import { InventarioArquivos } from "../componentes/Arquivos";
 import { Abas, Aviso, Cabecalho, Cartao, Carregando, Hash, Paginacao, Selo, tabela, Vazio } from "../componentes/Estrutura";
@@ -26,6 +26,7 @@ function DetalheExtracao({ caso, extracaoId }: { caso: Caso; extracaoId: string 
   const extracao = useExtracao(extracaoId);
   const dispositivos = useDispositivos(caso.id);
   const execucoes = useExecucoes(extracaoId);
+  const checkpoint = useEstadoCheckpoint(extracaoId);
   const recuperar = useMarcarExtracaoInterrompida(caso.id, extracaoId);
   const [aba, setAba] = useState<Aba>("artefatos");
 
@@ -64,7 +65,7 @@ function DetalheExtracao({ caso, extracaoId }: { caso: Caso; extracaoId: string 
         </>}
       />
       <div className="space-y-4">
-        <BlocosTecnicos caso={caso} x={x} disp={disp} parsers={execucoes.data?.length} />
+        <BlocosTecnicos caso={caso} x={x} disp={disp} parsers={execucoes.data?.length} checkpoint={checkpoint.data} />
         <div>
           <Abas
             rotulo="Conteúdo da extração"
@@ -108,7 +109,7 @@ function Par({ rotulo, children, mono }: { rotulo: string; children: ReactNode; 
   );
 }
 
-function BlocosTecnicos({ caso, x, disp, parsers }: { caso: Caso; x: Extracao; disp: Dispositivo | undefined; parsers: number | undefined }) {
+function BlocosTecnicos({ caso, x, disp, parsers, checkpoint }: { caso: Caso; x: Extracao; disp: Dispositivo | undefined; parsers: number | undefined; checkpoint?: string | null }) {
   const fuso = caso.fuso_horario;
   return (
     <div className="space-y-3">
@@ -166,6 +167,11 @@ function BlocosTecnicos({ caso, x, disp, parsers }: { caso: Caso; x: Extracao; d
         </Bloco>
       </div>
       {x.erro && x.status !== "concluida" && <Aviso tipo={x.status === "falhou" ? "erro" : "atencao"}>{x.erro}</Aviso>}
+      {checkpoint && (
+        <Aviso tipo="info">
+          Checkpoint de recuperação: <span className="font-mono">{checkpoint}</span>. Ele é apenas diagnóstico; a retomada automática permanece desativada.
+        </Aviso>
+      )}
       {x.observacoes.length > 0 && (
         <details className="group painel text-sm">
           <summary className="flex cursor-pointer list-none items-center gap-2 px-3.5 py-2.5 text-texto-2 hover:text-texto">
